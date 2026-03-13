@@ -6,7 +6,7 @@ from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 # --- 1. CONFIGURATION & HIDDEN BACKSTAGE ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", layout="wide")
 
-# Secret Credentials
+# Secret Credentials (Hidden)
 CLIENT_ID = "1a938096ed21b2854071101fc05ea428"
 CLIENT_SECRET = "WC0SjOxywUguKbbwFgDpRoaj0MqiQQcwHF-dFQJisxwM0gnYlSL0OdoRqVqU8DTJ"
 GLOBAL_PASSWORD = "20082021"
@@ -27,9 +27,9 @@ if "posts" not in st.session_state:
 # --- 2. PRESENTATION & LOGIN PAGE ---
 def presentation_page():
     # Capitalized Branding
-    st.markdown("<h1 style='text-align: center; color: #1E90FF;'>GLOBALINTERNET.PY</h1>", unsafe_content_label=True)
-    st.markdown("<h2 style='text-align: center;'>Gesner Deslandes</h2>", unsafe_content_label=True)
-    st.markdown("<p style='text-align: center; font-size: 20px;'><i>Specialized in coding with Python Programming Language</i></p>", unsafe_content_label=True)
+    st.markdown("<h1 style='text-align: center; color: #1E90FF;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>Gesner Deslandes</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 20px;'><i>Specialized in coding with Python Programming Language</i></p>", unsafe_allow_html=True)
     
     st.divider()
     
