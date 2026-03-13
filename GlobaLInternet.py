@@ -1,126 +1,127 @@
 import streamlit as st
-import time
 import pandas as pd
+import time
 
-# --- VIDEO MODULE SAFETY CHECK ---
+# --- 1. VIDEO MODULE CHECK ---
 try:
     from streamlit_webrtc import webrtc_streamer, RTCConfiguration
     VIDEO_READY = True
-except ModuleNotFoundError:
+except ImportError:
     VIDEO_READY = False
 
-# --- 1. CONFIGURATION & BRANDING ---
+# --- 2. CONFIGURATION & BACKGROUND ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", layout="wide")
 
-# Owner Credentials (Backstage)
-CLIENT_ID = "1a938096ed21b2854071101fc05ea428"
-CLIENT_SECRET = "WC0SjOxywUguKbbwFgDpRoaj0MqiQQcwHF-dFQJisxwM0gnYlSL0OdoRqVqU8DTJ"
+def add_bg_map():
+    st.markdown(
+        """
+        <style>
+        [data-testid="stAppViewContainer"] {
+            background-image: url("https://images.unsplash.com/photo-1521295121783-8a321d551ad2?q=80&w=2070&auto=format&fit=crop");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        [data-testid="stHeader"] {
+            background: rgba(0,0,0,0);
+        }
+        [data-testid="stSidebar"] {
+            background-color: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        .stMarkdown, h1, h2, h3, p {
+            color: white !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+add_bg_map()
+
+# Credentials
 GLOBAL_PASSWORD = "20082021"
 OWNER_CIN = "1248795849"
-MONCASH_NUMBER = "(509)-47385663"
 
-# WebRTC Video Config
-if VIDEO_READY:
-    RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
-
-# Session State Initialization
+# --- 3. SESSION STATE INITIALIZATION ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "data_fee" not in st.session_state:
     st.session_state.data_fee = 0.0
 if "posts" not in st.session_state:
     st.session_state.posts = []
+if "user_profile" not in st.session_state:
+    st.session_state.user_profile = {"name": "Gesner Deslandes", "bio": "Python Expert"}
 
-# --- 2. PRESENTATION & LOGIN PAGE ---
-def presentation_page():
-    st.markdown("<h1 style='text-align: center; color: #1E90FF;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>Gesner Deslandes</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 18px;'>Gesner Deslandes is specialized in coding with Python Programming Language.</p>", unsafe_allow_html=True)
-    
-    st.divider()
-    
-    st.write("### 🤝 Smart Collaborators")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.info("**Gesner Junior Deslandes**")
-    c2.info("**Roosevelt Deslandes**")
-    c3.info("**Sebastien Stephane Deslandes**")
-    c4.info("**Zendaya Christelle Deslandes**")
-    
+# --- 4. NAVIGATION PAGES ---
+def login_page():
+    st.markdown("<h1 style='text-align: center;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>Gesner Deslandes</h3>", unsafe_allow_html=True)
     st.write("---")
+    st.write("### 👥 Smart Collaborators")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.info("Gesner Junior Deslandes")
+    c2.info("Roosevelt Deslandes")
+    c3.info("Sebastien Stephane Deslandes")
+    c4.info("Zendaya Christelle Deslandes")
     
-    with st.container():
-        _, mid, _ = st.columns([1, 2, 1])
-        with mid:
-            st.subheader("Connect to the Global Mesh")
-            pwd = st.text_input("Enter Global Password:", type="password")
-            if st.button("Login to System", use_container_width=True):
-                if pwd == GLOBAL_PASSWORD:
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else:
-                    st.error("Incorrect Password. Access Denied.")
+    with st.columns([1,2,1])[1]:
+        pwd = st.text_input("System Access Password:", type="password")
+        if st.button("Enter Global Network"):
+            if pwd == GLOBAL_PASSWORD:
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Invalid Access Key.")
 
-# --- 3. MAIN APPLICATION INTERFACE ---
-def main_application():
-    st.markdown("### 🌐 GLOBALINTERNET.PY")
-    
-    # Backstage Data Accumulation (Simulated per minute)
-    st.session_state.data_fee += 0.01 
-    
+def main_app():
     st.sidebar.title("GLOBALINTERNET.PY")
-    st.sidebar.write("🟢 **Status: Online**")
+    st.session_state.data_fee += 0.005 # Auto-accumulate data reward
     
     menu = ["Chatbox Feed", "Go Live (Video)", "Global Map", "Profile Setup", "Reclaim & MonCash"]
     choice = st.sidebar.radio("Navigation", menu)
 
-    if st.sidebar.button("Log Off"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-    # --- FEED FEATURE ---
     if choice == "Chatbox Feed":
-        st.header("Collaborator Feed")
-        with st.form("feed_form"):
-            user_post = st.text_area("What is your professional update?")
-            if st.form_submit_button("Post to Feed"):
-                st.session_state.posts.insert(0, {"content": user_post, "likes": 0})
-        
-        for i, post in enumerate(st.session_state.posts):
-            with st.chat_message("user"):
-                st.write(post["content"])
-                if st.button(f"❤️ Like ({post['likes']})", key=f"lk_{i}"):
-                    post['likes'] += 1
+        st.header("Global Collaborator Feed")
+        with st.form("post_form", clear_on_submit=True):
+            msg = st.text_area("Update your status:")
+            if st.form_submit_button("Broadcast Message"):
+                st.session_state.posts.insert(0, {"text": msg, "user": st.session_state.user_profile["name"]})
+        for p in st.session_state.posts:
+            st.chat_message("user").write(f"**{p['user']}**: {p['text']}")
 
-    # --- VIDEO FEATURE ---
     elif choice == "Go Live (Video)":
-        st.header("Live Video & Group Call")
+        st.header("Live Video Connection")
         if VIDEO_READY:
-            webrtc_streamer(key="stream", rtc_configuration=RTC_CONFIG)
+            webrtc_streamer(key="global-video", rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
         else:
-            st.error("The Video Module is still installing in the backstage of the server.")
-            st.info("Please ensure 'streamlit-webrtc' is in your requirements.txt and REBOOT the app.")
+            st.error("Video drivers not yet installed on server. Check requirements.txt.")
 
-    # --- OWNER RECLAIM FEATURE ---
+    elif choice == "Global Map":
+        st.header("User Connection Points")
+        # Ensure column names are 'lat' and 'lon' for st.map
+        map_points = pd.DataFrame({'lat': [18.5392, 19.75, 40.71], 'lon': [-72.335, -72.2, -74.00]})
+        st.map(map_points)
+
+    elif choice == "Profile Setup":
+        st.header("👤 Your Profile")
+        st.session_state.user_profile["name"] = st.text_input("Name:", value=st.session_state.user_profile["name"])
+        st.session_state.user_profile["bio"] = st.text_area("Professional Bio:", value=st.session_state.user_profile["bio"])
+        if st.button("Save Changes"):
+            st.success("Profile synchronized with global database.")
+
     elif choice == "Reclaim & MonCash":
-        st.header("🔐 Owner Reclaim Tool")
-        cin_input = st.text_input("Verify Owner CIN Card Number:", type="password")
-        if cin_input == OWNER_CIN:
-            st.success("Welcome, Gesner Deslandes. Access Granted.")
-            st.metric("Total Data Compensation (Real Currency)", f"${st.session_state.data_fee:.4f}")
-            if st.button("Transfer to MonCash: (509)-47385663"):
-                st.write("Connecting to MonCash Business platform...")
-                time.sleep(2)
+        st.header("🔐 Secure Reclaim Tool")
+        cin = st.text_input("Enter Owner CIN:", type="password")
+        if cin == OWNER_CIN:
+            st.metric("Total Data Reward", f"${st.session_state.data_fee:.4f}")
+            if st.button("Payout to MonCash: (509)-47385663"):
                 st.balloons()
-                st.success("Payment Processed Successfully.")
+                st.success("Transferring... Funds cleared to Gesner Deslandes.")
                 st.session_state.data_fee = 0.0
-        elif cin_input != "":
-            st.error("Credentials do not match Owner identity.")
 
-# --- 4. EXECUTION LOOP ---
-try:
-    if not st.session_state.logged_in:
-        presentation_page()
-    else:
-        main_application()
-except Exception:
-    st.warning("GLOBALINTERNET.PY is updating features. The app remains active.")
+# --- 5. EXECUTION ---
+if not st.session_state.logged_in:
+    login_page()
+else:
+    main_app()
