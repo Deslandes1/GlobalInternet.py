@@ -1,67 +1,41 @@
 import streamlit as st
-import time
-import requests
-import json
-import asyncio
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration
+import av
+import cv2
 
-# --- 1. SETUP ---
-# This must be the first Streamlit command used
-st.set_page_config(page_title="Infinity Engine Global", layout="centered")
+# --- UPDATED REQUIREMENTS ---
+# Ensure you add 'streamlit-webrtc' and 'opencv-python-headless' to your requirements.txt
 
-# Your Secret Global Key
-GLOBAL_PASSWORD = "20082021"
+# --- 1. CONFIGURATION ---
+# STUN servers are needed for users to connect from different internet networks (Haiti to USA, etc.)
+RTC_CONFIG = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-# --- 2. BACKSTAGE LOGIN ---
-if not st.session_state.logged_in:
-    st.header("🌐 Infinity Engine: Private Entry")
-    user_pwd = st.text_input("Enter Company Password:", type="password")
+# --- 2. LIVE VIDEO FEATURE ---
+def video_call_page():
+    st.header("📽️ Global Live & Group Call")
+    st.info("Start your camera to go live. Other collaborators can join the mesh.")
     
-    if st.button("Connect"):
-        if user_pwd == GLOBAL_PASSWORD:
-            st.session_state.logged_in = True
-            st.success("Identity Verified. Linking to Global Mesh...")
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.error("Incorrect Password. Access Denied.")
-
-else:
-    # --- 3. MAIN INTERFACE ---
-    st.title("🛡️ Infinity Engine Active")
-    st.sidebar.success("Status: RELAY ACTIVE")
+    # Room Selection for Group Calls
+    room_id = st.text_input("Enter Room ID to join a Group Call:", value="Global-Main")
     
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-    
-    # Invisible Data Tracker logic
-    if 'mb_shared' not in st.session_state:
-        st.session_state.mb_shared = 0.0
-    
-    # Progress simulation
-    st.session_state.mb_shared += 0.25 
-    st.progress(min(st.session_state.mb_shared / 100, 1.0), text=f"Data Contribution: {st.session_state.mb_shared:.2f} MB")
+    # The WebRTC Streamer
+    # This handles the "Green Light" logic automatically by showing active status
+    ctx = webrtc_streamer(
+        key=f"group-call-{room_id}",
+        rtc_configuration=RTC_CONFIG,
+        media_stream_constraints={"video": True, "audio": True},
+        video_frame_callback=None, # Standard pass-through for high quality
+    )
 
-    st.divider()
-    st.write("### 🔑 Network Handshake")
-    st.info("Direct private tunnel established. Share your link with authorized users.")
-    
-    # Generate a dummy signaling ID
-    tunnel_id = f"TUNNEL-{hash(time.time())}"
-    st.code(f"Active Tunnel ID: {tunnel_id}", language="bash")
+    if ctx.state.playing:
+        st.success(f"🔴 LIVE in Room: {room_id}")
+        st.write("Others can see you if they join the same Room ID.")
+    else:
+        st.warning("Camera is currently Offline.")
 
-    # 4. MonCash Backstage
-    with st.expander("💰 Reclaim & MonCash Backstage"):
-        st.write("Convert shared data into credits or MonCash fees.")
-        phone = st.text_input("MonCash Number / Phone (+509...)")
-        if st.button("Process Fee Transfer"):
-            if st.session_state.mb_shared > 10:
-                st.success(f"Processing transfer to {phone}. Transaction Logged.")
-                st.session_state.mb_shared = 0.0
-            else:
-                st.warning("Insufficient shared data. You need at least 10MB.")
-
-    st.caption("Infinity Engine v2.0 | Global Deployment Ready.")
+# --- 3. UPDATED MAIN APP NAVIGATION ---
+# (Incorporate this into your existing menu logic)
+# if choice == "Live Video":
+#     video_call_page()
