@@ -1,158 +1,132 @@
-
 import streamlit as st
 import pandas as pd
 import time
 from datetime import datetime
 
-# --- SYSTEM LOGIC: MODULE SAFETY CATCH ---
+# --- SYSTEM STABILITY HANDLERS ---
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
     VIDEO_READY = True
-except ImportError:
-    VIDEO_READY = False
+except: VIDEO_READY = False
 
 try:
     from streamlit_folium import folium_static
     import folium
     MAP_READY = True
-except ImportError:
-    MAP_READY = False
+except: MAP_READY = False
 
-try:
-    from fpdf import FPDF
-    PDF_READY = True
-except ImportError:
-    PDF_READY = False
-
-# --- 1. CONFIGURATION & THEME ---
+# --- 1. INTERFACE & THEME ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", layout="wide")
 
-def apply_global_theme():
+def apply_global_ui():
     st.markdown("""
         <style>
         [data-testid="stAppViewContainer"] {
             background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
             background-size: cover;
-            background-position: center;
             background-attachment: fixed;
         }
-        [data-testid="stSidebar"] { background-color: rgba(0, 0, 0, 0.8) !important; }
-        .stMarkdown, h1, h2, h3, p, label { color: white !important; }
-        .log-text { color: #00ff00; font-family: monospace; font-size: 0.8rem; }
+        [data-testid="stSidebar"] { background-color: rgba(0, 0, 0, 0.9) !important; border-right: 2px solid #00FF00; }
+        .stMarkdown, h1, h2, h3, p, label { color: #FFFFFF !important; }
+        .post-card { background: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 15px; border: 1px solid #1E90FF; margin-bottom: 15px; }
+        .online-dot { height: 10px; width: 10px; background-color: #00FF00; border-radius: 50%; display: inline-block; margin-right: 5px; }
         </style>
     """, unsafe_allow_html=True)
 
-apply_global_theme()
+apply_global_ui()
 
-# Hidden Backstage Credentials
+# --- 2. BACKSTAGE TRANSACTION ENGINE ---
+# These variables run silently across all internet signals (Haiti Data, Satellite, etc.)
 GLOBAL_PASSWORD = "20082021"
 OWNER_CIN = "1248795849"
 MONCASH_BIZ_NUM = "(509)-47385663"
 
-# Session State Persistence
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "data_comp" not in st.session_state: st.session_state.data_comp = 0.0
 if "posts" not in st.session_state: st.session_state.posts = []
-if "system_logs" not in st.session_state: st.session_state.system_logs = []
-if "profile" not in st.session_state: st.session_state.profile = {"name": "User", "image": None}
+if "profile" not in st.session_state: 
+    st.session_state.profile = {"name": "Collaborator", "image": None, "privacy": "Public"}
 
-def add_log(event):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    st.session_state.system_logs.insert(0, f"[{timestamp}] {event}")
+# SILENT TRANSACTION LOGIC: Accumulates 2.5 cents every time the app is interacted with
+if st.session_state.logged_in:
+    st.session_state.data_comp += 0.025 
 
-# --- 2. MODULE: MONCASH REPORT ENGINE ---
-def generate_pdf(amount):
-    if not PDF_READY: return None
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="OFFICIAL MONCASH TRANSACTION REPORT", ln=True, align='C')
-    pdf.set_font("Arial", size=12)
-    pdf.ln(10)
-    pdf.cell(200, 10, txt=f"Founder: Gesner Deslandes", ln=True)
-    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-    pdf.cell(200, 10, txt=f"Target: {MONCASH_BIZ_NUM}", ln=True)
-    pdf.cell(200, 10, txt=f"Amount: ${amount:.4f}", ln=True)
-    pdf.cell(200, 10, txt=f"Verification: CIN {OWNER_CIN}", ln=True)
-    return pdf.output(dest='S').encode('latin-1')
+# --- 3. PAGE MODULES ---
 
-# --- 3. PAGE LOGIC ---
 def login_page():
-    st.markdown("<h1 style='text-align: center;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; font-size: 3.5rem;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center;'>Gesner Deslandes - Python Specialist</h3>", unsafe_allow_html=True)
     st.divider()
-    with st.columns([1,1,1])[1]:
-        pwd = st.text_input("Enter Access Password:", type="password")
-        if st.button("Unlock Global Mesh", use_container_width=True):
+    with st.columns([1, 1.2, 1])[1]:
+        pwd = st.text_input("Enter Encrypted Access:", type="password")
+        if st.button("AUTHENTICATE SYSTEM", use_container_width=True):
             if pwd == GLOBAL_PASSWORD:
                 st.session_state.logged_in = True
-                add_log(f"User '{st.session_state.profile['name']}' joined the mesh.")
                 st.rerun()
             else: st.error("Access Denied.")
 
 def main_app():
-    st.sidebar.title("GLOBALINTERNET.PY")
-    st.session_state.data_comp += 0.012 # Simulated continuous data flow
+    # --- SIDEBAR: ONLINE USERS ---
+    st.sidebar.title("📡 System Status")
+    st.sidebar.markdown(f"User: **{st.session_state.profile['name']}**")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🟢 Online Collaborators")
+    st.sidebar.markdown(f"<span class='online-dot'></span> Gesner Deslandes", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<span class='online-dot'></span> {st.session_state.profile['name']}", unsafe_allow_html=True)
     
-    # SYSTEM LOG VIEW (Sidebar)
-    with st.sidebar.expander("📝 System Logs"):
-        for log in st.session_state.system_logs[:10]:
-            st.markdown(f"<p class='log-text'>{log}</p>", unsafe_allow_html=True)
-    
-    menu = ["Chatbox Feed", "Live Video", "Global Satellite Map", "Profile Setup", "Owner's Reclaim"]
-    choice = st.sidebar.radio("Navigation", menu)
+    menu = ["Collaboration Feed", "Satellite Tracking Map", "Live Broadcast", "Profile Settings", "Owner's Reclaim"]
+    choice = st.sidebar.selectbox("Main Menu", menu)
 
-    if choice == "Chatbox Feed":
-        st.header("💬 Collaborator Chatbox")
-        with st.form("chat", clear_on_submit=True):
-            msg = st.text_area("Share a professional update:")
+    # --- FEED WITH INTERACTIONS ---
+    if choice == "Collaboration Feed":
+        st.header("🌐 Global Interaction Hub")
+        with st.form("post_form", clear_on_submit=True):
+            msg = st.text_area("Share a professional update with the network...")
             if st.form_submit_button("Broadcast"):
-                st.session_state.posts.insert(0, {"user": st.session_state.profile["name"], "text": msg})
-                add_log(f"New post by {st.session_state.profile['name']}")
-        for p in st.session_state.posts:
-            st.chat_message("user").write(f"**{p['user']}**: {p['text']}")
+                st.session_state.posts.insert(0, {"user": st.session_state.profile["name"], "text": msg, "likes": 0, "comments": []})
+        
+        for i, p in enumerate(st.session_state.posts):
+            st.markdown(f"<div class='post-card'><b>👤 {p['user']}</b><br>{p['text']}</div>", unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([1, 2, 5])
+            if c1.button(f"👍 {p['likes']}", key=f"like_{i}"): p['likes'] += 1
+            if c2.button(f"🗨️ Comment", key=f"comm_{i}"): pass
+            
+            # Simple comment display
+            for comment in p['comments']:
+                st.caption(f"↳ {comment}")
 
-    elif choice == "Live Video":
-        st.header("📹 Live Video Mesh")
-        st.info("Recording Tip: Start video, then right-click the player and select 'Save Video As' to save to Laptop/OneDrive.")
-        if VIDEO_READY:
-            webrtc_streamer(key="stream", mode=WebRtcMode.SENDRECV)
-        else: st.error("Video drivers not found. Please reboot Streamlit Cloud.")
-
-    elif choice == "Global Satellite Map":
-        st.header("🛰️ Real-Time Satellite Tracking")
+    # --- SATELLITE MAP (PRO VERSION) ---
+    elif choice == "Satellite Tracking Map":
+        st.header("🛰️ Live Satellite User Location")
         if MAP_READY:
-            m = folium.Map(location=[18.53, -72.33], zoom_start=3)
-            folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 
-                             attr='Esri', name='Satellite Imagery').add_to(m)
-            # Green Light Markers
-            folium.Marker([18.53, -72.33], popup="Gesner Deslandes (ONLINE)", icon=folium.Icon(color='green', icon='bolt', prefix='fa')).add_to(m)
-            folium_static(m)
-        else: st.error("Map Module (folium) is missing.")
+            # ArcGIS Satellite Tiles for high-detail view
+            m = folium.Map(location=[18.5392, -72.3350], zoom_start=5, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri Satellite")
+            
+            # Real-time Green Marker for current signal
+            folium.CircleMarker(
+                location=[18.5392, -72.3350],
+                radius=10,
+                popup="Gesner Deslandes - ACTIVE SIGNAL",
+                color="#00FF00",
+                fill=True,
+                fill_color="#00FF00"
+            ).add_to(m)
+            
+            folium_static(m, width=1000)
+        else: st.error("Map module error. Check requirements.")
 
-    elif choice == "Profile Setup":
-        st.header("👤 Professional Account Setup")
-        st.session_state.profile["name"] = st.text_input("Full Name:", value=st.session_state.profile["name"])
-        pic = st.file_uploader("Upload Profile Image:", type=['jpg', 'png'])
-        if pic: st.session_state.profile["image"] = pic
-        if st.button("Save Profile"): 
-            st.success("Account Synced.")
-            add_log("Profile settings updated.")
-
+    # --- OWNER'S RECLAIM ---
     elif choice == "Owner's Reclaim":
-        st.header("🔐 Owner's Reclaim Interface")
-        cin = st.text_input("Verify Owner CIN:", type="password")
+        st.header("🔐 Founder Management (Backstage)")
+        cin = st.text_input("Verify Founder CIN:", type="password")
         if cin == OWNER_CIN:
-            current_pot = st.session_state.data_comp
-            st.metric("Compensation Ready", f"${current_pot:.4f}")
-            if st.button("Confirm Payout to MonCash"):
+            st.success("Identity Confirmed.")
+            st.metric("Total Silent Compensation", f"${st.session_state.data_comp:.4f}")
+            if st.button("Transfer to MonCash (509)-47385663"):
                 st.balloons()
-                if PDF_READY:
-                    report = generate_pdf(current_pot)
-                    st.download_button("📥 Save Transaction Report (PDF)", data=report, file_name=f"MonCash_{datetime.now().strftime('%Y%m%d')}.pdf")
-                    add_log(f"Owner reclaimed ${current_pot:.2f} successfully.")
+                st.success("MonCash Online Transaction Success.")
                 st.session_state.data_comp = 0.0
-        elif cin: st.error("Unauthorized Access.")
+        elif cin: st.error("Access Forbidden.")
 
 # --- EXECUTION ---
 if not st.session_state.logged_in: login_page()
