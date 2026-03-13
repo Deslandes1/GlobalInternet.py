@@ -1,42 +1,40 @@
 import streamlit as st
 import pandas as pd
 import time
+import socket
 from datetime import datetime
 
-# --- SYSTEM STABILITY HANDLERS ---
+# --- 1. ROBUST MODULE IMPORTS ---
 try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
     VIDEO_READY = True
-except: VIDEO_READY = False
+except Exception: VIDEO_READY = False
 
 try:
     from streamlit_folium import folium_static
     import folium
     MAP_READY = True
-except: MAP_READY = False
+except Exception: MAP_READY = False
 
-# --- 1. INTERFACE & THEME ---
+# --- 2. THEME & INTERFACE ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", layout="wide")
 
-def apply_global_ui():
+def apply_ui():
     st.markdown("""
         <style>
         [data-testid="stAppViewContainer"] {
             background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-            background-size: cover;
-            background-attachment: fixed;
+            background-size: cover; background-attachment: fixed;
         }
-        [data-testid="stSidebar"] { background-color: rgba(0, 0, 0, 0.9) !important; border-right: 2px solid #00FF00; }
-        .stMarkdown, h1, h2, h3, p, label { color: #FFFFFF !important; }
-        .post-card { background: rgba(0, 0, 0, 0.6); padding: 20px; border-radius: 15px; border: 1px solid #1E90FF; margin-bottom: 15px; }
-        .online-dot { height: 10px; width: 10px; background-color: #00FF00; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .stMetric { background: rgba(0,0,0,0.6); padding: 10px; border-radius: 10px; border: 1px solid #00FF00; }
+        .post-card { background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; border: 1px solid #1E90FF; margin-bottom: 15px; }
+        .health-text { font-family: monospace; color: #00FF00; font-size: 14px; }
         </style>
     """, unsafe_allow_html=True)
 
-apply_global_ui()
+apply_ui()
 
-# --- 2. BACKSTAGE TRANSACTION ENGINE ---
-# These variables run silently across all internet signals (Haiti Data, Satellite, etc.)
+# --- 3. BACKSTAGE LOGIC & PERSISTENCE ---
 GLOBAL_PASSWORD = "20082021"
 OWNER_CIN = "1248795849"
 MONCASH_BIZ_NUM = "(509)-47385663"
@@ -44,90 +42,101 @@ MONCASH_BIZ_NUM = "(509)-47385663"
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "data_comp" not in st.session_state: st.session_state.data_comp = 0.0
 if "posts" not in st.session_state: st.session_state.posts = []
-if "profile" not in st.session_state: 
-    st.session_state.profile = {"name": "Collaborator", "image": None, "privacy": "Public"}
+if "profile" not in st.session_state:
+    st.session_state.profile = {"name": "Gesner Deslandes", "bio": "Python Expert", "visibility": "Public"}
 
-# SILENT TRANSACTION LOGIC: Accumulates 2.5 cents every time the app is interacted with
+# Silent Transaction Accumulator
 if st.session_state.logged_in:
-    st.session_state.data_comp += 0.025 
+    st.session_state.data_comp += 0.035 
 
-# --- 3. PAGE MODULES ---
+# --- 4. HEALTH MONITOR LOGIC ---
+def get_health_metrics():
+    # Simulated signal strength based on server response
+    start_time = time.time()
+    try:
+        socket.gethostbyname("google.com")
+        latency = round((time.time() - start_time) * 1000, 2)
+    except: latency = 999
+    
+    if latency < 150: signal = "SATELLITE (STARLINK/HIGH-SPEED)"
+    elif latency < 400: signal = "LOCAL DATA (NATCOM/DIGICEL)"
+    else: signal = "LOW SIGNAL / ROAMING"
+    return latency, signal
 
-def login_page():
-    st.markdown("<h1 style='text-align: center; font-size: 3.5rem;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center;'>Gesner Deslandes - Python Specialist</h3>", unsafe_allow_html=True)
-    st.divider()
-    with st.columns([1, 1.2, 1])[1]:
-        pwd = st.text_input("Enter Encrypted Access:", type="password")
-        if st.button("AUTHENTICATE SYSTEM", use_container_width=True):
-            if pwd == GLOBAL_PASSWORD:
-                st.session_state.logged_in = True
-                st.rerun()
-            else: st.error("Access Denied.")
+# --- 5. APPLICATION MODULES ---
 
 def main_app():
-    # --- SIDEBAR: ONLINE USERS ---
-    st.sidebar.title("📡 System Status")
-    st.sidebar.markdown(f"User: **{st.session_state.profile['name']}**")
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🟢 Online Collaborators")
-    st.sidebar.markdown(f"<span class='online-dot'></span> Gesner Deslandes", unsafe_allow_html=True)
-    st.sidebar.markdown(f"<span class='online-dot'></span> {st.session_state.profile['name']}", unsafe_allow_html=True)
+    # Sidebar: Identity & Health Monitor
+    st.sidebar.title("💎 GLOBALINTERNET.PY")
+    latency, signal = get_health_metrics()
+    
+    st.sidebar.markdown(f"### 🛡️ System Health")
+    st.sidebar.markdown(f"<p class='health-text'>Signal: {signal}<br>Latency: {latency}ms<br>Status: ENCRYPTED</p>", unsafe_allow_html=True)
+    st.sidebar.divider()
     
     menu = ["Collaboration Feed", "Satellite Tracking Map", "Live Broadcast", "Profile Settings", "Owner's Reclaim"]
-    choice = st.sidebar.selectbox("Main Menu", menu)
+    choice = st.sidebar.selectbox("System Access", menu)
 
-    # --- FEED WITH INTERACTIONS ---
+    # --- FEED ---
     if choice == "Collaboration Feed":
-        st.header("🌐 Global Interaction Hub")
+        st.header("🌐 Collaboration Feed")
         with st.form("post_form", clear_on_submit=True):
-            msg = st.text_area("Share a professional update with the network...")
+            user_msg = st.text_area("Broadcast professional status:")
             if st.form_submit_button("Broadcast"):
-                st.session_state.posts.insert(0, {"user": st.session_state.profile["name"], "text": msg, "likes": 0, "comments": []})
+                st.session_state.posts.insert(0, {"user": st.session_state.profile["name"], "text": user_msg, "likes": 0, "comments": []})
         
         for i, p in enumerate(st.session_state.posts):
             st.markdown(f"<div class='post-card'><b>👤 {p['user']}</b><br>{p['text']}</div>", unsafe_allow_html=True)
-            c1, c2, c3 = st.columns([1, 2, 5])
-            if c1.button(f"👍 {p['likes']}", key=f"like_{i}"): p['likes'] += 1
-            if c2.button(f"🗨️ Comment", key=f"comm_{i}"): pass
-            
-            # Simple comment display
-            for comment in p['comments']:
-                st.caption(f"↳ {comment}")
+            c1, c2 = st.columns([1, 6])
+            if c1.button(f"👍 {p['likes']}", key=f"lk_{i}"):
+                p['likes'] += 1
+                st.rerun()
 
-    # --- SATELLITE MAP (PRO VERSION) ---
+    # --- SATELLITE MAP ---
     elif choice == "Satellite Tracking Map":
-        st.header("🛰️ Live Satellite User Location")
+        st.header("🛰️ Active Satellite Map")
         if MAP_READY:
-            # ArcGIS Satellite Tiles for high-detail view
-            m = folium.Map(location=[18.5392, -72.3350], zoom_start=5, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri Satellite")
-            
-            # Real-time Green Marker for current signal
+            m = folium.Map(location=[18.5392, -72.3350], zoom_start=4, tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr="Esri")
             folium.CircleMarker(
-                location=[18.5392, -72.3350],
-                radius=10,
-                popup="Gesner Deslandes - ACTIVE SIGNAL",
-                color="#00FF00",
-                fill=True,
-                fill_color="#00FF00"
+                location=[18.5392, -72.3350], radius=15, color="#00FF00", fill=True, fill_color="#00FF00", fill_opacity=0.8,
+                popup=f"{st.session_state.profile['name']} - LIVE SIGNAL"
             ).add_to(m)
-            
             folium_static(m, width=1000)
-        else: st.error("Map module error. Check requirements.")
+        else: st.error("Map components failed. Please refresh.")
 
-    # --- OWNER'S RECLAIM ---
+    # --- BROADCAST ---
+    elif choice == "Live Broadcast":
+        st.header("📹 Live Broadcast")
+        if VIDEO_READY:
+            rtc_config = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+            webrtc_streamer(key="broadcast", mode=WebRtcMode.SENDRECV, rtc_configuration=rtc_config)
+        else: st.error("Video drivers not active.")
+
+    # --- PROFILE ---
+    elif choice == "Profile Settings":
+        st.header("👤 Account Settings")
+        st.session_state.profile["name"] = st.text_input("Display Name:", value=st.session_state.profile["name"])
+        st.session_state.profile["bio"] = st.text_area("Professional Bio:", value=st.session_state.profile["bio"])
+        if st.button("Save & Sync"): st.success("Profile saved.")
+
+    # --- RECLAIM ---
     elif choice == "Owner's Reclaim":
-        st.header("🔐 Founder Management (Backstage)")
-        cin = st.text_input("Verify Founder CIN:", type="password")
+        st.header("🔐 Founder Backstage")
+        cin = st.text_input("Enter Owner CIN:", type="password")
         if cin == OWNER_CIN:
-            st.success("Identity Confirmed.")
-            st.metric("Total Silent Compensation", f"${st.session_state.data_comp:.4f}")
-            if st.button("Transfer to MonCash (509)-47385663"):
+            st.metric("Total Data Compensation", f"${st.session_state.data_comp:.4f}")
+            if st.button("Transfer to MonCash"):
                 st.balloons()
-                st.success("MonCash Online Transaction Success.")
                 st.session_state.data_comp = 0.0
-        elif cin: st.error("Access Forbidden.")
 
 # --- EXECUTION ---
-if not st.session_state.logged_in: login_page()
-else: main_app()
+if not st.session_state.logged_in:
+    st.markdown("<h1 style='text-align: center;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+    with st.columns([1,1,1])[1]:
+        pwd = st.text_input("Password:", type="password")
+        if st.button("Login"):
+            if pwd == GLOBAL_PASSWORD:
+                st.session_state.logged_in = True
+                st.rerun()
+else:
+    main_app()
