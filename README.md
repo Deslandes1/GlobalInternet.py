@@ -6,3 +6,4 @@ av
 streamlit-folium
 folium
 fpdf
+geopy
