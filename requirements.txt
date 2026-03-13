@@ -1,4 +1,3 @@
-requirements.txt
-requirements.txt
-GlobalInternet.py
-GlobalInternet.py
+streamlit
+requests
+pillow
