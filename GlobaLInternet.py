@@ -277,7 +277,7 @@ class SatelliteTracker:
         for sat_name, pos in SATELLITE_POSITIONS.items():
             color = '#00ff88' if pos['status'] == 'active' else '#ffaa00'
             # Create custom icon for satellite
-            icon_html = f'''
+            icon_html = f"""
                 <div style="
                     background: radial-gradient(circle, {color}, #000);
                     width: 20px;
@@ -287,7 +287,7 @@ class SatelliteTracker:
                     box-shadow: 0 0 20px {color};
                     animation: pulse 2s infinite;
                 "></div>
-            '''
+            """
             # Add marker with popup
             folium.Marker(
                 location=[pos['lat'], pos['lon']],
@@ -728,5 +728,49 @@ def render_satellite_map():
                     f"{data['coverage_km']} km"
                 )
     else:
-        st.error("""
-        ❌ Satellite tracking unavailable. Please install required packages:
+        error_message = "❌ Satellite tracking unavailable. Please install required packages: pip install folium streamlit-folium geocoder"
+        st.error(error_message)
+# --- 12. LOGIN INTERFACE ---
+def login_interface():
+    """Enhanced login interface"""
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+        <h1 style='text-align: center; font-size: 48px; margin-bottom: 0;' class='glow-text'>
+        🌐
+        </h1>
+        <h1 style='text-align: center; margin-top: 0;'>GLOBALINTERNET.PY</h1>
+        <p style='text-align: center; color: #888;'>Satellite Communication Network</p>
+        """, unsafe_allow_html=True)
+        st.markdown("---")
+        with st.form("login_form"):
+            password = st.text_input(
+                "Access Password",
+                type="password",
+                placeholder="Enter network password"
+            )
+            col_a, col_b, col_c = st.columns(3)
+            with col_b:
+                submitted = st.form_submit_button("🚀 Connect", use_container_width=True)
+            if submitted:
+                if password == GLOBAL_PASSWORD:
+                    st.session_state.logged_in = True
+                    st.session_state.login_time = datetime.now()
+                    st.session_state.connection_time = time.time()
+                    st.session_state.user_role = "admin" if password == OWNER_CIN else "user"
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid password. Access denied.")
+        st.markdown("---")
+        st.markdown("""
+        <div style='text-align: center; color: #888; font-size: 12px;'>
+        🔒 Encrypted Satellite Connection<br>
+        © 2024 GLOBALINTERNET.PY - All rights reserved
+        </div>
+        """, unsafe_allow_html=True)
+# --- 13. APPLICATION ENTRY POINT ---
+if __name__ == "__main__":
+    if not st.session_state.logged_in:
+        login_interface()
+    else:
+        main_app()
