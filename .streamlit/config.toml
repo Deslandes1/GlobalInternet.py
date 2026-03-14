@@ -1,12 +1,2 @@
-[theme]
-primaryColor = "#00ff88"
-backgroundColor = "#0a1929"
-secondaryBackgroundColor = "#1a1f2e"
-textColor = "#ffffff"
-font = "sans serif"
-[server]
-maxUploadSize = 10
-enableCORS = true
-enableXsrfProtection = true
-[browser]
-gatherUsageStats = false
+SUPABASE_URL = "https://your-project-id.supabase.co"
+SUPABASE_KEY = "your-anon-public-key-here"
