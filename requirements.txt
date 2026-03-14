@@ -3,4 +3,5 @@ pandas
 numpy
 pillow
 nest-asyncio
+streamlit-autorefresh
 supabase
