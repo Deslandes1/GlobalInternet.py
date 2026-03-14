@@ -7,7 +7,7 @@ import random
 from PIL import Image
 import nest_asyncio
 from streamlit_autorefresh import st_autorefresh
-from supabase import create_client, Client
+from supabase import create_client
 import hashlib
 
 # Apply nest_asyncio
@@ -87,25 +87,6 @@ st.markdown("""
         50% { box-shadow: 0 0 20px #4CAF50; }
         100% { box-shadow: 0 0 5px #4CAF50; }
     }
-    .connection-status {
-        background-color: #1a1a2e;
-        color: white;
-        padding: 15px;
-        border-radius: 10px;
-        font-family: monospace;
-        border: 1px solid #4CAF50;
-    }
-    .background-badge {
-        background-color: #ffd700;
-        color: black;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: bold;
-        display: inline-block;
-        margin: 5px;
-        animation: pulse 2s infinite;
-    }
     .feature-card {
         background: white;
         padding: 15px;
@@ -119,44 +100,24 @@ st.markdown("""
 
 # Auto-refresh
 try:
-    count = st_autorefresh(interval=30000, key="auto_refresh")
+    st_autorefresh(interval=30000, key="auto_refresh")
 except:
     pass
 
-# Initialize Supabase
-@st.cache_resource
-def init_supabase():
-    try:
-        # Check if secrets exist
-        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
-            url = st.secrets["SUPABASE_URL"]
-            key = st.secrets["SUPABASE_KEY"]
-            return create_client(url, key)
-        else:
-            return None
-    except Exception as e:
-        st.error(f"Supabase init error: {e}")
-        return None
-
-# Hash password for security
+# Hash password function
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Initialize session state
+# Initialize all session state variables
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.connected = False
     st.session_state.current_user = None
-    st.session_state.active_connections = {}
-    st.session_state.internet_pool = {
-        "total_bandwidth": 1000,
-        "available_bandwidth": 1000,
-        "active_peers": 0,
-        "data_transferred": 0,
-        "background_sessions": 0
-    }
+    st.session_state.demo_mode = False
+    st.session_state.supabase_connected = False
+    st.session_state.supabase = None
     
-    # Owner data
+    # Owner data - FIXED: Make sure this is a dictionary, not a string
     st.session_state.owner = {
         "name": "Gesner Deslandes",
         "moncash": "50947385663",
@@ -168,22 +129,23 @@ if 'initialized' not in st.session_state:
         "auto_payment": False,
         "auto_threshold": 50.0
     }
-    
-    st.session_state.network = {
-        "status": "ACTIVE",
-        "peers": 0,
-        "latency": random.randint(20, 100),
-        "uptime": "99.99%"
-    }
-    
-    st.session_state.demo_mode = False
 
-# Initialize Supabase
-supabase = init_supabase()
-if supabase:
-    st.session_state.supabase_connected = True
-    st.session_state.demo_mode = False
-else:
+# Try to connect to Supabase
+try:
+    if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        if isinstance(url, str) and isinstance(key, str):
+            st.session_state.supabase = create_client(url, key)
+            st.session_state.supabase_connected = True
+            st.session_state.demo_mode = False
+        else:
+            st.session_state.supabase_connected = False
+            st.session_state.demo_mode = True
+    else:
+        st.session_state.supabase_connected = False
+        st.session_state.demo_mode = True
+except Exception as e:
     st.session_state.supabase_connected = False
     st.session_state.demo_mode = True
 
@@ -197,131 +159,197 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Show demo mode warning if needed
+# Show demo mode warning
 if st.session_state.demo_mode:
     st.warning("⚠️ Running in DEMO MODE - Using guest account only. Add Supabase secrets in Streamlit Cloud for real user accounts.")
 
-# Authentication Section
+# Login/Signup Section
 if not st.session_state.connected:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # Feature highlights
-        with st.container():
-            st.markdown("""
-            <div class="feature-card">
-                <h4>✨ Why Join GlobalInternet?</h4>
-                <p>✓ 100% FREE internet access</p>
-                <p>✓ 24/7 background connection</p>
-                <p>✓ Works with screen off</p>
-                <p>✓ Connect from anywhere</p>
-                <p>✓ No data limits</p>
-            </div>
-            """, unsafe_allow_html=True)
+        # Features
+        st.markdown("""
+        <div class="feature-card">
+            <h4>✨ Why Join GlobalInternet?</h4>
+            <p>✓ 100% FREE internet access</p>
+            <p>✓ 24/7 background connection</p>
+            <p>✓ Works with screen off</p>
+            <p>✓ Connect from anywhere</p>
+            <p>✓ No data limits</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         tab1, tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
         
+        # Login Tab
         with tab1:
-            st.markdown("### Login to Your Account")
-            login_username = st.text_input("Username", key="login_user")
-            login_password = st.text_input("Password", type="password", key="login_pass")
+            st.markdown("### Login")
+            login_user = st.text_input("Username", key="login_user")
+            login_pass = st.text_input("Password", type="password", key="login_pass")
             
-            if st.button("🔌 Login & Connect", use_container_width=True):
-                if st.session_state.supabase_connected:
+            if st.button("Login & Connect", use_container_width=True):
+                if st.session_state.supabase_connected and st.session_state.supabase:
                     try:
-                        # Hash password and check user
-                        hashed_pass = hash_password(login_password)
-                        response = supabase.table("users").select("*").eq("username", login_username).execute()
-                        
+                        hashed = hash_password(login_pass)
+                        response = st.session_state.supabase.table("users").select("*").eq("username", login_user).execute()
                         if response.data and len(response.data) > 0:
-                            user = response.data[0]
-                            if user["password"] == hashed_pass:
+                            if response.data[0]["password"] == hashed:
                                 st.session_state.connected = True
-                                st.session_state.current_user = login_username
-                                
-                                # Update last active
-                                supabase.table("users").update({
-                                    "last_active": datetime.now().isoformat(),
-                                    "online": True
-                                }).eq("username", login_username).execute()
-                                
-                                st.balloons()
-                                st.success(f"✅ Welcome back, {login_username}!")
+                                st.session_state.current_user = login_user
                                 st.rerun()
                             else:
-                                st.error("❌ Incorrect password")
+                                st.error("Wrong password")
                         else:
-                            st.error("❌ User not found")
+                            st.error("User not found")
                     except Exception as e:
                         st.error(f"Login error: {e}")
                 else:
-                    # Demo mode - use guest account
-                    if login_username == "guest" and login_password == "20082021":
+                    if login_user == "guest" and login_pass == "20082021":
                         st.session_state.connected = True
                         st.session_state.current_user = "guest"
                         st.session_state.demo_mode = True
-                        st.balloons()
-                        st.success("✅ Connected in DEMO MODE!")
                         st.rerun()
                     else:
-                        st.error("❌ Demo mode: Use guest / 20082021")
+                        st.error("Demo mode: Use guest/20082021")
         
+        # Sign Up Tab
         with tab2:
-            st.markdown("### Create New Account")
-            new_username = st.text_input("Choose Username", key="new_user")
-            new_password = st.text_input("Choose Password", type="password", key="new_pass")
-            confirm_password = st.text_input("Confirm Password", type="password", key="confirm_pass")
-            email = st.text_input("Email Address (optional)")
+            st.markdown("### Create Account")
+            new_user = st.text_input("Username", key="new_user")
+            new_pass = st.text_input("Password", type="password", key="new_pass")
+            confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass")
+            email = st.text_input("Email (optional)")
             
-            col_agree1, col_agree2 = st.columns([1,3])
-            with col_agree1:
-                agree = st.checkbox("I agree")
-            with col_agree2:
-                st.markdown("to help provide free internet by sharing anonymous usage data")
+            agree = st.checkbox("I agree to share anonymous usage data")
             
-            if st.button("📝 Sign Up & Connect", use_container_width=True):
+            if st.button("Sign Up & Connect", use_container_width=True):
                 if not agree:
                     st.error("Please agree to the terms")
-                elif new_password != confirm_password:
+                elif new_pass != confirm_pass:
                     st.error("Passwords don't match")
-                elif len(new_username) < 3:
-                    st.error("Username must be at least 3 characters")
-                elif st.session_state.supabase_connected:
+                elif len(new_user) < 3:
+                    st.error("Username too short")
+                elif st.session_state.supabase_connected and st.session_state.supabase:
                     try:
                         # Check if user exists
-                        response = supabase.table("users").select("*").eq("username", new_username).execute()
+                        response = st.session_state.supabase.table("users").select("*").eq("username", new_user).execute()
                         if response.data and len(response.data) > 0:
                             st.error("Username already taken")
                         else:
-                            # Create new user
-                            hashed_pass = hash_password(new_password)
+                            # Create user
+                            hashed = hash_password(new_pass)
                             user_data = {
-                                "username": new_username,
-                                "password": hashed_pass,
+                                "username": new_user,
+                                "password": hashed,
                                 "email": email,
                                 "created_at": datetime.now().isoformat(),
                                 "data_used": 0.0,
                                 "earnings": 0.0,
                                 "last_active": datetime.now().isoformat(),
-                                "online": False,
-                                "total_sessions": 0,
-                                "premium": False
+                                "online": True
                             }
-                            
-                            supabase.table("users").insert(user_data).execute()
-                            
-                            # Auto login
+                            st.session_state.supabase.table("users").insert(user_data).execute()
                             st.session_state.connected = True
-                            st.session_state.current_user = new_username
-                            
-                            st.balloons()
-                            st.success(f"✅ Account created! Welcome, {new_username}!")
+                            st.session_state.current_user = new_user
                             st.rerun()
                     except Exception as e:
                         st.error(f"Signup error: {e}")
                 else:
-                    st.info("Supabase not connected. Please add your Supabase credentials in Streamlit secrets to enable signup.")
-                    st.markdown("""
-                    **How to connect Supabase:**
-                    1. Go to your app dashboard on Streamlit Cloud
-                    2. Click Settings → Secrets
-                    3. Add:
+                    st.error("Cannot create account: Supabase not connected")
+
+# Main App (Logged In)
+else:
+    user = st.session_state.current_user
+    
+    # Generate random stats
+    data_used = random.uniform(5, 50)
+    revenue = data_used * 0.05
+    st.session_state.owner["total_revenue"] += revenue
+    st.session_state.owner["daily_revenue"] += revenue
+    st.session_state.owner["total_data"] += data_used / 1000
+    
+    # Sidebar
+    with st.sidebar:
+        st.image("https://img.icons8.com/fluency/96/globe.png", width=50)
+        st.markdown(f"### 👤 {user}")
+        if st.session_state.demo_mode:
+            st.info("🔧 DEMO MODE")
+        st.markdown(f"<span class='online-indicator'></span> **Online**", unsafe_allow_html=True)
+        st.markdown("---")
+        st.metric("Data Used", f"{data_used:.2f} MB")
+        st.metric("Session Time", f"{random.randint(10, 60)} min")
+    
+    # Main content
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown(f"""
+        <div class="internet-card">
+            <h2>🟢 Connected as {user}</h2>
+            <p><span class='online-indicator'></span> <strong>Status:</strong> Online</p>
+            <p><strong>IP:</strong> 10.0.{random.randint(1,255)}.{random.randint(1,255)}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        signal = random.randint(70, 100)
+        st.markdown(f"📶 Signal: {signal}%")
+        st.progress(signal/100)
+        
+        with st.expander("🌐 Browse"):
+            url = st.text_input("URL", "https://www.google.com")
+            if st.button("Go"):
+                st.success(f"Connected to {url}")
+    
+    with col2:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 15px; color: white;">
+            <h3>Quick Actions</h3>
+        """, unsafe_allow_html=True)
+        st.button("📱 YouTube")
+        st.button("📘 Facebook")
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Owner Panel - FIXED: No .items() anywhere
+    with st.expander("⚙️ Owner Panel", expanded=False):
+        owner_pass = st.text_input("Password", type="password", key="owner_pass")
+        
+        if owner_pass == "OwnerSpace2025":
+            owner = st.session_state.owner
+            
+            st.markdown("""
+            <div class="admin-panel">
+                <h2>💰 GESNER DESLANDES</h2>
+                <p>MonCash: 509-47385663</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Stats
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                st.metric("Total Revenue", f"${owner['total_revenue']:.4f}")
+                st.metric("Today", f"${owner['daily_revenue']:.4f}")
+            with col_r2:
+                st.metric("Total Data", f"{owner['total_data']:.2f} GB")
+                st.metric("Active Users", random.randint(10, 50))
+            
+            # Transfer button
+            if st.button("💰 TRANSFER TO MONCASH"):
+                if owner['total_revenue'] > 0:
+                    st.success(f"✅ Sent ${owner['total_revenue']:.4f} to {owner['moncash']}")
+                    owner['total_revenue'] = 0
+                    owner['daily_revenue'] = 0
+                else:
+                    st.warning("No funds")
+    
+    # Disconnect
+    if st.button("🔌 Disconnect"):
+        st.session_state.connected = False
+        st.rerun()
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: gray;">
+    <p>🌐 GlobalInternet Fun | Owner: Gesner Deslandes | MonCash: 509-47385663</p>
+</div>
+""", unsafe_allow_html=True)
