@@ -1,4 +1,4 @@
-"""
+  """
 GLOBALINTERNET.PY - Advanced Satellite Communication Platform
 Author: Gesner Deslandes
 Version: 2.0.0
