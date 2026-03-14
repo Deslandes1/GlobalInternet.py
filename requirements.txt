@@ -1,0 +1,6 @@
+streamlit
+pandas
+numpy
+pillow
+nest_asyncio
+streamlit-autorefresh
