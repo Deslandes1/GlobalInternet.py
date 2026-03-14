@@ -13,18 +13,27 @@ import json
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
-import plotly.graph_objects as go
-import plotly.express as px
 from streamlit_option_menu import option_menu
 import requests
+
 # --- 1. ADVANCED MODULE IMPORTS WITH FALLBACKS ---
+# Plotly for charts
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_READY = True
+except ImportError:
+    PLOTLY_READY = False
+    go = None
+    px = None
+
 # Video/Audio Modules
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
     VIDEO_READY = True
 except ImportError:
     VIDEO_READY = False
-    st.warning("WebRTC features disabled. Install streamlit-webrtc for video broadcasting.")
+
 # Mapping Modules
 try:
     import folium
@@ -33,13 +42,7 @@ try:
     MAP_READY = True
 except ImportError:
     MAP_READY = False
-    st.warning("Mapping features disabled. Install required packages for satellite tracking.")
-# Data Visualization
-try:
-    import plotly.express as px
-    PLOTLY_READY = True
-except ImportError:
-    PLOTLY_READY = False
+
 # --- 2. CONFIGURATION & CONSTANTS ---
 st.set_page_config(
     page_title="GLOBALINTERNET.PY",
@@ -47,11 +50,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
 # Security Constants
 GLOBAL_PASSWORD = "20082021"
 OWNER_CIN = "1248795849"
 MONCASH_BIZ_NUM = "(509)-47385663"
 ADMIN_EMAIL = "gesner@globalinternet.py"
+
 # Satellite Constants
 SATELLITE_POSITIONS = {
     "Starlink-3070": {"lat": 32.7767, "lon": -96.7970, "alt": 550, "status": "active"},
@@ -60,6 +65,7 @@ SATELLITE_POSITIONS = {
     "Starlink-6231": {"lat": 51.5074, "lon": -0.1278, "alt": 550, "status": "active"},
     "Starlink-7342": {"lat": 18.5392, "lon": -72.3350, "alt": 550, "status": "priority"}
 }
+
 # --- 3. SESSION STATE INITIALIZATION ---
 def init_session_state():
     """Initialize all session state variables"""
@@ -109,6 +115,7 @@ def init_session_state():
             "errors": 0
         }
 init_session_state()
+
 # --- 4. ADVANCED UI STYLING ---
 def apply_advanced_ui():
     """Apply sophisticated UI styling with animations"""
@@ -206,6 +213,7 @@ def apply_advanced_ui():
         </style>
     """, unsafe_allow_html=True)
 apply_advanced_ui()
+
 # --- 5. ENHANCED HEALTH MONITORING ---
 class SystemHealthMonitor:
     """Advanced system health monitoring with real-time metrics"""
@@ -258,6 +266,7 @@ class SystemHealthMonitor:
         minutes = int((uptime_seconds % 3600) // 60)
         seconds = int(uptime_seconds % 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
 # --- 6. SATELLITE TRACKING SYSTEM ---
 class SatelliteTracker:
     """Advanced satellite tracking and visualization"""
@@ -336,6 +345,7 @@ class SatelliteTracker:
                 "users_served": np.random.randint(100, 1000)
             }
         return coverage
+
 # --- 7. COLLABORATION FEED SYSTEM ---
 class CollaborationFeed:
     """Advanced social collaboration features"""
@@ -425,6 +435,7 @@ class CollaborationFeed:
                         CollaborationFeed.add_comment(post['id'], st.session_state.profile["name"], new_comment)
                         st.rerun()
                 st.divider()
+
 # --- 8. LIVE BROADCAST SYSTEM ---
 class LiveBroadcastSystem:
     """Advanced live broadcasting system"""
@@ -489,6 +500,7 @@ class LiveBroadcastSystem:
                 st.info("📡 Simulating satellite uplink...")
                 time.sleep(2)
                 st.success("Broadcast connected (Simulation Mode)")
+
 # --- 9. OWNER'S RECLAIM SYSTEM ---
 class OwnerReclaimSystem:
     """Owner-specific compensation and management system"""
@@ -519,7 +531,8 @@ class OwnerReclaimSystem:
                 np.random.randint(50, 500)
             )
         st.divider()
-        # Compensation charts
+        # Compensation charts (with fallback)
+        st.markdown("### 📈 Compensation History")
         if PLOTLY_READY:
             # Generate historical data
             history = pd.DataFrame({
@@ -539,6 +552,14 @@ class OwnerReclaimSystem:
                 font_color='white'
             )
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("📊 Install plotly for interactive charts: pip install plotly")
+            # Simple fallback chart using st.line_chart
+            chart_data = pd.DataFrame(
+                np.random.randn(20, 1) * st.session_state.data_comp,
+                columns=['Compensation']
+            )
+            st.line_chart(chart_data)
         st.divider()
         # Withdrawal interface
         st.markdown("### 💰 Withdrawal Options")
@@ -568,6 +589,7 @@ class OwnerReclaimSystem:
                 st.session_state.data_comp -= withdrawal_amount
             else:
                 st.error("Insufficient compensation balance")
+
 # --- 10. PROFILE MANAGEMENT ---
 class ProfileManager:
     """Advanced profile management system"""
@@ -625,6 +647,7 @@ class ProfileManager:
             st.info("Two-factor authentication coming soon")
             if st.button("Enable 2FA"):
                 st.success("2FA enabled (simulated)")
+
 # --- 11. MAIN APPLICATION LAYOUT ---
 def main_app():
     """Main application interface"""
@@ -686,6 +709,7 @@ def main_app():
             st.rerun()
     # Main content area
     menu_options[choice]["func"]()
+
 def render_satellite_map():
     """Render satellite tracking map"""
     st.markdown("### 🛰️ Global Satellite Network")
@@ -728,8 +752,8 @@ def render_satellite_map():
                     f"{data['coverage_km']} km"
                 )
     else:
-        error_message = "❌ Satellite tracking unavailable. Please install required packages: pip install folium streamlit-folium geocoder"
-        st.error(error_message)
+        st.error("❌ Satellite tracking unavailable. Please install required packages: folium, streamlit-folium, geocoder")
+
 # --- 12. LOGIN INTERFACE ---
 def login_interface():
     """Enhanced login interface"""
@@ -768,6 +792,7 @@ def login_interface():
         © 2024 GLOBALINTERNET.PY - All rights reserved
         </div>
         """, unsafe_allow_html=True)
+
 # --- 13. APPLICATION ENTRY POINT ---
 if __name__ == "__main__":
     if not st.session_state.logged_in:
