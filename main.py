@@ -7,3 +7,4 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 # Connect to the database
 connection = psycopg2.connect(DATABASE_URL)
+db.oyyywfwufogknghzyeov.supabase.co
