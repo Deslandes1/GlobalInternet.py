@@ -9,7 +9,6 @@ import nest_asyncio
 from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
 import hashlib
-import hmac
 
 # Apply nest_asyncio
 nest_asyncio.apply()
@@ -107,14 +106,6 @@ st.markdown("""
         margin: 5px;
         animation: pulse 2s infinite;
     }
-    .success-message {
-        background-color: #4CAF50;
-        color: white;
-        padding: 10px;
-        border-radius: 5px;
-        text-align: center;
-        margin: 10px 0;
-    }
     .feature-card {
         background: white;
         padding: 15px;
@@ -199,7 +190,7 @@ st.markdown("""
 
 # Show demo mode warning if needed
 if st.session_state.demo_mode:
-    st.warning("⚠️ Running in DEMO MODE - Connect Supabase for real user accounts. Add secrets in Streamlit Cloud settings.")
+    st.warning("⚠️ Running in DEMO MODE - Using guest account only. Add Supabase secrets in Streamlit Cloud for real user accounts.")
 
 # Authentication Section
 if not st.session_state.connected:
@@ -263,7 +254,7 @@ if not st.session_state.connected:
                         st.success("✅ Connected in DEMO MODE!")
                         st.rerun()
                     else:
-                        st.error("❌ Demo mode: Use guest/20082021")
+                        st.error("❌ Demo mode: Use guest / 20082021")
         
         with tab2:
             st.markdown("### Create New Account")
@@ -276,7 +267,7 @@ if not st.session_state.connected:
             with col_agree1:
                 agree = st.checkbox("I agree")
             with col_agree2:
-                st.mark to("to help provide free internet by sharing anonymous usage data")
+                st.markdown("to help provide free internet by sharing anonymous usage data")
             
             if st.button("📝 Sign Up & Connect", use_container_width=True):
                 if not agree:
@@ -319,7 +310,7 @@ if not st.session_state.connected:
                     except Exception as e:
                         st.error(f"Signup error: {e}")
                 else:
-                    st.error("Supabase not connected. Cannot create account.")
+                    st.error("Supabase not connected. Cannot create account. Using demo mode with guest account instead.")
 
 else:
     # User is logged in
@@ -443,7 +434,7 @@ else:
     
     # Admin Panel
     with st.expander("⚙️ Owner Panel", expanded=False):
-        owner_pass = st.text_input("Owner Password", type="password")
+        owner_pass = st.text_input("Owner Password", type="password", key="owner_pass")
         
         if owner_pass == "OwnerSpace2025":
             owner = st.session_state.owner
@@ -538,16 +529,22 @@ else:
                 st.subheader("📜 History")
                 df_t = pd.DataFrame(owner['transactions'])
                 st.dataframe(df_t)
+        
+        elif owner_pass:
+            st.error("🔒 Incorrect OwnerSpace Password. Access Denied.")
     
     # Disconnect
-    if st.button("🔌 DISCONNECT", use_container_width=True):
-        if st.session_state.supabase_connected and user != "guest":
-            try:
-                supabase.table("users").update({"online": False}).eq("username", user).execute()
-            except:
-                pass
-        st.session_state.connected = False
-        st.rerun()
+    col_d1, col_d2, col_d3 = st.columns([1,2,1])
+    with col_d2:
+        if st.button("🔌 MANUALLY DISCONNECT", use_container_width=True):
+            if st.session_state.supabase_connected and user != "guest":
+                try:
+                    supabase.table("users").update({"online": False}).eq("username", user).execute()
+                except:
+                    pass
+            st.session_state.connected = False
+            st.success("Disconnected. Come back anytime!")
+            st.rerun()
 
 # Footer
 st.markdown("---")
