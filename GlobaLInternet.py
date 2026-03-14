@@ -1,9 +1,8 @@
-  """
+"""
 GLOBALINTERNET.PY - Advanced Satellite Communication Platform
 Author: Gesner Deslandes
 Version: 2.0.0
 """
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +17,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_option_menu import option_menu
 import requests
-
 # --- 1. ADVANCED MODULE IMPORTS WITH FALLBACKS ---
 # Video/Audio Modules
 try:
@@ -27,7 +25,6 @@ try:
 except ImportError:
     VIDEO_READY = False
     st.warning("WebRTC features disabled. Install streamlit-webrtc for video broadcasting.")
-
 # Mapping Modules
 try:
     import folium
@@ -37,14 +34,12 @@ try:
 except ImportError:
     MAP_READY = False
     st.warning("Mapping features disabled. Install required packages for satellite tracking.")
-
 # Data Visualization
 try:
     import plotly.express as px
     PLOTLY_READY = True
 except ImportError:
     PLOTLY_READY = False
-
 # --- 2. CONFIGURATION & CONSTANTS ---
 st.set_page_config(
     page_title="GLOBALINTERNET.PY",
@@ -52,13 +47,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 # Security Constants
 GLOBAL_PASSWORD = "20082021"
 OWNER_CIN = "1248795849"
 MONCASH_BIZ_NUM = "(509)-47385663"
 ADMIN_EMAIL = "gesner@globalinternet.py"
-
 # Satellite Constants
 SATELLITE_POSITIONS = {
     "Starlink-3070": {"lat": 32.7767, "lon": -96.7970, "alt": 550, "status": "active"},
@@ -67,11 +60,9 @@ SATELLITE_POSITIONS = {
     "Starlink-6231": {"lat": 51.5074, "lon": -0.1278, "alt": 550, "status": "active"},
     "Starlink-7342": {"lat": 18.5392, "lon": -72.3350, "alt": 550, "status": "priority"}
 }
-
 # --- 3. SESSION STATE INITIALIZATION ---
 def init_session_state():
     """Initialize all session state variables"""
-    
     # Authentication
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
@@ -79,13 +70,11 @@ def init_session_state():
         st.session_state.login_time = None
     if "session_token" not in st.session_state:
         st.session_state.session_token = None
-    
     # User Data
     if "username" not in st.session_state:
         st.session_state.username = "guest"
     if "user_role" not in st.session_state:
         st.session_state.user_role = "user"
-    
     # Compensation Data
     if "data_comp" not in st.session_state:
         st.session_state.data_comp = 0.0
@@ -93,7 +82,6 @@ def init_session_state():
         st.session_state.total_bandwidth = 0.0
     if "connection_time" not in st.session_state:
         st.session_state.connection_time = time.time()
-    
     # Social Features
     if "posts" not in st.session_state:
         st.session_state.posts = []
@@ -101,7 +89,6 @@ def init_session_state():
         st.session_state.messages = []
     if "notifications" not in st.session_state:
         st.session_state.notifications = []
-    
     # User Profile
     if "profile" not in st.session_state:
         st.session_state.profile = {
@@ -113,7 +100,6 @@ def init_session_state():
             "verified": True,
             "connections": 0
         }
-    
     # System Metrics
     if "system_metrics" not in st.session_state:
         st.session_state.system_metrics = {
@@ -122,9 +108,7 @@ def init_session_state():
             "packets_received": 0,
             "errors": 0
         }
-
 init_session_state()
-
 # --- 4. ADVANCED UI STYLING ---
 def apply_advanced_ui():
     """Apply sophisticated UI styling with animations"""
@@ -136,13 +120,11 @@ def apply_advanced_ui():
             background-size: 400% 400%;
             animation: gradient 15s ease infinite;
         }
-        
         @keyframes gradient {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
-        
         /* Cyberpunk-styled metric cards */
         .stMetric {
             background: rgba(10, 25, 47, 0.8);
@@ -153,12 +135,10 @@ def apply_advanced_ui():
             backdrop-filter: blur(10px);
             transition: transform 0.3s ease;
         }
-        
         .stMetric:hover {
             transform: translateY(-5px);
             box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
         }
-        
         /* Futuristic post cards */
         .post-card {
             background: rgba(17, 34, 64, 0.9);
@@ -170,12 +150,10 @@ def apply_advanced_ui():
             animation: slideIn 0.5s ease;
             color: #e0e0e0;
         }
-        
         @keyframes slideIn {
             from { transform: translateX(-20px); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-        
         /* Health monitor styling */
         .health-text {
             font-family: 'Courier New', monospace;
@@ -186,31 +164,26 @@ def apply_advanced_ui():
             border-radius: 5px;
             border-left: 3px solid #00ff88;
         }
-        
         /* Glowing text effect */
         .glow-text {
             color: #fff;
             text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88, 0 0 30px #00ff88;
             animation: pulse 2s ease-in-out infinite;
         }
-        
         @keyframes pulse {
             0% { text-shadow: 0 0 10px #00ff88; }
             50% { text-shadow: 0 0 20px #00ff88, 0 0 30px #00a8ff; }
             100% { text-shadow: 0 0 10px #00ff88; }
         }
-        
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 10px;
             background: #0a1929;
         }
-        
         ::-webkit-scrollbar-thumb {
             background: linear-gradient(45deg, #00ff88, #00a8ff);
             border-radius: 5px;
         }
-        
         /* Button styling */
         .stButton > button {
             background: linear-gradient(45deg, #00ff88, #00a8ff);
@@ -221,12 +194,10 @@ def apply_advanced_ui():
             font-weight: bold;
             transition: all 0.3s ease;
         }
-        
         .stButton > button:hover {
             transform: scale(1.05);
             box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
         }
-        
         /* Sidebar styling */
         [data-testid="stSidebar"] {
             background: rgba(10, 25, 47, 0.95);
@@ -234,13 +205,10 @@ def apply_advanced_ui():
         }
         </style>
     """, unsafe_allow_html=True)
-
 apply_advanced_ui()
-
 # --- 5. ENHANCED HEALTH MONITORING ---
 class SystemHealthMonitor:
     """Advanced system health monitoring with real-time metrics"""
-    
     @staticmethod
     def get_network_metrics() -> Tuple[float, str, Dict]:
         """Get comprehensive network metrics"""
@@ -251,16 +219,13 @@ class SystemHealthMonitor:
             "signal_quality": 0,
             "bandwidth": 0
         }
-        
         try:
             # Test DNS resolution
             dns_start = time.time()
             socket.gethostbyname("google.com")
             metrics["dns_resolution"] = round((time.time() - dns_start) * 1000, 2)
-            
             # Calculate latency
             latency = round((time.time() - start_time) * 1000, 2)
-            
             # Determine signal quality and type
             if latency < 50:
                 signal = "SATELLITE (STARLINK/HIGH-SPEED)"
@@ -278,17 +243,13 @@ class SystemHealthMonitor:
                 signal = "LOW SIGNAL / ROAMING"
                 metrics["signal_quality"] = 40
                 metrics["bandwidth"] = 5
-            
             # Simulate packet loss (lower is better)
             metrics["packet_loss"] = round(np.random.uniform(0.1, 2.0), 2)
-            
         except Exception as e:
             latency = 999
             signal = "CONNECTION ERROR"
             metrics["packet_loss"] = 100
-        
         return latency, signal, metrics
-    
     @staticmethod
     def get_system_uptime() -> str:
         """Calculate system uptime"""
@@ -297,17 +258,14 @@ class SystemHealthMonitor:
         minutes = int((uptime_seconds % 3600) // 60)
         seconds = int(uptime_seconds % 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
 # --- 6. SATELLITE TRACKING SYSTEM ---
 class SatelliteTracker:
     """Advanced satellite tracking and visualization"""
-    
     @staticmethod
     def create_satellite_map(center_lat: float = 18.5392, center_lon: float = -72.3350):
         """Create an interactive satellite tracking map"""
         if not MAP_READY:
             return None
-        
         # Create base map with satellite imagery
         m = folium.Map(
             location=[center_lat, center_lon],
@@ -315,11 +273,9 @@ class SatelliteTracker:
             tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
             attr='Esri'
         )
-        
         # Add satellite positions
         for sat_name, pos in SATELLITE_POSITIONS.items():
             color = '#00ff88' if pos['status'] == 'active' else '#ffaa00'
-            
             # Create custom icon for satellite
             icon_html = f'''
                 <div style="
@@ -332,7 +288,6 @@ class SatelliteTracker:
                     animation: pulse 2s infinite;
                 "></div>
             '''
-            
             # Add marker with popup
             folium.Marker(
                 location=[pos['lat'], pos['lon']],
@@ -347,7 +302,6 @@ class SatelliteTracker:
                 ),
                 icon=folium.DivIcon(html=icon_html)
             ).add_to(m)
-        
         # Add user location marker
         folium.CircleMarker(
             location=[center_lat, center_lon],
@@ -359,7 +313,6 @@ class SatelliteTracker:
             popup=f"{st.session_state.profile['name']} - PRIMARY STATION",
             tooltip="Your Location"
         ).add_to(m)
-        
         # Add connection lines between satellites
         points = [(pos['lat'], pos['lon']) for pos in SATELLITE_POSITIONS.values()]
         folium.PolyLine(
@@ -369,9 +322,7 @@ class SatelliteTracker:
             opacity=0.3,
             dash_array="5"
         ).add_to(m)
-        
         return m
-    
     @staticmethod
     def get_satellite_coverage() -> Dict:
         """Calculate satellite coverage area"""
@@ -385,11 +336,9 @@ class SatelliteTracker:
                 "users_served": np.random.randint(100, 1000)
             }
         return coverage
-
 # --- 7. COLLABORATION FEED SYSTEM ---
 class CollaborationFeed:
     """Advanced social collaboration features"""
-    
     @staticmethod
     def create_post(user: str, content: str, post_type: str = "text"):
         """Create a new post in the feed"""
@@ -406,7 +355,6 @@ class CollaborationFeed:
         }
         st.session_state.posts.insert(0, post)
         return post
-    
     @staticmethod
     def add_comment(post_id: str, user: str, comment: str):
         """Add a comment to a post"""
@@ -418,12 +366,10 @@ class CollaborationFeed:
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 })
                 break
-    
     @staticmethod
     def render_feed():
         """Render the collaboration feed with enhanced UI"""
         st.markdown("### 🌐 Global Collaboration Network")
-        
         # Post creation form
         with st.form("post_creation", clear_on_submit=True):
             col1, col2 = st.columns([4, 1])
@@ -435,7 +381,6 @@ class CollaborationFeed:
                 )
             with col2:
                 post_type = st.selectbox("Type", ["text", "update", "alert", "broadcast"])
-            
             if st.form_submit_button("🚀 Broadcast", use_container_width=True):
                 if post_content:
                     CollaborationFeed.create_post(
@@ -445,9 +390,7 @@ class CollaborationFeed:
                     )
                     st.success("Message broadcast to satellite network!")
                     st.rerun()
-        
         st.divider()
-        
         # Display posts
         for post in st.session_state.posts:
             with st.container():
@@ -460,10 +403,8 @@ class CollaborationFeed:
                     st.markdown(f"**{verified_badge}{post['user']}**")
                 with col3:
                     st.markdown(f"<span style='color: #888;'>{post['timestamp']}</span>", unsafe_allow_html=True)
-                
                 # Post content
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
-                
                 # Post actions
                 col1, col2, col3, col4 = st.columns([1, 1, 1, 4])
                 with col1:
@@ -475,28 +416,22 @@ class CollaborationFeed:
                         st.session_state[f"show_comments_{post['id']}"] = True
                 with col3:
                     st.button(f"🔄 {post['shares']}", key=f"share_{post['id']}")
-                
                 # Comments section
                 if st.session_state.get(f"show_comments_{post['id']}", False):
                     for comment in post['comments']:
                         st.markdown(f"<span style='color: #888;'>💬 {comment['user']}: {comment['comment']}</span>", unsafe_allow_html=True)
-                    
                     new_comment = st.text_input("Add comment:", key=f"new_comment_{post['id']}")
                     if new_comment:
                         CollaborationFeed.add_comment(post['id'], st.session_state.profile["name"], new_comment)
                         st.rerun()
-                
                 st.divider()
-
 # --- 8. LIVE BROADCAST SYSTEM ---
 class LiveBroadcastSystem:
     """Advanced live broadcasting system"""
-    
     @staticmethod
     def render_broadcast():
         """Render live broadcast interface"""
         st.markdown("### 📡 Live Satellite Broadcast")
-        
         if VIDEO_READY:
             # Broadcast configuration
             col1, col2 = st.columns(2)
@@ -512,7 +447,6 @@ class LiveBroadcastSystem:
                     ["Public", "Private", "Encrypted"],
                     horizontal=True
                 )
-            
             # RTC Configuration
             rtc_config = RTCConfiguration({
                 "iceServers": [
@@ -520,7 +454,6 @@ class LiveBroadcastSystem:
                     {"urls": ["stun:stun1.l.google.com:19302"]}
                 ]
             })
-            
             # WebRTC Streamer
             webrtc_ctx = webrtc_streamer(
                 key="satellite-broadcast",
@@ -536,11 +469,9 @@ class LiveBroadcastSystem:
                     "autoPlay": True,
                 }
             )
-            
             # Broadcast stats
             if webrtc_ctx.state.playing:
                 st.success("🔴 LIVE - Broadcasting to satellite network")
-                
                 # Viewer stats
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -549,33 +480,26 @@ class LiveBroadcastSystem:
                     st.metric("Bandwidth", f"{np.random.randint(5, 50)} Mbps")
                 with col3:
                     st.metric("Quality", broadcast_quality)
-            
         else:
             st.warning("⚠️ WebRTC not available. Install streamlit-webrtc for live broadcasting.")
-            
             # Fallback: Simulated broadcast
             st.image("https://images.unsplash.com/photo-1451187580459-43490279c0fa", 
                     caption="Simulated Broadcast Mode")
-            
             if st.button("Start Simulated Broadcast"):
                 st.info("📡 Simulating satellite uplink...")
                 time.sleep(2)
                 st.success("Broadcast connected (Simulation Mode)")
-
 # --- 9. OWNER'S RECLAIM SYSTEM ---
 class OwnerReclaimSystem:
     """Owner-specific compensation and management system"""
-    
     @staticmethod
     def render_owner_panel():
         """Render the owner's reclaim interface"""
         st.markdown("### 🔐 Founder's Command Center")
-        
         # Calculate compensation
         session_duration = time.time() - st.session_state.connection_time
         data_comp_rate = 0.035  # $ per second
         st.session_state.data_comp = session_duration * data_comp_rate
-        
         # Main metrics
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -594,9 +518,7 @@ class OwnerReclaimSystem:
                 "Active Connections",
                 np.random.randint(50, 500)
             )
-        
         st.divider()
-        
         # Compensation charts
         if PLOTLY_READY:
             # Generate historical data
@@ -604,7 +526,6 @@ class OwnerReclaimSystem:
                 'Time': pd.date_range(start='now', periods=20, freq='1min')[-20:],
                 'Compensation': [st.session_state.data_comp * (1 - i/100) for i in range(20)]
             })
-            
             fig = px.line(
                 history, 
                 x='Time', 
@@ -618,12 +539,9 @@ class OwnerReclaimSystem:
                 font_color='white'
             )
             st.plotly_chart(fig, use_container_width=True)
-        
         st.divider()
-        
         # Withdrawal interface
         st.markdown("### 💰 Withdrawal Options")
-        
         col1, col2 = st.columns(2)
         with col1:
             withdrawal_method = st.selectbox(
@@ -637,7 +555,6 @@ class OwnerReclaimSystem:
                 max_value=float(st.session_state.data_comp),
                 value=min(10.0, st.session_state.data_comp)
             )
-        
         if st.button("🚀 Initiate Transfer", use_container_width=True):
             if withdrawal_amount <= st.session_state.data_comp:
                 st.balloons()
@@ -651,23 +568,19 @@ class OwnerReclaimSystem:
                 st.session_state.data_comp -= withdrawal_amount
             else:
                 st.error("Insufficient compensation balance")
-
 # --- 10. PROFILE MANAGEMENT ---
 class ProfileManager:
     """Advanced profile management system"""
-    
     @staticmethod
     def render_profile_settings():
         """Render profile settings interface"""
         st.markdown("### 👤 Satellite Identity Management")
-        
         # Profile picture section
         col1, col2 = st.columns([1, 3])
         with col1:
             st.image("https://via.placeholder.com/150", caption="Profile Image")
             if st.button("Upload New"):
                 st.info("Image upload coming soon")
-        
         with col2:
             # Profile form
             with st.form("profile_form"):
@@ -675,18 +588,15 @@ class ProfileManager:
                     "Display Name",
                     value=st.session_state.profile["name"]
                 )
-                
                 st.session_state.profile["bio"] = st.text_area(
                     "Professional Bio",
                     value=st.session_state.profile["bio"],
                     height=100
                 )
-                
                 st.session_state.profile["location"] = st.text_input(
                     "Location",
                     value=st.session_state.profile.get("location", "Earth")
                 )
-                
                 visibility = st.selectbox(
                     "Profile Visibility",
                     ["Public", "Private", "Connections Only"],
@@ -695,12 +605,9 @@ class ProfileManager:
                     )
                 )
                 st.session_state.profile["visibility"] = visibility
-                
                 if st.form_submit_button("💾 Save Changes", use_container_width=True):
                     st.success("Profile synchronized with satellite network!")
-        
         st.divider()
-        
         # Account statistics
         st.markdown("### 📊 Network Statistics")
         col1, col2, col3, col4 = st.columns(4)
@@ -712,28 +619,22 @@ class ProfileManager:
             st.metric("Join Date", st.session_state.profile.get("join_date", "2024"))
         with col4:
             st.metric("Verified", "✅" if st.session_state.profile.get("verified", False) else "❌")
-        
         st.divider()
-        
         # Security settings
         with st.expander("🔐 Security Settings"):
             st.info("Two-factor authentication coming soon")
             if st.button("Enable 2FA"):
                 st.success("2FA enabled (simulated)")
-
 # --- 11. MAIN APPLICATION LAYOUT ---
 def main_app():
     """Main application interface"""
-    
     # Sidebar with health monitor
     with st.sidebar:
         st.markdown("## 🌐 **GLOBALINTERNET.PY**")
         st.markdown("---")
-        
         # Health monitor
         latency, signal, metrics = SystemHealthMonitor.get_network_metrics()
         uptime = SystemHealthMonitor.get_system_uptime()
-        
         st.markdown("### 🛡️ **System Health**")
         st.markdown(f"""
         <div class='health-text'>
@@ -746,9 +647,7 @@ def main_app():
         🔒 Status: ENCRYPTED
         </div>
         """, unsafe_allow_html=True)
-        
         st.markdown("---")
-        
         # Data compensation display
         st.markdown("### 💎 **Data Compensation**")
         st.markdown(f"""
@@ -757,9 +656,7 @@ def main_app():
         💰 ${st.session_state.data_comp:.4f}
         </div>
         """, unsafe_allow_html=True)
-        
         st.markdown("---")
-        
         # Navigation menu with icons
         menu_options = {
             "Collaboration Feed": {"icon": "📡", "func": CollaborationFeed.render_feed},
@@ -768,7 +665,6 @@ def main_app():
             "Profile Settings": {"icon": "👤", "func": ProfileManager.render_profile_settings},
             "Owner's Reclaim": {"icon": "🔐", "func": OwnerReclaimSystem.render_owner_panel}
         }
-        
         choice = option_menu(
             menu_title="System Access",
             options=list(menu_options.keys()),
@@ -782,22 +678,17 @@ def main_app():
                 "nav-link-selected": {"background-color": "#00ff88", "color": "black"},
             }
         )
-        
         st.markdown("---")
         st.markdown(f"**Logged in as:** {st.session_state.profile['name']}")
         st.markdown(f"**Role:** {st.session_state.user_role}")
-        
         if st.button("🚪 Logout"):
             st.session_state.logged_in = False
             st.rerun()
-    
     # Main content area
     menu_options[choice]["func"]()
-
 def render_satellite_map():
     """Render satellite tracking map"""
     st.markdown("### 🛰️ Global Satellite Network")
-    
     if MAP_READY:
         # Map controls
         col1, col2 = st.columns(2)
@@ -808,7 +699,6 @@ def render_satellite_map():
             )
         with col2:
             tracking = st.checkbox("Auto-track my location", value=True)
-        
         # Get user location if tracking enabled
         if tracking:
             try:
@@ -821,16 +711,13 @@ def render_satellite_map():
                 center_lat, center_lon = 18.5392, -72.3350
         else:
             center_lat, center_lon = 18.5392, -72.3350
-        
         # Create and display map
         m = SatelliteTracker.create_satellite_map(center_lat, center_lon)
         if m:
             folium_static(m, width=1000, height=600)
-        
         # Satellite statistics
         st.divider()
         st.markdown("### 📊 Satellite Network Statistics")
-        
         coverage = SatelliteTracker.get_satellite_coverage()
         cols = st.columns(len(coverage))
         for i, (sat_name, data) in enumerate(coverage.items()):
