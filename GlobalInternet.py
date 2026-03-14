@@ -118,16 +118,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Auto-refresh
-count = st_autorefresh(interval=30000, key="auto_refresh")
+try:
+    count = st_autorefresh(interval=30000, key="auto_refresh")
+except:
+    pass
 
 # Initialize Supabase
 @st.cache_resource
 def init_supabase():
     try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except:
+        # Check if secrets exist
+        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+            url = st.secrets["SUPABASE_URL"]
+            key = st.secrets["SUPABASE_KEY"]
+            return create_client(url, key)
+        else:
+            return None
+    except Exception as e:
+        st.error(f"Supabase init error: {e}")
         return None
 
 # Hash password for security
@@ -174,6 +182,7 @@ if 'initialized' not in st.session_state:
 supabase = init_supabase()
 if supabase:
     st.session_state.supabase_connected = True
+    st.session_state.demo_mode = False
 else:
     st.session_state.supabase_connected = False
     st.session_state.demo_mode = True
@@ -223,7 +232,7 @@ if not st.session_state.connected:
                         hashed_pass = hash_password(login_password)
                         response = supabase.table("users").select("*").eq("username", login_username).execute()
                         
-                        if response.data:
+                        if response.data and len(response.data) > 0:
                             user = response.data[0]
                             if user["password"] == hashed_pass:
                                 st.session_state.connected = True
@@ -280,7 +289,7 @@ if not st.session_state.connected:
                     try:
                         # Check if user exists
                         response = supabase.table("users").select("*").eq("username", new_username).execute()
-                        if response.data:
+                        if response.data and len(response.data) > 0:
                             st.error("Username already taken")
                         else:
                             # Create new user
@@ -310,256 +319,9 @@ if not st.session_state.connected:
                     except Exception as e:
                         st.error(f"Signup error: {e}")
                 else:
-                    st.error("Supabase not connected. Cannot create account. Using demo mode with guest account instead.")
-
-else:
-    # User is logged in
-    user = st.session_state.current_user
-    
-    # Track data usage (simulated)
-    data_used_today = random.uniform(5, 50)
-    revenue_generated = data_used_today * st.session_state.owner["profit_rate"]
-    
-    # Update in Supabase if connected
-    if st.session_state.supabase_connected and user != "guest":
-        try:
-            # Get user data
-            response = supabase.table("users").select("*").eq("username", user).execute()
-            if response.data:
-                user_data = response.data[0]
-                current_data = user_data.get("data_used", 0)
-                
-                # Update with new data
-                supabase.table("users").update({
-                    "data_used": current_data + data_used_today,
-                    "last_active": datetime.now().isoformat(),
-                    "online": True
-                }).eq("username", user).execute()
-        except Exception as e:
-            st.error(f"Error updating user data: {e}")
-    
-    # Update owner revenue
-    st.session_state.owner["total_revenue"] += revenue_generated
-    st.session_state.owner["daily_revenue"] += revenue_generated
-    st.session_state.owner["total_data"] += data_used_today / 1000
-    
-    # Sidebar with user info
-    with st.sidebar:
-        st.image("https://img.icons8.com/fluency/96/globe.png", width=50)
-        st.markdown(f"### 👤 {user}")
-        
-        if st.session_state.demo_mode:
-            st.info("🔧 DEMO MODE")
-        
-        # Online status
-        st.markdown(f"<span class='online-indicator'></span> **Online**", unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.markdown("**📊 Your Stats:**")
-        st.metric("Data Shared", f"{data_used_today:.2f} MB")
-        st.metric("Session Time", f"{random.randint(10, 120)} min")
-        
-        st.markdown("---")
-        st.markdown("**👥 Online Now:**")
-        online_users = ["alice", "bob", "charlie", "diana"][:random.randint(2,4)]
-        for ou in online_users:
-            st.markdown(f"<span class='online-indicator'></span> {ou}", unsafe_allow_html=True)
-    
-    # Main content
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown(f"""
-        <div class="internet-card">
-            <h2>🟢 Connected as {user}</h2>
-            <p><span class='online-indicator'></span> <strong>Status:</strong> Online 24/7</p>
-            <p><strong>IP Address:</strong> 10.0.{random.randint(1,255)}.{random.randint(1,255)}</p>
-            <p><strong>Connected Since:</strong> {datetime.now().strftime('%H:%M:%S')}</p>
-            <p><strong>Background Mode:</strong> ✅ Active (works with screen off)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Signal strength
-        signal = random.randint(80, 100)
-        st.markdown(f"""
-        <div style="margin: 20px 0;">
-            <strong>📶 Signal: {signal}%</strong>
-            <div class="signal-strength" style="width: {signal}%;"></div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Network stats
-        st.markdown("### 🌍 Global Network")
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            st.metric("Active Users", random.randint(50, 200))
-        with col_b:
-            st.metric("Speed", f"{random.randint(50, 150)} Mbps")
-        with col_c:
-            st.metric("Data Today", f"{st.session_state.owner['total_data']:.2f} GB")
-        
-        # Browse option
-        with st.expander("🌐 Browse Internet"):
-            url = st.text_input("Enter URL", "https://www.google.com")
-            if st.button("Go"):
-                st.success(f"Connected to {url}")
-                st.markdown(f'<iframe src="{url}" width="100%" height="400"></iframe>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 15px; color: white;">
-            <h3>⚡ Quick Actions</h3>
-        """, unsafe_allow_html=True)
-        
-        if st.button("📱 YouTube"):
-            st.info("Opening YouTube...")
-        if st.button("📘 Facebook"):
-            st.info("Opening Facebook...")
-        if st.button("📸 Instagram"):
-            st.info("Opening Instagram...")
-        if st.button("🐦 Twitter"):
-            st.info("Opening Twitter...")
-        
-        st.markdown("---")
-        st.markdown("**💬 Recent Activity:**")
-        activities = [
-            f"• Watched video (5 MB)",
-            f"• Scrolled feed (2 MB)",
-            f"• Chat messages (1 MB)"
-        ]
-        for act in activities[:2]:
-            st.markdown(act)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Admin Panel
-    with st.expander("⚙️ Owner Panel", expanded=False):
-        owner_pass = st.text_input("Owner Password", type="password", key="owner_pass")
-        
-        if owner_pass == "OwnerSpace2025":
-            owner = st.session_state.owner
-            
-            st.markdown("""
-            <div class="admin-panel">
-                <h2>💰 GESNER DESLANDES - OWNER DASHBOARD</h2>
-                <p>MonCash: 509-47385663</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Revenue stats
-            col_r1, col_r2, col_r3 = st.columns(3)
-            with col_r1:
-                st.markdown(f"""
-                <div class="profit-counter">
-                    ${owner['total_revenue']:.4f}
-                </div>
-                <p style="text-align: center;">Total Revenue</p>
-                """, unsafe_allow_html=True)
-            with col_r2:
-                st.metric("Today", f"${owner['daily_revenue']:.4f}")
-                st.metric("Active Users", random.randint(20, 100))
-            with col_r3:
-                st.metric("Total Data", f"{owner['total_data']:.2f} GB")
-                st.metric("Rate", f"${owner['profit_rate']}/MB")
-            
-            # Real users from Supabase
-            if st.session_state.supabase_connected:
-                st.subheader("📋 Registered Users")
-                try:
-                    users = supabase.table("users").select("*").execute()
-                    if users.data:
-                        df = pd.DataFrame(users.data)
-                        # Remove password column for display
-                        if 'password' in df.columns:
-                            df = df.drop('password', axis=1)
-                        st.dataframe(df)
-                        
-                        # Total users count
-                        st.metric("Total Registered Users", len(users.data))
-                except Exception as e:
-                    st.warning(f"Could not load users: {e}")
-            
-            # Payment processing
-            st.subheader("💸 Instant MonCash Transfer")
-            
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                st.markdown(f"""
-                **Payment Details:**
-                - Amount: ${owner['total_revenue']:.4f}
-                - To: {owner['moncash']}
-                """)
-                
-                if st.button("💰 TRANSFER NOW", use_container_width=True):
-                    if owner['total_revenue'] > 0:
-                        transaction = {
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "amount": owner['total_revenue'],
-                            "to": owner['moncash'],
-                            "status": "COMPLETED",
-                            "reference": f"MC{random.randint(10000, 99999)}"
-                        }
-                        owner['transactions'].append(transaction)
-                        
-                        st.balloons()
-                        st.success(f"""
-                        ✅ TRANSFER COMPLETE!
-                        Amount: ${owner['total_revenue']:.4f}
-                        Reference: {transaction['reference']}
-                        """)
-                        
-                        owner['total_revenue'] = 0
-                        owner['daily_revenue'] = 0
-                        st.rerun()
-                    else:
-                        st.warning("No funds to transfer")
-            
-            with col_p2:
-                # Auto-payment settings
-                enable_auto = st.checkbox("Enable Auto-Transfer")
-                if enable_auto:
-                    threshold = st.number_input("Threshold ($)", value=50.0)
-                    if st.button("Save Settings"):
-                        owner['auto_payment'] = True
-                        owner['auto_threshold'] = threshold
-                        st.success(f"Auto-transfer at ${threshold}")
-            
-            # Transaction history
-            if owner['transactions']:
-                st.subheader("📜 History")
-                df_t = pd.DataFrame(owner['transactions'])
-                st.dataframe(df_t)
-        
-        elif owner_pass:
-            st.error("🔒 Incorrect OwnerSpace Password. Access Denied.")
-    
-    # Disconnect
-    col_d1, col_d2, col_d3 = st.columns([1,2,1])
-    with col_d2:
-        if st.button("🔌 MANUALLY DISCONNECT", use_container_width=True):
-            if st.session_state.supabase_connected and user != "guest":
-                try:
-                    supabase.table("users").update({"online": False}).eq("username", user).execute()
-                except:
-                    pass
-            st.session_state.connected = False
-            st.success("Disconnected. Come back anytime!")
-            st.rerun()
-
-# Footer
-st.markdown("---")
-col_f1, col_f2, col_f3 = st.columns(3)
-with col_f1:
-    st.metric("Total Users", "150+" if st.session_state.supabase_connected else "DEMO")
-with col_f2:
-    st.metric("Active Now", str(random.randint(20, 50)) + "+")
-with col_f3:
-    st.metric("Data Shared", f"{random.randint(100, 500)} GB")
-
-st.markdown("""
-<div style="text-align: center; color: gray; padding: 20px;">
-    <p>🌐 GlobalInternet Fun - Free Internet for Everyone</p>
-    <p>© 2025 | Owner: Gesner Deslandes | MonCash: 509-47385663</p>
-    <p style="color: #4CAF50;">⚡ Connect and have fun!</p>
-</div>
-""", unsafe_allow_html=True)
+                    st.info("Supabase not connected. Please add your Supabase credentials in Streamlit secrets to enable signup.")
+                    st.markdown("""
+                    **How to connect Supabase:**
+                    1. Go to your app dashboard on Streamlit Cloud
+                    2. Click Settings → Secrets
+                    3. Add:
