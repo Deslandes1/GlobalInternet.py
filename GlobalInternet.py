@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 4.0.0 (Full Social Features)
+Version: 5.0.0 (User signup only, no global password)
 """
 import streamlit as st
 import pandas as pd
@@ -38,8 +38,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Secrets ---
-GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
+# --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
@@ -305,7 +304,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth ---
+# --- Auth (only Supabase) ---
 def sign_up(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable (Supabase not configured).")
@@ -567,25 +566,7 @@ def login_interface():
                         sign_up(email, password, full_name)
                     else:
                         st.warning("Please fill all fields")
-        st.markdown("---")
-        with st.expander("Admin Access (Legacy)"):
-            admin_pwd = st.text_input("Admin Password", type="password")
-            if st.button("Admin Login"):
-                if admin_pwd == GLOBAL_PASSWORD:
-                    st.session_state.logged_in = True
-                    st.session_state.user = {"id": "admin", "email": "admin@local"}
-                    st.session_state.profile = {
-                        "id": "admin",
-                        "full_name": "Admin",
-                        "avatar_url": None,
-                        "bio": "",
-                        "location": ""
-                    }
-                    st.session_state.connection_time = time.time()
-                    st.session_state.posts = load_posts()
-                    st.rerun()
-                else:
-                    st.error("Invalid admin password")
+        # No admin login – only Supabase auth
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:
