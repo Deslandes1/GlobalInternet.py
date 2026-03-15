@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.6.0 (Password reset, video playback, enhanced profile)
+Version: 8.7.0 (Schema check for media_urls)
 """
 import streamlit as st
 import pandas as pd
@@ -39,6 +39,27 @@ def init_supabase():
         return None
 
 supabase = init_supabase()
+
+# --- Schema check: verify media_urls column exists ---
+@st.cache_resource
+def check_schema():
+    if supabase is None:
+        return False
+    try:
+        # Try to select media_urls from posts (limit 0 to avoid data)
+        supabase.table("posts").select("media_urls").limit(0).execute()
+        return True
+    except Exception as e:
+        if "Could not find the 'media_urls' column" in str(e):
+            st.error("⚠️ Database schema incomplete: 'media_urls' column missing in 'posts' table. "
+                     "Please run the SQL setup script (see documentation). Media uploads will be disabled.")
+            return False
+        else:
+            # Other error – maybe table doesn't exist at all
+            st.error(f"Database error: {e}")
+            return False
+
+SCHEMA_OK = check_schema()
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -254,7 +275,8 @@ def upload_avatar(user_id, image_file):
         return None
 
 def upload_post_media(user_id, file):
-    if supabase is None:
+    if supabase is None or not SCHEMA_OK:
+        st.error("Media uploads are disabled because the database schema is incomplete.")
         return None
     try:
         content_type = file.type
@@ -278,11 +300,21 @@ def load_posts():
     if supabase is None:
         return []
     try:
-        response = supabase.table("posts").select(
-            "*, profiles(full_name, avatar_url, is_live)"
-        ).order("created_at", desc=True).execute()
+        # If schema is incomplete, don't try to select media_urls
+        if SCHEMA_OK:
+            response = supabase.table("posts").select(
+                "*, profiles(full_name, avatar_url, is_live)"
+            ).order("created_at", desc=True).execute()
+        else:
+            # Select without media_urls
+            response = supabase.table("posts").select(
+                "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
+            ).order("created_at", desc=True).execute()
         posts = response.data
         for post in posts:
+            # Add empty media_urls if missing
+            if "media_urls" not in post:
+                post["media_urls"] = []
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -323,7 +355,7 @@ def create_post(user_id, content, media_files, is_public=True):
                 return False
 
         media_urls = []
-        if media_files:
+        if SCHEMA_OK and media_files:
             for f in media_files:
                 media_info = upload_post_media(user_id, f)
                 if media_info:
@@ -331,21 +363,24 @@ def create_post(user_id, content, media_files, is_public=True):
                 else:
                     st.warning(f"One file failed to upload, skipped.")
 
+        # Prepare post data – include media_urls only if schema is ok
         post = {
             "user_id": user_id,
             "content": content,
             "is_public": is_public,
             "likes_count": 0,
             "shares_count": 0,
-            "media_urls": media_urls,
             "created_at": datetime.now().isoformat()
         }
+        if SCHEMA_OK:
+            post["media_urls"] = media_urls
+
         result = supabase.table("posts").insert(post).execute()
         if result.data:
             st.session_state.posts = load_posts()
             return True
         else:
-            st.error("Post insertion failed (maybe missing 'media_urls' column? Run the SQL script).")
+            st.error("Post insertion failed.")
             return False
     except Exception as e:
         error_str = str(e)
@@ -386,9 +421,10 @@ def share_post(original_post_id, user_id, is_public=True):
             "original_post_id": original_post_id,
             "likes_count": 0,
             "shares_count": 0,
-            "media_urls": [],
             "created_at": datetime.now().isoformat()
         }
+        if SCHEMA_OK:
+            post["media_urls"] = []
         supabase.table("posts").insert(post).execute()
         st.session_state.posts = load_posts()
         return True
@@ -736,17 +772,21 @@ def render_feed():
     # New post form
     with st.form("new_post", clear_on_submit=True):
         content = st.text_area("Caption", height=100, placeholder="Write a caption...")
-        media_files = st.file_uploader(
-            "Add images or videos (optional)",
-            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
-            accept_multiple_files=True
-        )
+        if SCHEMA_OK:
+            media_files = st.file_uploader(
+                "Add images or videos (optional)",
+                type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+                accept_multiple_files=True
+            )
+        else:
+            media_files = None
+            st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
         col1, col2 = st.columns([4,1])
         with col2:
             is_public = st.checkbox("Public", value=True)
         if st.form_submit_button("🚀 Post"):
-            if content or media_files:
-                if create_post(st.session_state.user.id, content, media_files, is_public):
+            if content or (SCHEMA_OK and media_files):
+                if create_post(st.session_state.user.id, content, media_files if SCHEMA_OK else [], is_public):
                     st.success("Post published!")
                     st.rerun()
             else:
@@ -800,7 +840,6 @@ def render_feed():
                     if media["type"] == "image":
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
-                        # Video with controls – users can tap to play/unmute
                         st.video(media["url"])
 
             # Reactions
