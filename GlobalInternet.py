@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.2.0 (Phone OTP Fixed)
+Version: 8.3.0 (Phone signup with international numbers)
 
 --- REQUIRED SUPABASE SCHEMA UPDATES ---
 Run these SQL statements in your Supabase SQL Editor:
@@ -593,11 +593,12 @@ def send_phone_otp(raw_phone):
         return False
     try:
         phone = format_phone(raw_phone)
+        # Validate: after '+', must have only digits and at least 8 characters
         if len(phone) < 8 or not phone[1:].isdigit():
-            st.error("Phone number must include country code and at least 8 digits. Example: +50947385663")
+            st.error("Please enter a valid international phone number with country code, e.g., 50947385663 for Haiti or 447840379 for UK.")
             return False
         supabase.auth.sign_in_with_otp({"phone": phone})
-        st.success("OTP sent to your phone. Please enter it below.")
+        st.success("OTP sent to your phone. Please enter the 6-digit code below.")
         return True
     except Exception as e:
         error_msg = str(e)
@@ -1023,10 +1024,14 @@ def login_interface():
                         else:
                             st.warning("Please fill all fields")
         else:
-            st.info("Phone number must be in international format, e.g., **+50947385663**")
+            st.info("Enter your phone number with country code (no +, no spaces).\n\n"
+                    "Examples:\n"
+                    "- Haiti: `50947385663`\n"
+                    "- UK: `447840379`\n"
+                    "- USA: `12125551234`")
             if not st.session_state.phone_otp_sent:
                 with st.form("phone_request"):
-                    phone = st.text_input("Phone number (with country code)")
+                    phone = st.text_input("Phone number (digits only)")
                     if st.form_submit_button("📲 Send OTP", use_container_width=True):
                         if phone:
                             if send_phone_otp(phone):
@@ -1036,7 +1041,7 @@ def login_interface():
                         else:
                             st.warning("Please enter a phone number")
             else:
-                st.write(f"OTP sent to {st.session_state.temp_phone}")
+                st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
                 with st.form("phone_verify"):
                     otp = st.text_input("Enter 6-digit OTP code")
                     if st.form_submit_button("✅ Verify & Login", use_container_width=True):
