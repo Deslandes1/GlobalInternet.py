@@ -2,7 +2,7 @@
 GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Junior Deslandes
 Collaborators: Roosevelt Deslandes, Zendaya Christelle Deslandes
-Version: 3.0.0 (with user registration)
+Version: 3.1.0 (with Supabase auth & error handling)
 """
 import streamlit as st
 import pandas as pd
@@ -17,24 +17,40 @@ from supabase import create_client, Client
 # Page config
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🌐", layout="wide")
 
-# --- Supabase client ---
+# --- Supabase client with error handling ---
 @st.cache_resource
 def init_supabase():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    """Initialize Supabase client only if secrets are valid."""
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+    
+    if not url or not key:
+        st.warning("⚠️ Supabase credentials not found. User registration/login disabled.")
+        return None
+    
+    # Basic URL validation
+    if not url.startswith(("http://", "https://")):
+        st.error("❌ SUPABASE_URL must start with http:// or https://")
+        return None
+    
+    try:
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"❌ Failed to connect to Supabase: {e}")
+        return None
 
 supabase = init_supabase()
 
-# --- Constants from secrets ---
-GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")  # optional admin
+# --- Constants from secrets (optional admin login) ---
+GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")  # if needed
 
 # --- Session state initialization ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
-    st.session_state.user = None          # will hold user data from Supabase
+    st.session_state.user = None
 if "data_comp" not in st.session_state:
     st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
@@ -48,7 +64,7 @@ if "profile" not in st.session_state:
         "location": ""
     }
 
-# --- UI styling (unchanged) ---
+# --- UI styling (unchanged, but included for completeness) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -165,18 +181,16 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Sign up function ---
+# --- Supabase auth functions with error checking ---
 def sign_up(email, password, name):
+    if supabase is None:
+        st.error("Registration is currently unavailable (Supabase not configured).")
+        return False
     try:
-        # Create user in Supabase Auth
         user = supabase.auth.sign_up({
             "email": email,
             "password": password,
-            "options": {
-                "data": {
-                    "full_name": name
-                }
-            }
+            "options": {"data": {"full_name": name}}
         })
         if user.user:
             st.success("Sign-up successful! Please log in.")
@@ -185,8 +199,10 @@ def sign_up(email, password, name):
         st.error(f"Sign-up failed: {e}")
         return False
 
-# --- Login function ---
 def log_in(email, password):
+    if supabase is None:
+        st.error("Login is currently unavailable (Supabase not configured).")
+        return
     try:
         user = supabase.auth.sign_in_with_password({
             "email": email,
@@ -195,7 +211,6 @@ def log_in(email, password):
         if user.user:
             st.session_state.logged_in = True
             st.session_state.user = user.user
-            # Update profile with user metadata
             st.session_state.profile["name"] = user.user.user_metadata.get("full_name", email)
             st.session_state.profile["email"] = email
             st.session_state.connection_time = time.time()
@@ -203,8 +218,9 @@ def log_in(email, password):
     except Exception as e:
         st.error(f"Login failed: {e}")
 
-# --- Logout ---
 def logout():
+    if supabase:
+        supabase.auth.sign_out()
     st.session_state.logged_in = False
     st.session_state.user = None
     st.rerun()
@@ -258,7 +274,7 @@ def render_profile():
         loc = st.text_input("Location", value=st.session_state.profile.get("location", ""))
         if st.form_submit_button("💾 Save"):
             st.session_state.profile.update({"name": name, "bio": bio, "location": loc})
-            # Optionally update Supabase user metadata here
+            # Optionally update Supabase user metadata here (if you want)
             st.success("Profile updated!")
 
 def render_reclaim():
@@ -375,7 +391,7 @@ def login_interface():
                 else:
                     st.error("Invalid admin password")
 
-# --- Main ---
+# --- Main entry point ---
 if __name__ == "__main__":
     if not st.session_state.logged_in:
         login_interface()
