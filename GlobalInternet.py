@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 5.0.0 (User signup only, no global password)
+Version: 5.1.0 (Fixed profile creation on post)
 """
 import streamlit as st
 import pandas as pd
@@ -141,14 +141,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Helper functions for Supabase ---
+
 def get_or_create_profile(user_id, email):
+    """Fetch profile; if missing, create one with robust error handling."""
     if supabase is None:
+        st.error("Supabase not configured.")
         return None
     try:
+        # Attempt to fetch existing profile
         response = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if response.data:
             return response.data[0]
         else:
+            # No profile exists – create one
             new_profile = {
                 "id": user_id,
                 "full_name": email.split('@')[0],
@@ -156,10 +161,16 @@ def get_or_create_profile(user_id, email):
                 "bio": "",
                 "location": ""
             }
-            supabase.table("profiles").insert(new_profile).execute()
-            return new_profile
+            insert_response = supabase.table("profiles").insert(new_profile).execute()
+            if insert_response.data:
+                return insert_response.data[0]
+            else:
+                st.error("Failed to create profile – no data returned.")
+                return None
     except Exception as e:
-        st.error(f"Error fetching profile: {e}")
+        st.error(f"Error in get_or_create_profile: {e}")
+        if hasattr(e, 'args') and len(e.args) > 0:
+            st.error(f"Details: {e.args[0]}")
         return None
 
 def update_profile(profile_data):
@@ -199,9 +210,27 @@ def load_posts():
         return []
 
 def create_post(user_id, content, is_public=True):
+    """Create a new post with profile existence check."""
     if supabase is None:
+        st.error("Supabase not configured.")
         return False
     try:
+        # Ensure the user has a profile before inserting post
+        profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not profile_check.data:
+            st.warning("Profile missing – attempting to recreate...")
+            # Try to recreate profile using email from session
+            if st.session_state.user and st.session_state.user.email:
+                email = st.session_state.user.email
+                profile = get_or_create_profile(user_id, email)
+                if not profile:
+                    st.error("Could not create profile. Please contact support.")
+                    return False
+            else:
+                st.error("User email not found in session.")
+                return False
+        
+        # Proceed with post creation
         post = {
             "user_id": user_id,
             "content": content,
@@ -210,9 +239,13 @@ def create_post(user_id, content, is_public=True):
             "shares_count": 0,
             "created_at": datetime.now().isoformat()
         }
-        supabase.table("posts").insert(post).execute()
-        st.session_state.posts = load_posts()
-        return True
+        result = supabase.table("posts").insert(post).execute()
+        if result.data:
+            st.session_state.posts = load_posts()  # refresh feed
+            return True
+        else:
+            st.error("Post insertion returned no data.")
+            return False
     except Exception as e:
         st.error(f"Error creating post: {e}")
         return False
