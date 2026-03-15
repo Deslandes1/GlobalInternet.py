@@ -1,4 +1,0 @@
-runtime.txt (NEW - forces Python 3.9)
-requirements.txt (simplified version)
-.streamlit/config.toml
-GlobalInternet.py
