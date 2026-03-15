@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 3.2.0 (with pigeon logo and OwnerSpace2025)
+Version: 4.0.0 (Full Social Features)
 """
 import streamlit as st
 import pandas as pd
@@ -14,9 +14,11 @@ import hashlib
 from datetime import datetime
 import requests
 from supabase import create_client, Client
+import io
+from PIL import Image
 
 # Page config
-st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🕊️", layout="wide")
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
 # --- Supabase client with error handling ---
 @st.cache_resource
@@ -41,31 +43,28 @@ def init_supabase():
 supabase = init_supabase()
 
 # --- Secrets ---
-GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
-OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
-OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")  # <-- OwnerSpace2025
+GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")          # fallback admin
+OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")                    # owner's CIN
+MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")            # MonCash number
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025") # owner space password
 
 # --- Session state initialization ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
-    st.session_state.user = None
+    st.session_state.user = None          # Supabase user object
+if "profile" not in st.session_state:
+    st.session_state.profile = None       # custom profile data
 if "data_comp" not in st.session_state:
     st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
     st.session_state.connection_time = time.time()
 if "posts" not in st.session_state:
-    st.session_state.posts = []
-if "profile" not in st.session_state:
-    st.session_state.profile = {
-        "name": "Guest",
-        "bio": "",
-        "location": ""
-    }
+    st.session_state.posts = []            # cache for posts
 if "owner_space_access" not in st.session_state:
     st.session_state.owner_space_access = False
 
-# --- UI styling with pigeon logo and names ---
+# --- UI styling (Haitian symbol and collaborators) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -77,11 +76,11 @@ st.markdown("""
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
-    /* Pigeon logo with red/blue gradient */
-    .pigeon-logo {
-        font-size: 5rem;
+    /* Haitian flag colors in symbol */
+    .haiti-symbol {
+        font-size: 4rem;
         text-align: center;
-        background: linear-gradient(135deg, #0044cc 0%, #0044cc 50%, #cc0000 50%, #cc0000 100%);
+        background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         display: inline-block;
@@ -111,11 +110,6 @@ st.markdown("""
         border-radius: 20px;
         border: 1px solid rgba(0,168,255,0.3);
         box-shadow: 0 8px 20px rgba(0,20,50,0.1);
-        transition: transform 0.2s;
-    }
-    .stMetric:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 25px rgba(0,100,200,0.15);
     }
     .post-card {
         background: rgba(255,255,255,0.7);
@@ -152,7 +146,156 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Health monitoring ---
+# --- Helper functions for Supabase data ---
+def get_or_create_profile(user_id, email):
+    """Fetch profile from 'profiles' table; create if not exists."""
+    if supabase is None:
+        return None
+    try:
+        response = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if response.data:
+            return response.data[0]
+        else:
+            # Create new profile
+            new_profile = {
+                "id": user_id,
+                "full_name": email.split('@')[0],
+                "avatar_url": None,
+                "bio": "",
+                "location": ""
+            }
+            supabase.table("profiles").insert(new_profile).execute()
+            return new_profile
+    except Exception as e:
+        st.error(f"Error fetching profile: {e}")
+        return None
+
+def update_profile(profile_data):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("profiles").update(profile_data).eq("id", profile_data["id"]).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error updating profile: {e}")
+        return False
+
+def upload_avatar(user_id, image_file):
+    """Upload image to Supabase Storage bucket 'avatars'."""
+    if supabase is None:
+        return None
+    try:
+        # Generate unique filename
+        ext = image_file.name.split('.')[-1]
+        file_name = f"{user_id}_{int(time.time())}.{ext}"
+        # Read file bytes
+        image_bytes = image_file.getvalue()
+        # Upload to Supabase Storage
+        supabase.storage.from_("avatars").upload(file_name, image_bytes)
+        # Get public URL
+        public_url = supabase.storage.from_("avatars").get_public_url(file_name)
+        return public_url
+    except Exception as e:
+        st.error(f"Avatar upload failed: {e}")
+        return None
+
+# --- Post functions ---
+def load_posts():
+    if supabase is None:
+        return []
+    try:
+        # Join with profiles to get user names and avatars
+        response = supabase.table("posts").select(
+            "*, profiles(full_name, avatar_url)"
+        ).order("created_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error loading posts: {e}")
+        return []
+
+def create_post(user_id, content, is_public=True):
+    if supabase is None:
+        return False
+    try:
+        post = {
+            "user_id": user_id,
+            "content": content,
+            "is_public": is_public,
+            "likes_count": 0,
+            "shares_count": 0,
+            "created_at": datetime.now().isoformat()
+        }
+        supabase.table("posts").insert(post).execute()
+        # Refresh posts in session
+        st.session_state.posts = load_posts()
+        return True
+    except Exception as e:
+        st.error(f"Error creating post: {e}")
+        return False
+
+def like_post(post_id, increment=True):
+    if supabase is None:
+        return
+    try:
+        if increment:
+            supabase.rpc("increment_likes", {"post_id": post_id}).execute()
+        else:
+            supabase.rpc("decrement_likes", {"post_id": post_id}).execute()
+    except Exception as e:
+        st.error(f"Error updating likes: {e}")
+
+def share_post(original_post_id, user_id, is_public=True):
+    if supabase is None:
+        return False
+    try:
+        # First increment shares count on original post
+        supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
+        # Create new post as a share (you can add a reference)
+        post = {
+            "user_id": user_id,
+            "content": f"(Shared post)",
+            "is_public": is_public,
+            "original_post_id": original_post_id,
+            "likes_count": 0,
+            "shares_count": 0,
+            "created_at": datetime.now().isoformat()
+        }
+        supabase.table("posts").insert(post).execute()
+        st.session_state.posts = load_posts()
+        return True
+    except Exception as e:
+        st.error(f"Error sharing post: {e}")
+        return False
+
+def add_comment(post_id, user_id, content):
+    if supabase is None:
+        return False
+    try:
+        comment = {
+            "post_id": post_id,
+            "user_id": user_id,
+            "content": content,
+            "created_at": datetime.now().isoformat()
+        }
+        supabase.table("comments").insert(comment).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error adding comment: {e}")
+        return False
+
+def load_comments(post_id):
+    if supabase is None:
+        return []
+    try:
+        response = supabase.table("comments").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("post_id", post_id).order("created_at").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error loading comments: {e}")
+        return []
+
+# --- Health monitoring (unchanged) ---
 def get_network_status():
     try:
         start = time.time()
@@ -179,8 +322,8 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Supabase auth functions ---
-def sign_up(email, password, name):
+# --- Authentication functions ---
+def sign_up(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable (Supabase not configured).")
         return False
@@ -188,9 +331,10 @@ def sign_up(email, password, name):
         user = supabase.auth.sign_up({
             "email": email,
             "password": password,
-            "options": {"data": {"full_name": name}}
+            "options": {"data": {"full_name": full_name}}
         })
         if user.user:
+            # Profile will be created on first login via get_or_create_profile
             st.success("Sign-up successful! Please log in.")
             return True
     except Exception as e:
@@ -209,9 +353,12 @@ def log_in(email, password):
         if user.user:
             st.session_state.logged_in = True
             st.session_state.user = user.user
-            st.session_state.profile["name"] = user.user.user_metadata.get("full_name", email)
-            st.session_state.profile["email"] = email
+            # Load profile
+            profile = get_or_create_profile(user.user.id, email)
+            st.session_state.profile = profile
             st.session_state.connection_time = time.time()
+            # Load posts
+            st.session_state.posts = load_posts()
             st.rerun()
     except Exception as e:
         st.error(f"Login failed: {e}")
@@ -221,51 +368,111 @@ def logout():
         supabase.auth.sign_out()
     st.session_state.logged_in = False
     st.session_state.user = None
+    st.session_state.profile = None
     st.session_state.owner_space_access = False
     st.rerun()
 
-# --- Owner Space (using OwnerSpace2025) ---
-def owner_space():
-    st.header("🕊️ Owner Space")
-    if not st.session_state.owner_space_access:
-        with st.form("owner_space_login"):
-            pwd = st.text_input("Enter Owner Space Password", type="password")
-            if st.form_submit_button("Access"):
-                if pwd == OWNSPACE_PASSWORD:
-                    st.session_state.owner_space_access = True
-                    st.rerun()
-                else:
-                    st.error("Invalid password")
-        return
-    
-    st.success("Welcome to the Owner Space!")
-    st.markdown("Here you can manage privileged settings.")
-    # Add any owner-specific functionality here
-    if st.button("Logout from Owner Space"):
-        st.session_state.owner_space_access = False
-        st.rerun()
+# --- Page rendering functions ---
 
-# --- Main app pages ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
-    with st.form("post_form", clear_on_submit=True):
-        post = st.text_area("Share an update...", height=100)
-        if st.form_submit_button("🚀 Broadcast"):
-            if post:
-                new_post = {
-                    "user": st.session_state.profile["name"],
-                    "content": post,
-                    "time": datetime.now().strftime("%H:%M"),
-                    "likes": 0,
-                    "id": hashlib.md5(str(time.time()).encode()).hexdigest()[:6]
-                }
-                st.session_state.posts.insert(0, new_post)
+    
+    # New post form
+    with st.form("new_post", clear_on_submit=True):
+        col1, col2 = st.columns([4,1])
+        with col1:
+            content = st.text_area("What's on your mind?", height=100)
+        with col2:
+            is_public = st.checkbox("Public", value=True)
+        if st.form_submit_button("🚀 Post"):
+            if content:
+                if create_post(st.session_state.user.id, content, is_public):
+                    st.success("Post published!")
+                    st.rerun()
+    
+    st.divider()
+    
+    # Display posts
+    for post in st.session_state.posts:
+        with st.container():
+            # Post header
+            col_a, col_b, col_c = st.columns([1,5,2])
+            with col_a:
+                avatar = post.get("profiles", {}).get("avatar_url")
+                if avatar:
+                    st.image(avatar, width=40)
+                else:
+                    st.markdown("👤")
+            with col_b:
+                st.markdown(f"**{post['profiles']['full_name']}**")
+            with col_c:
+                st.caption(post['created_at'][:16])
+            
+            # Post content
+            st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+            
+            # Actions
+            col1, col2, col3, col4 = st.columns([1,1,1,4])
+            with col1:
+                if st.button(f"👍 {post['likes_count']}", key=f"like_{post['id']}"):
+                    like_post(post['id'], increment=True)
+                    st.rerun()
+            with col2:
+                # Comment toggle
+                if st.button(f"💬", key=f"comment_{post['id']}"):
+                    st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
+                    st.rerun()
+            with col3:
+                if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                    # Share as new post (public by default)
+                    share_post(post['id'], st.session_state.user.id, is_public=True)
+                    st.rerun()
+            
+            # Comments section
+            if st.session_state.get(f"show_comments_{post['id']}", False):
+                comments = load_comments(post['id'])
+                for c in comments:
+                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                # Add comment form
+                with st.form(key=f"add_comment_{post['id']}"):
+                    new_comment = st.text_input("Write a comment...")
+                    if st.form_submit_button("Post Comment"):
+                        if new_comment:
+                            add_comment(post['id'], st.session_state.user.id, new_comment)
+                            st.rerun()
+            st.divider()
+
+def render_profile():
+    st.header("👤 My Profile")
+    if st.session_state.profile is None:
+        return
+    
+    profile = st.session_state.profile
+    col1, col2 = st.columns([1,2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=150)
+        else:
+            st.image("https://via.placeholder.com/150", width=150)
+        # Avatar upload
+        uploaded = st.file_uploader("Change profile picture", type=["png","jpg","jpeg"])
+        if uploaded:
+            url = upload_avatar(st.session_state.user.id, uploaded)
+            if url:
+                profile["avatar_url"] = url
+                update_profile(profile)
                 st.rerun()
-    for p in st.session_state.posts:
-        st.markdown(f"<div class='post-card'><b>{p['user']}</b> at {p['time']}<br>{p['content']}</div>", unsafe_allow_html=True)
-        if st.button(f"👍 {p['likes']}", key=f"like_{p['id']}"):
-            p['likes'] += 1
-            st.rerun()
+    
+    with col2:
+        with st.form("edit_profile"):
+            full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
+            bio = st.text_area("Bio", value=profile.get("bio", ""))
+            location = st.text_input("Location", value=profile.get("location", ""))
+            if st.form_submit_button("💾 Update Profile"):
+                profile.update({"full_name": full_name, "bio": bio, "location": location})
+                if update_profile(profile):
+                    st.success("Profile updated!")
+                    st.rerun()
 
 def render_map():
     st.header("🛰️ Satellite Network")
@@ -286,20 +493,12 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-def render_profile():
-    st.header("👤 Profile Settings")
-    with st.form("profile_form"):
-        name = st.text_input("Name", value=st.session_state.profile["name"])
-        bio = st.text_area("Bio", value=st.session_state.profile.get("bio", ""))
-        loc = st.text_input("Location", value=st.session_state.profile.get("location", ""))
-        if st.form_submit_button("💾 Save"):
-            st.session_state.profile.update({"name": name, "bio": bio, "location": loc})
-            st.success("Profile updated!")
-
 def render_reclaim():
     st.header("🔐 Owner's Dashboard")
+    # Update compensation
     duration = time.time() - st.session_state.connection_time
     st.session_state.data_comp = duration * 0.035
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Compensation", f"${st.session_state.data_comp:.4f}")
@@ -308,6 +507,7 @@ def render_reclaim():
     with col3:
         st.metric("Network Users", np.random.randint(100, 500))
     st.divider()
+    
     st.subheader("💰 Withdraw Funds")
     method = st.selectbox("Method", ["MonCash", "Bank Transfer", "Crypto"])
     amount = st.number_input("Amount ($)", 0.0, float(st.session_state.data_comp))
@@ -317,11 +517,34 @@ def render_reclaim():
             st.success(f"Transferred ${amount:.2f} via {method}")
             st.session_state.data_comp -= amount
 
+def owner_space():
+    st.header("🕊️ Owner Space (Private)")
+    if not st.session_state.owner_space_access:
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
+            if st.form_submit_button("Access"):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+    
+    st.success("Welcome, Owner!")
+    # Display owner's credentials (from secrets)
+    st.markdown("### 🔑 Your Private Credentials")
+    st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
+    st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
+    st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}` (stored in secrets)")
+    
+    if st.button("Logout from Owner Space"):
+        st.session_state.owner_space_access = False
+        st.rerun()
+
 # --- Main app with sidebar ---
 def main_app():
     with st.sidebar:
-        # Pigeon logo and owner name
-        st.markdown("<div class='pigeon-logo'>🕊️</div>", unsafe_allow_html=True)
+        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
         st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
         <div class='collaborators'>
@@ -347,14 +570,15 @@ def main_app():
         st.divider()
         st.markdown(f"💰 **Compensation:** ${st.session_state.data_comp:.4f}")
         st.divider()
-        st.markdown(f"👤 **Logged in as:** {st.session_state.profile['name']}")
+        if st.session_state.profile:
+            st.markdown(f"👤 **Logged in as:** {st.session_state.profile.get('full_name', 'User')}")
         if st.button("🚪 Logout"):
             logout()
         st.divider()
         
         # Navigation
         pages = {
-            "📡 Collaboration Feed": render_feed,
+            "📡 Feed": render_feed,
             "🛰️ Satellite Map": render_map,
             "👤 Profile": render_profile,
             "🔐 Owner's Dashboard": render_reclaim,
@@ -363,12 +587,11 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login / Sign-up interface ---
+# --- Login / Sign-up interface (with Haitian symbol and collaborators) ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # Pigeon logo and names on login page
-        st.markdown("<div style='text-align: center;'><span class='pigeon-logo' style='font-size:6rem;'>🕊️</span></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center;'><span class='haiti-symbol' style='font-size:6rem;'>🇭🇹</span></div>", unsafe_allow_html=True)
         st.markdown("<h1 style='text-align: center; color: #0a2a44;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
         st.markdown("<div class='owner-name' style='font-size:1.8rem;'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
@@ -390,25 +613,33 @@ def login_interface():
 
         with tab2:
             with st.form("signup_form"):
-                name = st.text_input("Full Name")
+                full_name = st.text_input("Full Name")
                 email = st.text_input("Email")
                 password = st.text_input("Password", type="password")
                 if st.form_submit_button("📝 Sign Up", use_container_width=True):
-                    if name and email and password:
-                        sign_up(email, password, name)
+                    if full_name and email and password:
+                        sign_up(email, password, full_name)
                     else:
                         st.warning("Please fill all fields")
 
-        # Optional admin login
+        # Optional admin login (using GLOBAL_PASSWORD)
         st.markdown("---")
-        with st.expander("Admin Access"):
+        with st.expander("Admin Access (Legacy)"):
             admin_pwd = st.text_input("Admin Password", type="password")
             if st.button("Admin Login"):
                 if admin_pwd == GLOBAL_PASSWORD:
+                    # Create a dummy session for admin
                     st.session_state.logged_in = True
-                    st.session_state.user = {"email": "admin@local"}
-                    st.session_state.profile["name"] = "Admin"
+                    st.session_state.user = {"id": "admin", "email": "admin@local"}
+                    st.session_state.profile = {
+                        "id": "admin",
+                        "full_name": "Admin",
+                        "avatar_url": None,
+                        "bio": "",
+                        "location": ""
+                    }
                     st.session_state.connection_time = time.time()
+                    st.session_state.posts = load_posts()
                     st.rerun()
                 else:
                     st.error("Invalid admin password")
