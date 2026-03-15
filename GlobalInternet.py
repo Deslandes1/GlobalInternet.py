@@ -1,8 +1,9 @@
 """
 GLOBALINTERNET.PY - Satellite Communication Platform
-Lead Developer: Gesner Junior Deslandes
-Collaborators: Roosevelt Deslandes, Zendaya Christelle Deslandes
-Version: 3.1.0 (with Supabase auth & error handling)
+Lead Developer: Gesner Deslandes
+Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
+               Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
+Version: 3.2.0 (with pigeon logo and OwnerSpace2025)
 """
 import streamlit as st
 import pandas as pd
@@ -15,12 +16,11 @@ import requests
 from supabase import create_client, Client
 
 # Page config
-st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🕊️", layout="wide")
 
 # --- Supabase client with error handling ---
 @st.cache_resource
 def init_supabase():
-    """Initialize Supabase client only if secrets are valid."""
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
     
@@ -28,7 +28,6 @@ def init_supabase():
         st.warning("⚠️ Supabase credentials not found. User registration/login disabled.")
         return None
     
-    # Basic URL validation
     if not url.startswith(("http://", "https://")):
         st.error("❌ SUPABASE_URL must start with http:// or https://")
         return None
@@ -41,10 +40,10 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Constants from secrets (optional admin login) ---
+# --- Secrets ---
 GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
-OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")  # if needed
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")  # <-- OwnerSpace2025
 
 # --- Session state initialization ---
 if "logged_in" not in st.session_state:
@@ -63,8 +62,10 @@ if "profile" not in st.session_state:
         "bio": "",
         "location": ""
     }
+if "owner_space_access" not in st.session_state:
+    st.session_state.owner_space_access = False
 
-# --- UI styling (unchanged, but included for completeness) ---
+# --- UI styling with pigeon logo and names ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -76,25 +77,32 @@ st.markdown("""
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
-    .logo-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin: 20px 0 10px 0;
-    }
-    .logo {
-        font-size: 3.5rem;
-        font-weight: 800;
+    /* Pigeon logo with red/blue gradient */
+    .pigeon-logo {
+        font-size: 5rem;
+        text-align: center;
         background: linear-gradient(135deg, #0044cc 0%, #0044cc 50%, #cc0000 50%, #cc0000 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        padding: 0 10px;
+        display: inline-block;
+        width: 100%;
     }
-    .logo-sub {
+    .owner-name {
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #0a2a44;
+        margin-top: -10px;
+    }
+    .collaborators {
+        text-align: center;
         font-size: 0.9rem;
-        color: #1e2a3a;
-        opacity: 0.8;
-        letter-spacing: 1px;
+        color: #2c3e50;
+        background: rgba(255,255,255,0.5);
+        padding: 8px 16px;
+        border-radius: 40px;
+        margin: 10px 0;
+        border: 1px solid rgba(0,68,204,0.2);
     }
     .stMetric {
         background: rgba(255,255,255,0.6);
@@ -141,20 +149,10 @@ st.markdown("""
         box-shadow: 0 12px 24px rgba(0,128,255,0.3);
         transform: scale(1.02);
     }
-    .team-credit {
-        text-align: center;
-        font-size: 0.95rem;
-        color: #2c3e50;
-        background: rgba(255,255,255,0.5);
-        padding: 8px 16px;
-        border-radius: 40px;
-        margin-top: 15px;
-        border: 1px solid rgba(0,68,204,0.2);
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Health monitoring (unchanged) ---
+# --- Health monitoring ---
 def get_network_status():
     try:
         start = time.time()
@@ -181,10 +179,10 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Supabase auth functions with error checking ---
+# --- Supabase auth functions ---
 def sign_up(email, password, name):
     if supabase is None:
-        st.error("Registration is currently unavailable (Supabase not configured).")
+        st.error("Registration unavailable (Supabase not configured).")
         return False
     try:
         user = supabase.auth.sign_up({
@@ -201,7 +199,7 @@ def sign_up(email, password, name):
 
 def log_in(email, password):
     if supabase is None:
-        st.error("Login is currently unavailable (Supabase not configured).")
+        st.error("Login unavailable (Supabase not configured).")
         return
     try:
         user = supabase.auth.sign_in_with_password({
@@ -223,9 +221,31 @@ def logout():
         supabase.auth.sign_out()
     st.session_state.logged_in = False
     st.session_state.user = None
+    st.session_state.owner_space_access = False
     st.rerun()
 
-# --- Main app pages (unchanged) ---
+# --- Owner Space (using OwnerSpace2025) ---
+def owner_space():
+    st.header("🕊️ Owner Space")
+    if not st.session_state.owner_space_access:
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
+            if st.form_submit_button("Access"):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+    
+    st.success("Welcome to the Owner Space!")
+    st.markdown("Here you can manage privileged settings.")
+    # Add any owner-specific functionality here
+    if st.button("Logout from Owner Space"):
+        st.session_state.owner_space_access = False
+        st.rerun()
+
+# --- Main app pages ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
     with st.form("post_form", clear_on_submit=True):
@@ -274,7 +294,6 @@ def render_profile():
         loc = st.text_input("Location", value=st.session_state.profile.get("location", ""))
         if st.form_submit_button("💾 Save"):
             st.session_state.profile.update({"name": name, "bio": bio, "location": loc})
-            # Optionally update Supabase user metadata here (if you want)
             st.success("Profile updated!")
 
 def render_reclaim():
@@ -298,20 +317,22 @@ def render_reclaim():
             st.success(f"Transferred ${amount:.2f} via {method}")
             st.session_state.data_comp -= amount
 
+# --- Main app with sidebar ---
 def main_app():
     with st.sidebar:
+        # Pigeon logo and owner name
+        st.markdown("<div class='pigeon-logo'>🕊️</div>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
-        <div class='logo-container'>
-            <span class='logo'>GLOBAL</span><span class='logo' style='background: linear-gradient(135deg, #cc0000 0%, #cc0000 100%); -webkit-background-clip: text;'>INTERNET</span>
-        </div>
-        <div class='logo-sub'>.PY</div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <div class='team-credit'>
-            👥 Gesner Junior · Roosevelt · Zendaya Christelle
+        <div class='collaborators'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes<br>
+            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
         </div>
         """, unsafe_allow_html=True)
         st.divider()
+        
+        # Health monitor
         lat, sig, qual = get_network_status()
         st.markdown("### 🛡️ System Health")
         st.markdown(f"""
@@ -330,11 +351,14 @@ def main_app():
         if st.button("🚪 Logout"):
             logout()
         st.divider()
+        
+        # Navigation
         pages = {
             "📡 Collaboration Feed": render_feed,
             "🛰️ Satellite Map": render_map,
             "👤 Profile": render_profile,
-            "🔐 Owner's Reclaim": render_reclaim
+            "🔐 Owner's Dashboard": render_reclaim,
+            "🕊️ Owner Space": owner_space
         }
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
@@ -343,17 +367,15 @@ def main_app():
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
+        # Pigeon logo and names on login page
+        st.markdown("<div style='text-align: center;'><span class='pigeon-logo' style='font-size:6rem;'>🕊️</span></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #0a2a44;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name' style='font-size:1.8rem;'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
-        <div style='text-align: center; margin: 30px 0;'>
-            <span style='font-size: 4rem; font-weight: 800; background: linear-gradient(135deg, #0044cc 0%, #0044cc 50%, #cc0000 50%, #cc0000 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>GLOBAL</span>
-            <span style='font-size: 4rem; font-weight: 800; background: linear-gradient(135deg, #cc0000 0%, #cc0000 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>INTERNET</span>
-            <div style='font-size: 1.2rem; color: #1e2a3a;'>.PY</div>
+        <div class='collaborators' style='font-size:1rem;'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes · Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
         </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <p style='text-align: center; font-size: 1.1rem; background: rgba(0,68,204,0.1); padding: 12px; border-radius: 40px; border: 1px solid rgba(204,0,0,0.2);'>
-        <b>Gesner Junior Deslandes</b> · Roosevelt Deslandes · Zendaya Christelle Deslandes
-        </p>
         """, unsafe_allow_html=True)
         st.markdown("---")
 
@@ -377,7 +399,7 @@ def login_interface():
                     else:
                         st.warning("Please fill all fields")
 
-        # Optional: keep old admin password login
+        # Optional admin login
         st.markdown("---")
         with st.expander("Admin Access"):
             admin_pwd = st.text_input("Admin Password", type="password")
