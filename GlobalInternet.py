@@ -1,9 +1,38 @@
 """
 GLOBALINTERNET.PY - Satellite Communication Platform
-Lead Developer: Gesner Deslandes
+Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 6.0.0 (Email & Phone Signup)
+Version: 8.1.0 (Live Chat with Comment Likes)
+
+--- REQUIRED SUPABASE SCHEMA UPDATES ---
+Run these SQL statements in your Supabase SQL Editor:
+
+-- 1. Add likes column to comments table
+ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0;
+
+-- 2. Create comment_likes table (optional, but better for tracking per user)
+-- We'll use a simple increment/decrement on comments.likes without tracking who liked.
+-- If you want per-user tracking, a separate table is needed. We'll keep simple for now.
+
+-- 3. Create live_sessions table (if not exists)
+CREATE TABLE IF NOT EXISTS public.live_sessions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    is_live BOOLEAN DEFAULT true,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ended_at TIMESTAMP WITH TIME ZONE,
+    stream_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.live_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read live sessions" ON public.live_sessions FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own live sessions" ON public.live_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own live sessions" ON public.live_sessions FOR UPDATE USING (auth.uid() = user_id);
+
+-- 4. Add is_live to profiles
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false;
 """
 import streamlit as st
 import pandas as pd
@@ -16,6 +45,8 @@ import requests
 from supabase import create_client, Client
 import io
 from PIL import Image
+import mimetypes
+import urllib.parse
 
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
@@ -58,8 +89,16 @@ if "posts" not in st.session_state:
     st.session_state.posts = []
 if "owner_space_access" not in st.session_state:
     st.session_state.owner_space_access = False
+if "phone_otp_sent" not in st.session_state:
+    st.session_state.phone_otp_sent = False
+if "temp_phone" not in st.session_state:
+    st.session_state.temp_phone = ""
+if "viewing_live" not in st.session_state:
+    st.session_state.viewing_live = None
+if "live_sessions" not in st.session_state:
+    st.session_state.live_sessions = []
 
-# --- UI styling (Haitian symbol + collaborators) ---
+# --- UI styling ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -137,49 +176,63 @@ st.markdown("""
         box-shadow: 0 12px 24px rgba(0,128,255,0.3);
         transform: scale(1.02);
     }
+    .live-badge {
+        background-color: #ff4444;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 8px;
+    }
+    .green-dot {
+        height: 12px;
+        width: 12px;
+        background-color: #00ff88;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # --- Helper functions for Supabase ---
 
 def get_or_create_profile(user_id, identifier):
-    """
-    Fetch profile; if missing, create one.
-    identifier is either email or phone string (used for default name).
-    """
     if supabase is None:
-        st.error("Supabase not configured.")
         return None
     try:
-        # Attempt to fetch existing profile
         response = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if response.data:
             return response.data[0]
         else:
-            # No profile exists – create one
-            # Use identifier (email or phone) to generate a default name
             if '@' in identifier:
                 default_name = identifier.split('@')[0]
             else:
-                # phone number – use last 4 digits or full number as name
                 default_name = f"User {identifier[-4:]}" if len(identifier) > 4 else "User"
             new_profile = {
                 "id": user_id,
                 "full_name": default_name,
                 "avatar_url": None,
                 "bio": "",
-                "location": ""
+                "location": "",
+                "is_live": False
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
                 return insert_response.data[0]
             else:
-                st.error("Failed to create profile – no data returned.")
+                st.error("Failed to create profile.")
                 return None
     except Exception as e:
         st.error(f"Error in get_or_create_profile: {e}")
-        if hasattr(e, 'args') and len(e.args) > 0:
-            st.error(f"Details: {e.args[0]}")
         return None
 
 def update_profile(profile_data):
@@ -206,29 +259,56 @@ def upload_avatar(user_id, image_file):
         st.error(f"Avatar upload failed: {e}")
         return None
 
+def upload_post_media(user_id, file):
+    if supabase is None:
+        return None
+    try:
+        content_type = file.type
+        ext = file.name.split('.')[-1]
+        file_name = f"post_{user_id}_{int(time.time())}_{hashlib.md5(file.name.encode()).hexdigest()[:8]}.{ext}"
+        file_bytes = file.getvalue()
+        supabase.storage.from_("post_media").upload(file_name, file_bytes, {"content-type": content_type})
+        public_url = supabase.storage.from_("post_media").get_public_url(file_name)
+        return {"url": public_url, "type": "video" if content_type.startswith("video") else "image"}
+    except Exception as e:
+        st.error(f"Media upload failed: {e}")
+        return None
+
 def load_posts():
     if supabase is None:
         return []
     try:
         response = supabase.table("posts").select(
-            "*, profiles(full_name, avatar_url)"
+            "*, profiles(full_name, avatar_url, is_live)"
         ).order("created_at", desc=True).execute()
-        return response.data
+        posts = response.data
+        for post in posts:
+            # Reactions for post
+            reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
+            counts = {}
+            if reactions_resp.data:
+                for r in reactions_resp.data:
+                    emoji = r["emoji"]
+                    counts[emoji] = counts.get(emoji, 0) + 1
+            post["reactions"] = counts
+            if st.session_state.user:
+                user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
+                post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
+            else:
+                post["user_reactions"] = []
+        return posts
     except Exception as e:
         st.error(f"Error loading posts: {e}")
         return []
 
-def create_post(user_id, content, is_public=True):
-    """Create a new post with profile existence check."""
+def create_post(user_id, content, media_files, is_public=True):
     if supabase is None:
         st.error("Supabase not configured.")
         return False
     try:
-        # Ensure the user has a profile before inserting post
         profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_check.data:
             st.warning("Profile missing – attempting to recreate...")
-            # Try to recreate profile using identifier from session
             identifier = None
             if st.session_state.user and st.session_state.user.email:
                 identifier = st.session_state.user.email
@@ -237,42 +317,57 @@ def create_post(user_id, content, is_public=True):
             if identifier:
                 profile = get_or_create_profile(user_id, identifier)
                 if not profile:
-                    st.error("Could not create profile. Please contact support.")
+                    st.error("Could not create profile.")
                     return False
             else:
-                st.error("User identifier not found in session.")
+                st.error("User identifier not found.")
                 return False
-        
-        # Proceed with post creation
+
+        media_urls = []
+        if media_files:
+            for f in media_files:
+                media_info = upload_post_media(user_id, f)
+                if media_info:
+                    media_urls.append(media_info)
+
         post = {
             "user_id": user_id,
             "content": content,
             "is_public": is_public,
             "likes_count": 0,
             "shares_count": 0,
+            "media_urls": media_urls,
             "created_at": datetime.now().isoformat()
         }
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            st.session_state.posts = load_posts()  # refresh feed
+            st.session_state.posts = load_posts()
             return True
         else:
-            st.error("Post insertion returned no data.")
+            st.error("Post insertion failed.")
             return False
     except Exception as e:
         st.error(f"Error creating post: {e}")
         return False
 
-def like_post(post_id, increment=True):
+def toggle_reaction(post_id, user_id, emoji):
     if supabase is None:
-        return
+        return False
     try:
-        if increment:
-            supabase.rpc("increment_likes", {"post_id": post_id}).execute()
+        check = supabase.table("reactions").select("id").eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
+        if check.data:
+            supabase.table("reactions").delete().eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
         else:
-            supabase.rpc("decrement_likes", {"post_id": post_id}).execute()
+            supabase.table("reactions").insert({
+                "post_id": post_id,
+                "user_id": user_id,
+                "emoji": emoji
+            }).execute()
+        st.session_state.posts = load_posts()
+        return True
     except Exception as e:
-        st.error(f"Error updating likes: {e}")
+        st.error(f"Error toggling reaction: {e}")
+        return False
 
 def share_post(original_post_id, user_id, is_public=True):
     if supabase is None:
@@ -286,6 +381,7 @@ def share_post(original_post_id, user_id, is_public=True):
             "original_post_id": original_post_id,
             "likes_count": 0,
             "shares_count": 0,
+            "media_urls": [],
             "created_at": datetime.now().isoformat()
         }
         supabase.table("posts").insert(post).execute()
@@ -303,6 +399,7 @@ def add_comment(post_id, user_id, content):
             "post_id": post_id,
             "user_id": user_id,
             "content": content,
+            "likes": 0,
             "created_at": datetime.now().isoformat()
         }
         supabase.table("comments").insert(comment).execute()
@@ -322,6 +419,90 @@ def load_comments(post_id):
     except Exception as e:
         st.error(f"Error loading comments: {e}")
         return []
+
+def like_comment(comment_id, increment=True):
+    """Toggle like on a comment (simple increment/decrement)."""
+    if supabase is None:
+        return False
+    try:
+        if increment:
+            supabase.rpc("increment_comment_likes", {"comment_id": comment_id}).execute()
+        else:
+            supabase.rpc("decrement_comment_likes", {"comment_id": comment_id}).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error toggling comment like: {e}")
+        return False
+
+# --- Live session functions ---
+def start_live_session(title):
+    if supabase is None or st.session_state.user is None:
+        st.error("Cannot start live session.")
+        return None
+    try:
+        active = supabase.table("live_sessions").select("id").eq("user_id", st.session_state.user.id).eq("is_live", True).execute()
+        if active.data:
+            st.warning("You already have an active live session. End it first.")
+            return None
+        session_data = {
+            "user_id": st.session_state.user.id,
+            "title": title,
+            "is_live": True,
+            "started_at": datetime.now().isoformat(),
+            "stream_url": None
+        }
+        result = supabase.table("live_sessions").insert(session_data).execute()
+        if result.data:
+            supabase.table("profiles").update({"is_live": True}).eq("id", st.session_state.user.id).execute()
+            st.session_state.profile["is_live"] = True
+            st.session_state.live_sessions = load_live_sessions()
+            return result.data[0]["id"]
+        else:
+            st.error("Failed to start live session.")
+            return None
+    except Exception as e:
+        st.error(f"Error starting live session: {e}")
+        return None
+
+def end_live_session(session_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_sessions").update({
+            "is_live": False,
+            "ended_at": datetime.now().isoformat()
+        }).eq("id", session_id).execute()
+        supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
+        st.session_state.profile["is_live"] = False
+        st.session_state.live_sessions = load_live_sessions()
+        return True
+    except Exception as e:
+        st.error(f"Error ending live session: {e}")
+        return False
+
+def load_live_sessions():
+    if supabase is None:
+        return []
+    try:
+        response = supabase.table("live_sessions").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("is_live", True).order("started_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error loading live sessions: {e}")
+        return []
+
+def get_live_session(session_id):
+    if supabase is None:
+        return None
+    try:
+        response = supabase.table("live_sessions").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("id", session_id).single().execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error fetching live session: {e}")
+        return None
 
 # --- Health monitoring ---
 def get_network_status():
@@ -350,10 +531,10 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions (email & phone) ---
+# --- Auth functions ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
-        st.error("Registration unavailable (Supabase not configured).")
+        st.error("Registration unavailable.")
         return False
     try:
         user = supabase.auth.sign_up({
@@ -368,27 +549,9 @@ def sign_up_email(email, password, full_name):
         st.error(f"Sign-up failed: {e}")
         return False
 
-def sign_up_phone(phone, password, full_name):
-    if supabase is None:
-        st.error("Registration unavailable (Supabase not configured).")
-        return False
-    try:
-        # Phone must be in E.164 format, e.g., +1234567890
-        user = supabase.auth.sign_up({
-            "phone": phone,
-            "password": password,
-            "options": {"data": {"full_name": full_name}}
-        })
-        if user.user:
-            st.success("Sign-up successful! Please log in.")
-            return True
-    except Exception as e:
-        st.error(f"Sign-up failed: {e}")
-        return False
-
 def log_in_email(email, password):
     if supabase is None:
-        st.error("Login unavailable (Supabase not configured).")
+        st.error("Login unavailable.")
         return
     try:
         user = supabase.auth.sign_in_with_password({
@@ -402,29 +565,47 @@ def log_in_email(email, password):
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
+            st.session_state.live_sessions = load_live_sessions()
             st.rerun()
     except Exception as e:
         st.error(f"Login failed: {e}")
 
-def log_in_phone(phone, password):
+def send_phone_otp(phone):
     if supabase is None:
-        st.error("Login unavailable (Supabase not configured).")
-        return
+        st.error("Supabase not configured.")
+        return False
     try:
-        user = supabase.auth.sign_in_with_password({
-            "phone": phone,
-            "password": password
-        })
-        if user.user:
+        supabase.auth.sign_in_with_otp({"phone": phone})
+        st.success("OTP sent.")
+        return True
+    except Exception as e:
+        st.error(f"Failed to send OTP: {e}")
+        return False
+
+def verify_phone_otp(phone, token):
+    if supabase is None:
+        st.error("Supabase not configured.")
+        return False
+    try:
+        session = supabase.auth.verify_otp({"phone": phone, "token": token, "type": "sms"})
+        if session.user:
             st.session_state.logged_in = True
-            st.session_state.user = user.user
-            profile = get_or_create_profile(user.user.id, phone)
+            st.session_state.user = session.user
+            profile = get_or_create_profile(session.user.id, phone)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
+            st.session_state.live_sessions = load_live_sessions()
+            st.session_state.phone_otp_sent = False
+            st.session_state.temp_phone = ""
             st.rerun()
+            return True
+        else:
+            st.error("Verification failed.")
+            return False
     except Exception as e:
-        st.error(f"Login failed: {e}")
+        st.error(f"Verification failed: {e}")
+        return False
 
 def logout():
     if supabase:
@@ -433,23 +614,128 @@ def logout():
     st.session_state.user = None
     st.session_state.profile = None
     st.session_state.owner_space_access = False
+    st.session_state.phone_otp_sent = False
+    st.session_state.temp_phone = ""
+    st.session_state.viewing_live = None
     st.rerun()
 
-# --- Page functions ---
+# --- Live page with chat and comment likes ---
+def render_live_page(session_id):
+    session = get_live_session(session_id)
+    if not session or not session.get("is_live"):
+        st.error("This live session has ended or does not exist.")
+        if st.button("Back to Feed"):
+            st.session_state.viewing_live = None
+            st.rerun()
+        return
+
+    st.header(f"🔴 LIVE: {session['title']}")
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        # Simulated video
+        st.markdown("""
+        <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
+            <h3>📡 Live Stream (Simulated)</h3>
+            <p>In a real implementation, this would be a video player.</p>
+            <div style="font-size: 3rem;">📹</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Share link
+        share_url = f"{st.get_option('server.baseUrlPath') or st.request.url.split('?')[0]}?live={session_id}"
+        st.text_input("Shareable link", value=share_url)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("📋 Copy Link"):
+                st.info("Link copied! (simulated)")
+        with col_b:
+            subject = f"Join me live on GLOBALINTERNET.PY: {session['title']}"
+            body = f"Join the live session: {share_url}"
+            mailto = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
+            st.markdown(f'<a href="{mailto}" target="_blank"><button style="background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%); color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600;">📧 Share via Email</button></a>', unsafe_allow_html=True)
+
+    with col2:
+        st.subheader("Live Chat")
+        # Load comments for this session (using session_id as post_id)
+        comments = load_comments(session_id)  # Reusing comments table with post_id as session_id
+        for c in comments:
+            cols = st.columns([4, 1])
+            with cols[0]:
+                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+            with cols[1]:
+                # Like button for comment
+                if st.button(f"👍 {c.get('likes', 0)}", key=f"like_comment_{c['id']}"):
+                    like_comment(c['id'], increment=True)
+                    st.rerun()
+        # New comment form
+        with st.form("live_chat"):
+            msg = st.text_input("Message")
+            if st.form_submit_button("Send"):
+                if msg:
+                    if add_comment(session_id, st.session_state.user.id, msg):
+                        st.rerun()
+
+    if st.button("Back to Feed"):
+        st.session_state.viewing_live = None
+        st.rerun()
+
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
+
+    params = st.query_params
+    if "live" in params and params["live"]:
+        try:
+            session_id = int(params["live"][0])
+            st.session_state.viewing_live = session_id
+        except:
+            pass
+
+    if st.session_state.viewing_live:
+        render_live_page(st.session_state.viewing_live)
+        return
+
+    # New post form
     with st.form("new_post", clear_on_submit=True):
+        content = st.text_area("What's on your mind?", height=100)
+        media_files = st.file_uploader(
+            "Add images or videos (optional)",
+            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+            accept_multiple_files=True
+        )
         col1, col2 = st.columns([4,1])
-        with col1:
-            content = st.text_area("What's on your mind?", height=100)
         with col2:
             is_public = st.checkbox("Public", value=True)
         if st.form_submit_button("🚀 Post"):
-            if content:
-                if create_post(st.session_state.user.id, content, is_public):
+            if content or media_files:
+                if create_post(st.session_state.user.id, content, media_files, is_public):
                     st.success("Post published!")
                     st.rerun()
+            else:
+                st.warning("Please add some content or media.")
+
+    # Live sessions banner
+    active_lives = st.session_state.live_sessions
+    if active_lives:
+        st.markdown("### 🔴 Live Now")
+        for live in active_lives:
+            with st.container():
+                col_a, col_b = st.columns([1,4])
+                with col_a:
+                    if live["profiles"]["avatar_url"]:
+                        st.image(live["profiles"]["avatar_url"], width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
+                    if st.button(f"Join Live", key=f"join_{live['id']}"):
+                        st.session_state.viewing_live = live["id"]
+                        st.rerun()
+                st.divider()
+
     st.divider()
+
     for post in st.session_state.posts:
         with st.container():
             col_a, col_b, col_c = st.columns([1,5,2])
@@ -460,23 +746,45 @@ def render_feed():
                 else:
                     st.markdown("👤")
             with col_b:
-                st.markdown(f"**{post['profiles']['full_name']}**")
+                name = post['profiles']['full_name']
+                if post.get("profiles", {}).get("is_live"):
+                    st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"**{name}**")
             with col_c:
                 st.caption(post['created_at'][:16])
-            st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
-            col1, col2, col3, col4 = st.columns([1,1,1,4])
-            with col1:
-                if st.button(f"👍 {post['likes_count']}", key=f"like_{post['id']}"):
-                    like_post(post['id'], increment=True)
-                    st.rerun()
-            with col2:
-                if st.button(f"💬", key=f"comment_{post['id']}"):
+
+            if post['content']:
+                st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+
+            media_urls = post.get("media_urls", [])
+            if media_urls:
+                for media in media_urls:
+                    if media["type"] == "image":
+                        st.image(media["url"], use_column_width=True)
+                    elif media["type"] == "video":
+                        st.video(media["url"])
+
+            # Reactions
+            emojis = ["👍", "❤️", "😂", "😮", "😢", "👏"]
+            cols = st.columns(len(emojis) + 2)
+            for i, emoji in enumerate(emojis):
+                with cols[i]:
+                    count = post.get("reactions", {}).get(emoji, 0)
+                    btn_label = f"{emoji} {count}" if count > 0 else emoji
+                    if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
+                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                        st.rerun()
+
+            with cols[len(emojis)]:
+                if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
                     st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
                     st.rerun()
-            with col3:
+            with cols[len(emojis)+1]:
                 if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                     share_post(post['id'], st.session_state.user.id, is_public=True)
                     st.rerun()
+
             if st.session_state.get(f"show_comments_{post['id']}", False):
                 comments = load_comments(post['id'])
                 for c in comments:
@@ -489,6 +797,7 @@ def render_feed():
                             st.rerun()
             st.divider()
 
+# --- Other pages (profile, map, reclaim, owner space) ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
@@ -591,6 +900,31 @@ def main_app():
         </div>
         """, unsafe_allow_html=True)
         st.divider()
+
+        # Live controls
+        if st.session_state.profile and st.session_state.profile.get("is_live"):
+            st.markdown("🔴 **You are live!**")
+            if st.button("End Live Session"):
+                for ls in st.session_state.live_sessions:
+                    if ls["user_id"] == st.session_state.user.id:
+                        end_live_session(ls["id"])
+                        st.rerun()
+                        break
+        else:
+            with st.expander("Go Live"):
+                with st.form("go_live"):
+                    title = st.text_input("Live title")
+                    if st.form_submit_button("Start Live"):
+                        if title:
+                            session_id = start_live_session(title)
+                            if session_id:
+                                st.success("Live started!")
+                                st.rerun()
+                        else:
+                            st.warning("Please enter a title")
+
+        st.divider()
+
         lat, sig, qual = get_network_status()
         st.markdown("### 🛡️ System Health")
         st.markdown(f"""
@@ -610,6 +944,7 @@ def main_app():
         if st.button("🚪 Logout"):
             logout()
         st.divider()
+
         pages = {
             "📡 Feed": render_feed,
             "🛰️ Satellite Map": render_map,
@@ -634,8 +969,7 @@ def login_interface():
         """, unsafe_allow_html=True)
         st.markdown("---")
 
-        # Choose authentication method
-        auth_method = st.radio("Choose method", ["Email", "Phone"], horizontal=True)
+        auth_method = st.radio("Choose method", ["Email", "Phone (OTP)"], horizontal=True)
 
         if auth_method == "Email":
             tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
@@ -655,25 +989,32 @@ def login_interface():
                             sign_up_email(email, password, full_name)
                         else:
                             st.warning("Please fill all fields")
-        else:  # Phone
-            st.info("Phone number must be in international format, e.g., +1234567890")
-            tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
-            with tab1:
-                with st.form("login_phone"):
-                    phone = st.text_input("Phone (with country code)")
-                    password = st.text_input("Password", type="password")
-                    if st.form_submit_button("🚀 Login", use_container_width=True):
-                        log_in_phone(phone, password)
-            with tab2:
-                with st.form("signup_phone"):
-                    full_name = st.text_input("Full Name")
-                    phone = st.text_input("Phone (with country code)")
-                    password = st.text_input("Password", type="password")
-                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
-                        if full_name and phone and password:
-                            sign_up_phone(phone, password, full_name)
+        else:
+            st.info("Phone number must be in international format, e.g., +509XXXXXXXX")
+            if not st.session_state.phone_otp_sent:
+                with st.form("phone_request"):
+                    phone = st.text_input("Phone number (with country code)")
+                    if st.form_submit_button("📲 Send OTP", use_container_width=True):
+                        if phone:
+                            if send_phone_otp(phone):
+                                st.session_state.phone_otp_sent = True
+                                st.session_state.temp_phone = phone
+                                st.rerun()
                         else:
-                            st.warning("Please fill all fields")
+                            st.warning("Please enter a phone number")
+            else:
+                st.write(f"OTP sent to {st.session_state.temp_phone}")
+                with st.form("phone_verify"):
+                    otp = st.text_input("Enter 6-digit OTP code")
+                    if st.form_submit_button("✅ Verify & Login", use_container_width=True):
+                        if otp:
+                            verify_phone_otp(st.session_state.temp_phone, otp)
+                        else:
+                            st.warning("Please enter the OTP")
+                if st.button("← Back / Resend OTP"):
+                    st.session_state.phone_otp_sent = False
+                    st.session_state.temp_phone = ""
+                    st.rerun()
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:
