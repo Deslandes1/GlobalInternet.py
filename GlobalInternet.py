@@ -3,47 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.3.0 (Phone signup with international numbers)
-
---- REQUIRED SUPABASE SCHEMA UPDATES ---
-Run these SQL statements in your Supabase SQL Editor:
-
--- Add likes column to comments table
-ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0;
-
--- Functions for comment likes
-CREATE OR REPLACE FUNCTION increment_comment_likes(comment_id BIGINT)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-    UPDATE public.comments SET likes = likes + 1 WHERE id = comment_id;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION decrement_comment_likes(comment_id BIGINT)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-    UPDATE public.comments SET likes = likes - 1 WHERE id = comment_id;
-END;
-$$;
-
--- Live sessions table
-CREATE TABLE IF NOT EXISTS public.live_sessions (
-    id BIGSERIAL PRIMARY KEY,
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    is_live BOOLEAN DEFAULT true,
-    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    ended_at TIMESTAMP WITH TIME ZONE,
-    stream_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-ALTER TABLE public.live_sessions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Anyone can read live sessions" ON public.live_sessions FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own live sessions" ON public.live_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their own live sessions" ON public.live_sessions FOR UPDATE USING (auth.uid() = user_id);
-
--- Add is_live to profiles
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false;
+Version: 8.4.0 (Fixed query params compatibility)
 """
 import streamlit as st
 import pandas as pd
@@ -587,13 +547,11 @@ def format_phone(phone: str) -> str:
     return phone
 
 def send_phone_otp(raw_phone):
-    """Request OTP for phone number."""
     if supabase is None:
         st.error("Supabase not configured.")
         return False
     try:
         phone = format_phone(raw_phone)
-        # Validate: after '+', must have only digits and at least 8 characters
         if len(phone) < 8 or not phone[1:].isdigit():
             st.error("Please enter a valid international phone number with country code, e.g., 50947385663 for Haiti or 447840379 for UK.")
             return False
@@ -609,7 +567,6 @@ def send_phone_otp(raw_phone):
         return False
 
 def verify_phone_otp(raw_phone, token):
-    """Verify OTP and log the user in."""
     if supabase is None:
         st.error("Supabase not configured.")
         return False
@@ -665,7 +622,6 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Simulated video
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
@@ -674,7 +630,6 @@ def render_live_page(session_id):
         </div>
         """, unsafe_allow_html=True)
 
-        # Share link
         share_url = f"{st.get_option('server.baseUrlPath') or st.request.url.split('?')[0]}?live={session_id}"
         st.text_input("Shareable link", value=share_url)
         col_a, col_b = st.columns(2)
@@ -689,7 +644,7 @@ def render_live_page(session_id):
 
     with col2:
         st.subheader("Live Chat")
-        comments = load_comments(session_id)  # Reusing comments table with post_id as session_id
+        comments = load_comments(session_id)
         for c in comments:
             cols = st.columns([4, 1])
             with cols[0]:
@@ -709,14 +664,21 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed ---
+# --- Feed (fixed query params) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
-    params = st.query_params
+    # Safely get query parameters
+    try:
+        params = st.query_params
+    except AttributeError:
+        params = st.experimental_get_query_params()
+
     if "live" in params and params["live"]:
         try:
-            session_id = int(params["live"][0])
+            # Handle both string and list return types
+            live_val = params["live"][0] if isinstance(params["live"], list) else params["live"]
+            session_id = int(live_val)
             st.session_state.viewing_live = session_id
         except:
             pass
