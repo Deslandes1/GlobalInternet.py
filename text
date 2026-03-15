@@ -1,8 +1,0 @@
- Create a new folder on your computer.
-Place all the above files in that folder (exactly as named).
-In Visual Studio Code, open that folder.
- Initialize Git:
-```bash
-git init
-git add .
-git commit -m "Initial commit with blue-red logo and correct names"
