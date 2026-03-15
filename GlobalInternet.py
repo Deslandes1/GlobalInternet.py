@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.7.0 (Schema check for media_urls)
+Version: 9.0.0 (Auto‑detects missing media_urls column)
 """
 import streamlit as st
 import pandas as pd
@@ -40,26 +40,29 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Schema check: verify media_urls column exists ---
+# --- Schema detection: check if media_urls column exists in posts ---
 @st.cache_resource
-def check_schema():
+def check_media_urls_column():
+    """Return True if media_urls column exists, False otherwise."""
     if supabase is None:
         return False
     try:
-        # Try to select media_urls from posts (limit 0 to avoid data)
+        # Try to select media_urls with limit 0 (no data)
         supabase.table("posts").select("media_urls").limit(0).execute()
         return True
     except Exception as e:
-        if "Could not find the 'media_urls' column" in str(e):
-            st.error("⚠️ Database schema incomplete: 'media_urls' column missing in 'posts' table. "
-                     "Please run the SQL setup script (see documentation). Media uploads will be disabled.")
+        # If error indicates missing column, return False
+        if "column posts.media_urls does not exist" in str(e):
             return False
         else:
-            # Other error – maybe table doesn't exist at all
-            st.error(f"Database error: {e}")
+            # Unexpected error – assume column exists? Better to log and assume False
+            st.warning(f"Unexpected schema check error: {e}")
             return False
 
-SCHEMA_OK = check_schema()
+MEDIA_URLS_EXISTS = check_media_urls_column()
+if not MEDIA_URLS_EXISTS:
+    st.warning("⚠️ The 'media_urls' column is missing from the 'posts' table. "
+               "Media uploads will be disabled. Please run the SQL setup script to enable them.")
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -92,7 +95,7 @@ if "live_sessions" not in st.session_state:
 if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
 
-# --- UI styling (enhanced) ---
+# --- UI styling ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -200,7 +203,6 @@ st.markdown("""
         50% { opacity: 0.5; transform: scale(1.1); }
         100% { opacity: 1; transform: scale(1); }
     }
-    /* Profile camera icon */
     .camera-icon {
         font-size: 2rem;
         text-align: center;
@@ -275,8 +277,7 @@ def upload_avatar(user_id, image_file):
         return None
 
 def upload_post_media(user_id, file):
-    if supabase is None or not SCHEMA_OK:
-        st.error("Media uploads are disabled because the database schema is incomplete.")
+    if supabase is None or not MEDIA_URLS_EXISTS:
         return None
     try:
         content_type = file.type
@@ -300,21 +301,20 @@ def load_posts():
     if supabase is None:
         return []
     try:
-        # If schema is incomplete, don't try to select media_urls
-        if SCHEMA_OK:
+        if MEDIA_URLS_EXISTS:
             response = supabase.table("posts").select(
                 "*, profiles(full_name, avatar_url, is_live)"
             ).order("created_at", desc=True).execute()
         else:
-            # Select without media_urls
+            # Without media_urls, select all columns except media_urls
             response = supabase.table("posts").select(
                 "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
             ).order("created_at", desc=True).execute()
         posts = response.data
         for post in posts:
-            # Add empty media_urls if missing
             if "media_urls" not in post:
-                post["media_urls"] = []
+                post["media_urls"] = []  # ensure key exists
+            # Fetch reactions
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -355,15 +355,14 @@ def create_post(user_id, content, media_files, is_public=True):
                 return False
 
         media_urls = []
-        if SCHEMA_OK and media_files:
+        if MEDIA_URLS_EXISTS and media_files:
             for f in media_files:
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
                 else:
-                    st.warning(f"One file failed to upload, skipped.")
+                    st.warning("One file failed to upload, skipped.")
 
-        # Prepare post data – include media_urls only if schema is ok
         post = {
             "user_id": user_id,
             "content": content,
@@ -372,7 +371,7 @@ def create_post(user_id, content, media_files, is_public=True):
             "shares_count": 0,
             "created_at": datetime.now().isoformat()
         }
-        if SCHEMA_OK:
+        if MEDIA_URLS_EXISTS:
             post["media_urls"] = media_urls
 
         result = supabase.table("posts").insert(post).execute()
@@ -383,11 +382,7 @@ def create_post(user_id, content, media_files, is_public=True):
             st.error("Post insertion failed.")
             return False
     except Exception as e:
-        error_str = str(e)
-        if "Could not find the 'media_urls' column" in error_str:
-            st.error("Database schema error: The 'media_urls' column is missing. Please run the SQL setup script.")
-        else:
-            st.error(f"Error creating post: {e}")
+        st.error(f"Error creating post: {e}")
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
@@ -423,7 +418,7 @@ def share_post(original_post_id, user_id, is_public=True):
             "shares_count": 0,
             "created_at": datetime.now().isoformat()
         }
-        if SCHEMA_OK:
+        if MEDIA_URLS_EXISTS:
             post["media_urls"] = []
         supabase.table("posts").insert(post).execute()
         st.session_state.posts = load_posts()
@@ -691,7 +686,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with chat and comment likes ---
+# --- Live page ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -705,7 +700,6 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Simulated video – in a real app you'd embed an actual video player
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
@@ -748,7 +742,7 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed with video support ---
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -772,7 +766,7 @@ def render_feed():
     # New post form
     with st.form("new_post", clear_on_submit=True):
         content = st.text_area("Caption", height=100, placeholder="Write a caption...")
-        if SCHEMA_OK:
+        if MEDIA_URLS_EXISTS:
             media_files = st.file_uploader(
                 "Add images or videos (optional)",
                 type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
@@ -785,8 +779,8 @@ def render_feed():
         with col2:
             is_public = st.checkbox("Public", value=True)
         if st.form_submit_button("🚀 Post"):
-            if content or (SCHEMA_OK and media_files):
-                if create_post(st.session_state.user.id, content, media_files if SCHEMA_OK else [], is_public):
+            if content or (MEDIA_URLS_EXISTS and media_files):
+                if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
                     st.success("Post published!")
                     st.rerun()
             else:
@@ -874,7 +868,7 @@ def render_feed():
                             st.rerun()
             st.divider()
 
-# --- Enhanced Profile page ---
+# --- Profile ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
@@ -883,7 +877,6 @@ def render_profile():
 
     col1, col2 = st.columns([1, 2])
     with col1:
-        # Avatar with camera icon (click to upload)
         if profile.get("avatar_url"):
             st.image(profile["avatar_url"], width=200, caption="Profile Picture")
         else:
@@ -911,7 +904,6 @@ def render_profile():
                     st.success("Profile updated successfully!")
                     st.rerun()
 
-    # Display account stats
     st.divider()
     cola, colb, colc, cold = st.columns(4)
     with cola:
@@ -987,7 +979,7 @@ def owner_space():
         st.session_state.owner_space_access = False
         st.rerun()
 
-# --- Main app with sidebar ---
+# --- Main app ---
 def main_app():
     with st.sidebar:
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
@@ -1055,7 +1047,7 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login interface with password reset ---
+# --- Login interface ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
