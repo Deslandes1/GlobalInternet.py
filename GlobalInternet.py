@@ -3,19 +3,30 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.1.0 (Live Chat with Comment Likes)
+Version: 8.2.0 (Phone OTP Fixed)
 
 --- REQUIRED SUPABASE SCHEMA UPDATES ---
 Run these SQL statements in your Supabase SQL Editor:
 
--- 1. Add likes column to comments table
+-- Add likes column to comments table
 ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0;
 
--- 2. Create comment_likes table (optional, but better for tracking per user)
--- We'll use a simple increment/decrement on comments.likes without tracking who liked.
--- If you want per-user tracking, a separate table is needed. We'll keep simple for now.
+-- Functions for comment likes
+CREATE OR REPLACE FUNCTION increment_comment_likes(comment_id BIGINT)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    UPDATE public.comments SET likes = likes + 1 WHERE id = comment_id;
+END;
+$$;
 
--- 3. Create live_sessions table (if not exists)
+CREATE OR REPLACE FUNCTION decrement_comment_likes(comment_id BIGINT)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    UPDATE public.comments SET likes = likes - 1 WHERE id = comment_id;
+END;
+$$;
+
+-- Live sessions table
 CREATE TABLE IF NOT EXISTS public.live_sessions (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -31,7 +42,7 @@ CREATE POLICY "Anyone can read live sessions" ON public.live_sessions FOR SELECT
 CREATE POLICY "Users can insert their own live sessions" ON public.live_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own live sessions" ON public.live_sessions FOR UPDATE USING (auth.uid() = user_id);
 
--- 4. Add is_live to profiles
+-- Add is_live to profiles
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false;
 """
 import streamlit as st
@@ -283,7 +294,6 @@ def load_posts():
         ).order("created_at", desc=True).execute()
         posts = response.data
         for post in posts:
-            # Reactions for post
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -421,7 +431,6 @@ def load_comments(post_id):
         return []
 
 def like_comment(comment_id, increment=True):
-    """Toggle like on a comment (simple increment/decrement)."""
     if supabase is None:
         return False
     try:
@@ -570,24 +579,46 @@ def log_in_email(email, password):
     except Exception as e:
         st.error(f"Login failed: {e}")
 
-def send_phone_otp(phone):
+def format_phone(phone: str) -> str:
+    """Ensure phone number is in E.164 format (starts with '+')."""
+    phone = phone.strip()
+    if not phone.startswith('+'):
+        phone = '+' + phone
+    return phone
+
+def send_phone_otp(raw_phone):
+    """Request OTP for phone number."""
     if supabase is None:
         st.error("Supabase not configured.")
         return False
     try:
+        phone = format_phone(raw_phone)
+        if len(phone) < 8 or not phone[1:].isdigit():
+            st.error("Phone number must include country code and at least 8 digits. Example: +50947385663")
+            return False
         supabase.auth.sign_in_with_otp({"phone": phone})
-        st.success("OTP sent.")
+        st.success("OTP sent to your phone. Please enter it below.")
         return True
     except Exception as e:
-        st.error(f"Failed to send OTP: {e}")
+        error_msg = str(e)
+        if "Phone logins are disabled" in error_msg:
+            st.error("Phone authentication is disabled in Supabase. Please enable it in Authentication → Providers.")
+        else:
+            st.error(f"Failed to send OTP: {error_msg}")
         return False
 
-def verify_phone_otp(phone, token):
+def verify_phone_otp(raw_phone, token):
+    """Verify OTP and log the user in."""
     if supabase is None:
         st.error("Supabase not configured.")
         return False
     try:
-        session = supabase.auth.verify_otp({"phone": phone, "token": token, "type": "sms"})
+        phone = format_phone(raw_phone)
+        session = supabase.auth.verify_otp({
+            "phone": phone,
+            "token": token,
+            "type": "sms"
+        })
         if session.user:
             st.session_state.logged_in = True
             st.session_state.user = session.user
@@ -601,7 +632,7 @@ def verify_phone_otp(phone, token):
             st.rerun()
             return True
         else:
-            st.error("Verification failed.")
+            st.error("Verification failed – no user returned.")
             return False
     except Exception as e:
         st.error(f"Verification failed: {e}")
@@ -657,18 +688,15 @@ def render_live_page(session_id):
 
     with col2:
         st.subheader("Live Chat")
-        # Load comments for this session (using session_id as post_id)
         comments = load_comments(session_id)  # Reusing comments table with post_id as session_id
         for c in comments:
             cols = st.columns([4, 1])
             with cols[0]:
                 st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
             with cols[1]:
-                # Like button for comment
                 if st.button(f"👍 {c.get('likes', 0)}", key=f"like_comment_{c['id']}"):
                     like_comment(c['id'], increment=True)
                     st.rerun()
-        # New comment form
         with st.form("live_chat"):
             msg = st.text_input("Message")
             if st.form_submit_button("Send"):
@@ -797,7 +825,7 @@ def render_feed():
                             st.rerun()
             st.divider()
 
-# --- Other pages (profile, map, reclaim, owner space) ---
+# --- Profile ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
@@ -827,6 +855,7 @@ def render_profile():
                     st.success("Profile updated!")
                     st.rerun()
 
+# --- Satellite Map ---
 def render_map():
     st.header("🛰️ Satellite Network")
     sats = {
@@ -846,6 +875,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
+# --- Owner's Dashboard ---
 def render_reclaim():
     st.header("🔐 Owner's Dashboard")
     duration = time.time() - st.session_state.connection_time
@@ -867,6 +897,7 @@ def render_reclaim():
             st.success(f"Transferred ${amount:.2f} via {method}")
             st.session_state.data_comp -= amount
 
+# --- Owner Space ---
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     if not st.session_state.owner_space_access:
@@ -888,6 +919,7 @@ def owner_space():
         st.session_state.owner_space_access = False
         st.rerun()
 
+# --- Main app with sidebar ---
 def main_app():
     with st.sidebar:
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
@@ -955,6 +987,7 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
+# --- Login interface ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -990,7 +1023,7 @@ def login_interface():
                         else:
                             st.warning("Please fill all fields")
         else:
-            st.info("Phone number must be in international format, e.g., +509XXXXXXXX")
+            st.info("Phone number must be in international format, e.g., **+50947385663**")
             if not st.session_state.phone_otp_sent:
                 with st.form("phone_request"):
                     phone = st.text_input("Phone number (with country code)")
