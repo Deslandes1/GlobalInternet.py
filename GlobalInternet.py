@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 8.4.0 (Fixed query params compatibility)
+Version: 8.6.0 (Password reset, video playback, enhanced profile)
 """
 import streamlit as st
 import pandas as pd
@@ -68,8 +68,10 @@ if "viewing_live" not in st.session_state:
     st.session_state.viewing_live = None
 if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
+if "reset_email_sent" not in st.session_state:
+    st.session_state.reset_email_sent = False
 
-# --- UI styling ---
+# --- UI styling (enhanced) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -123,6 +125,11 @@ st.markdown("""
         border: 1px solid rgba(0,168,255,0.2);
         margin: 15px 0;
         color: #1e2a3a;
+        transition: transform 0.2s;
+    }
+    .post-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
     }
     .health-text {
         font-family: 'Courier New', monospace;
@@ -141,6 +148,7 @@ st.markdown("""
         padding: 10px 28px;
         font-weight: 600;
         box-shadow: 0 8px 16px rgba(0,128,255,0.2);
+        transition: all 0.2s;
     }
     .stButton > button:hover {
         background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%);
@@ -170,6 +178,21 @@ st.markdown("""
         0% { opacity: 1; transform: scale(1); }
         50% { opacity: 0.5; transform: scale(1.1); }
         100% { opacity: 1; transform: scale(1); }
+    }
+    /* Profile camera icon */
+    .camera-icon {
+        font-size: 2rem;
+        text-align: center;
+        background: rgba(0,168,255,0.1);
+        padding: 20px;
+        border-radius: 50%;
+        display: inline-block;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .camera-icon:hover {
+        background: rgba(0,168,255,0.2);
+        transform: scale(1.05);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -242,7 +265,13 @@ def upload_post_media(user_id, file):
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         return {"url": public_url, "type": "video" if content_type.startswith("video") else "image"}
     except Exception as e:
-        st.error(f"Media upload failed: {e}")
+        error_str = str(e)
+        if "new row violates row-level security policy" in error_str:
+            st.error("Storage permission error: Please ensure the 'post_media' bucket is public and RLS policies allow uploads.")
+        elif "bucket not found" in error_str:
+            st.error("The 'post_media' storage bucket does not exist. Please create it in the Supabase Storage dashboard.")
+        else:
+            st.error(f"Media upload failed: {error_str}")
         return None
 
 def load_posts():
@@ -299,6 +328,8 @@ def create_post(user_id, content, media_files, is_public=True):
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
+                else:
+                    st.warning(f"One file failed to upload, skipped.")
 
         post = {
             "user_id": user_id,
@@ -314,10 +345,14 @@ def create_post(user_id, content, media_files, is_public=True):
             st.session_state.posts = load_posts()
             return True
         else:
-            st.error("Post insertion failed.")
+            st.error("Post insertion failed (maybe missing 'media_urls' column? Run the SQL script).")
             return False
     except Exception as e:
-        st.error(f"Error creating post: {e}")
+        error_str = str(e)
+        if "Could not find the 'media_urls' column" in error_str:
+            st.error("Database schema error: The 'media_urls' column is missing. Please run the SQL setup script.")
+        else:
+            st.error(f"Error creating post: {e}")
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
@@ -500,7 +535,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions ---
+# --- Auth functions with password reset ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable.")
@@ -539,8 +574,20 @@ def log_in_email(email, password):
     except Exception as e:
         st.error(f"Login failed: {e}")
 
+def reset_password_email(email):
+    """Send password reset email."""
+    if supabase is None:
+        st.error("Supabase not configured.")
+        return False
+    try:
+        supabase.auth.reset_password_for_email(email)
+        st.success("Password reset email sent. Please check your inbox.")
+        return True
+    except Exception as e:
+        st.error(f"Failed to send reset email: {e}")
+        return False
+
 def format_phone(phone: str) -> str:
-    """Ensure phone number is in E.164 format (starts with '+')."""
     phone = phone.strip()
     if not phone.startswith('+'):
         phone = '+' + phone
@@ -622,6 +669,7 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # Simulated video – in a real app you'd embed an actual video player
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
@@ -664,11 +712,10 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed (fixed query params) ---
+# --- Feed with video support ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
-    # Safely get query parameters
     try:
         params = st.query_params
     except AttributeError:
@@ -676,7 +723,6 @@ def render_feed():
 
     if "live" in params and params["live"]:
         try:
-            # Handle both string and list return types
             live_val = params["live"][0] if isinstance(params["live"], list) else params["live"]
             session_id = int(live_val)
             st.session_state.viewing_live = session_id
@@ -689,7 +735,7 @@ def render_feed():
 
     # New post form
     with st.form("new_post", clear_on_submit=True):
-        content = st.text_area("What's on your mind?", height=100)
+        content = st.text_area("Caption", height=100, placeholder="Write a caption...")
         media_files = st.file_uploader(
             "Add images or videos (optional)",
             type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
@@ -704,7 +750,7 @@ def render_feed():
                     st.success("Post published!")
                     st.rerun()
             else:
-                st.warning("Please add some content or media.")
+                st.warning("Please add a caption or media.")
 
     # Live sessions banner
     active_lives = st.session_state.live_sessions
@@ -754,6 +800,7 @@ def render_feed():
                     if media["type"] == "image":
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
+                        # Video with controls – users can tap to play/unmute
                         st.video(media["url"])
 
             # Reactions
@@ -788,35 +835,54 @@ def render_feed():
                             st.rerun()
             st.divider()
 
-# --- Profile ---
+# --- Enhanced Profile page ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
-    col1, col2 = st.columns([1,2])
+
+    col1, col2 = st.columns([1, 2])
     with col1:
+        # Avatar with camera icon (click to upload)
         if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=150)
+            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
         else:
-            st.image("https://via.placeholder.com/150", width=150)
-        uploaded = st.file_uploader("Change profile picture", type=["png","jpg","jpeg"])
+            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
+        st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+        uploaded = st.file_uploader("📸 Change picture", type=["png","jpg","jpeg"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
             if url:
                 profile["avatar_url"] = url
                 update_profile(profile)
                 st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
     with col2:
         with st.form("edit_profile"):
+            st.markdown("#### Account Information")
             full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
-            bio = st.text_area("Bio", value=profile.get("bio", ""))
+            bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
             location = st.text_input("Location", value=profile.get("location", ""))
-            if st.form_submit_button("💾 Update Profile"):
+            st.markdown("---")
+            if st.form_submit_button("💾 Save Changes", use_container_width=True):
                 profile.update({"full_name": full_name, "bio": bio, "location": location})
                 if update_profile(profile):
-                    st.success("Profile updated!")
+                    st.success("Profile updated successfully!")
                     st.rerun()
+
+    # Display account stats
+    st.divider()
+    cola, colb, colc, cold = st.columns(4)
+    with cola:
+        st.metric("Posts", len(st.session_state.posts))
+    with colb:
+        st.metric("Connections", profile.get("connections", 0))
+    with colc:
+        st.metric("Verified", "✅" if profile.get("verified", False) else "❌")
+    with cold:
+        st.metric("Member since", profile.get("join_date", "2024")[:10])
 
 # --- Satellite Map ---
 def render_map():
@@ -950,7 +1016,7 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login interface ---
+# --- Login interface with password reset ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -968,7 +1034,7 @@ def login_interface():
         auth_method = st.radio("Choose method", ["Email", "Phone (OTP)"], horizontal=True)
 
         if auth_method == "Email":
-            tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
+            tab1, tab2, tab3 = st.tabs(["🔑 Login", "📝 Sign Up", "🔐 Forgot Password"])
             with tab1:
                 with st.form("login_email"):
                     email = st.text_input("Email")
@@ -985,15 +1051,19 @@ def login_interface():
                             sign_up_email(email, password, full_name)
                         else:
                             st.warning("Please fill all fields")
+            with tab3:
+                with st.form("reset_email"):
+                    reset_email = st.text_input("Enter your email address")
+                    if st.form_submit_button("Send Reset Link", use_container_width=True):
+                        if reset_email:
+                            reset_password_email(reset_email)
+                        else:
+                            st.warning("Please enter your email")
         else:
-            st.info("Enter your phone number with country code (no +, no spaces).\n\n"
-                    "Examples:\n"
-                    "- Haiti: `50947385663`\n"
-                    "- UK: `447840379`\n"
-                    "- USA: `12125551234`")
+            st.info("Phone users: You will receive a 6‑digit OTP each time you log in. No password needed.")
             if not st.session_state.phone_otp_sent:
                 with st.form("phone_request"):
-                    phone = st.text_input("Phone number (digits only)")
+                    phone = st.text_input("Phone number (digits only, e.g., 50947385663)")
                     if st.form_submit_button("📲 Send OTP", use_container_width=True):
                         if phone:
                             if send_phone_otp(phone):
