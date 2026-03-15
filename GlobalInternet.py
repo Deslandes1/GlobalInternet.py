@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 9.0.0 (Auto‑detects missing media_urls column)
+Version: 9.1.0 (Private posts, dislike reaction)
 """
 import streamlit as st
 import pandas as pd
@@ -43,19 +43,15 @@ supabase = init_supabase()
 # --- Schema detection: check if media_urls column exists in posts ---
 @st.cache_resource
 def check_media_urls_column():
-    """Return True if media_urls column exists, False otherwise."""
     if supabase is None:
         return False
     try:
-        # Try to select media_urls with limit 0 (no data)
         supabase.table("posts").select("media_urls").limit(0).execute()
         return True
     except Exception as e:
-        # If error indicates missing column, return False
         if "column posts.media_urls does not exist" in str(e):
             return False
         else:
-            # Unexpected error – assume column exists? Better to log and assume False
             st.warning(f"Unexpected schema check error: {e}")
             return False
 
@@ -217,6 +213,16 @@ st.markdown("""
         background: rgba(0,168,255,0.2);
         transform: scale(1.05);
     }
+    .private-badge {
+        background-color: #ffaa00;
+        color: #1e2a3a;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 8px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -298,22 +304,35 @@ def upload_post_media(user_id, file):
         return None
 
 def load_posts():
+    """Load posts with visibility filtering."""
     if supabase is None:
         return []
     try:
+        # Build query based on schema
         if MEDIA_URLS_EXISTS:
-            response = supabase.table("posts").select(
+            query = supabase.table("posts").select(
                 "*, profiles(full_name, avatar_url, is_live)"
-            ).order("created_at", desc=True).execute()
+            )
         else:
-            # Without media_urls, select all columns except media_urls
-            response = supabase.table("posts").select(
+            query = supabase.table("posts").select(
                 "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
-            ).order("created_at", desc=True).execute()
+            )
+
+        # Apply visibility filter: public posts + private posts owned by current user
+        if st.session_state.user:
+            # Show all public posts + private posts from current user
+            query = query.or_(
+                f"is_public.eq.true,user_id.eq.{st.session_state.user.id}"
+            )
+        else:
+            # Not logged in: only public posts
+            query = query.eq("is_public", True)
+
+        response = query.order("created_at", desc=True).execute()
         posts = response.data
         for post in posts:
             if "media_urls" not in post:
-                post["media_urls"] = []  # ensure key exists
+                post["media_urls"] = []
             # Fetch reactions
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
@@ -332,7 +351,7 @@ def load_posts():
         st.error(f"Error loading posts: {e}")
         return []
 
-def create_post(user_id, content, media_files, is_public=True):
+def create_post(user_id, content, media_files, is_public):
     if supabase is None:
         st.error("Supabase not configured.")
         return False
@@ -606,7 +625,6 @@ def log_in_email(email, password):
         st.error(f"Login failed: {e}")
 
 def reset_password_email(email):
-    """Send password reset email."""
     if supabase is None:
         st.error("Supabase not configured.")
         return False
@@ -763,7 +781,7 @@ def render_feed():
         render_live_page(st.session_state.viewing_live)
         return
 
-    # New post form
+    # New post form with visibility options
     with st.form("new_post", clear_on_submit=True):
         content = st.text_area("Caption", height=100, placeholder="Write a caption...")
         if MEDIA_URLS_EXISTS:
@@ -777,7 +795,9 @@ def render_feed():
             st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
         col1, col2 = st.columns([4,1])
         with col2:
-            is_public = st.checkbox("Public", value=True)
+            # Visibility: Public or Private
+            visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
+            is_public = (visibility == "Public")
         if st.form_submit_button("🚀 Post"):
             if content or (MEDIA_URLS_EXISTS and media_files):
                 if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
@@ -822,6 +842,9 @@ def render_feed():
                     st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"**{name}**")
+                # Show private badge if post is not public
+                if not post.get("is_public", True):
+                    st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
             with col_c:
                 st.caption(post['created_at'][:16])
 
@@ -836,8 +859,8 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
-            # Reactions
-            emojis = ["👍", "❤️", "😂", "😮", "😢", "👏"]
+            # Reactions (now including 👎)
+            emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
                 with cols[i]:
