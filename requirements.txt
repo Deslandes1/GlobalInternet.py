@@ -8,3 +8,4 @@ geocoder==1.38.1
 requests==2.31.0
 pillow==10.0.0
 protobuf==3.20.3
+supabase==1.2.0
