@@ -2,7 +2,7 @@
 GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Junior Deslandes
 Collaborators: Roosevelt Deslandes, Zendaya Christelle Deslandes
-Version: 2.0.0
+Version: 3.0.0 (with user registration)
 """
 import streamlit as st
 import pandas as pd
@@ -12,23 +12,29 @@ import socket
 import hashlib
 from datetime import datetime
 import requests
+from supabase import create_client, Client
 
 # Page config
-st.set_page_config(
-    page_title="GLOBALINTERNET.PY",
-    page_icon="🌐",
-    layout="wide"
-)
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🌐", layout="wide")
 
-# --- SECRETS ---
-# Use st.secrets in production (set on Streamlit Cloud)
-# Fallback values for local testing (do not commit real secrets)
-GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
+# --- Supabase client ---
+@st.cache_resource
+def init_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_supabase()
+
+# --- Constants from secrets ---
+GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")  # optional admin
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 
-# Initialize session state
+# --- Session state initialization ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "user" not in st.session_state:
+    st.session_state.user = None          # will hold user data from Supabase
 if "data_comp" not in st.session_state:
     st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
@@ -37,27 +43,23 @@ if "posts" not in st.session_state:
     st.session_state.posts = []
 if "profile" not in st.session_state:
     st.session_state.profile = {
-        "name": "Gesner Junior Deslandes",
-        "bio": "Satellite Communications Specialist",
-        "location": "Port-au-Prince, Haiti"
+        "name": "Guest",
+        "bio": "",
+        "location": ""
     }
 
-# --- Enhanced UI Styling with Blue & Red Logo ---
+# --- UI styling (unchanged) ---
 st.markdown("""
     <style>
-    /* Main background with a bright gradient */
     [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
     }
-    /* Sidebar styling with glassmorphism */
     [data-testid="stSidebar"] {
-        background: rgba(255, 255, 255, 0.75);
+        background: rgba(255,255,255,0.75);
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
-        box-shadow: 4px 0 15px rgba(0,0,0,0.05);
     }
-    /* Custom Logo (Blue & Red) */
     .logo-container {
         display: flex;
         justify-content: center;
@@ -67,12 +69,9 @@ st.markdown("""
     .logo {
         font-size: 3.5rem;
         font-weight: 800;
-        letter-spacing: 2px;
         background: linear-gradient(135deg, #0044cc 0%, #0044cc 50%, #cc0000 50%, #cc0000 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 2px 2px 10px rgba(0,68,204,0.2);
-        display: inline-block;
         padding: 0 10px;
     }
     .logo-sub {
@@ -81,13 +80,6 @@ st.markdown("""
         opacity: 0.8;
         letter-spacing: 1px;
     }
-    /* Headers */
-    h1, h2, h3 {
-        color: #0a2a44;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-    }
-    /* Metric cards */
     .stMetric {
         background: rgba(255,255,255,0.6);
         backdrop-filter: blur(5px);
@@ -101,7 +93,6 @@ st.markdown("""
         transform: translateY(-4px);
         box-shadow: 0 12px 25px rgba(0,100,200,0.15);
     }
-    /* Post cards */
     .post-card {
         background: rgba(255,255,255,0.7);
         backdrop-filter: blur(8px);
@@ -110,15 +101,7 @@ st.markdown("""
         border: 1px solid rgba(0,168,255,0.2);
         margin: 15px 0;
         color: #1e2a3a;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.03);
-        transition: all 0.2s;
     }
-    .post-card:hover {
-        background: rgba(255,255,255,0.85);
-        border-color: #00a8ff;
-        box-shadow: 0 8px 25px rgba(0,168,255,0.15);
-    }
-    /* Health monitor */
     .health-text {
         font-family: 'Courier New', monospace;
         color: #0a2a44;
@@ -127,9 +110,7 @@ st.markdown("""
         padding: 15px;
         border-radius: 16px;
         border-left: 4px solid #00a8ff;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
     }
-    /* Buttons */
     .stButton > button {
         background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%);
         color: white;
@@ -137,16 +118,13 @@ st.markdown("""
         border-radius: 40px;
         padding: 10px 28px;
         font-weight: 600;
-        letter-spacing: 0.02em;
         box-shadow: 0 8px 16px rgba(0,128,255,0.2);
-        transition: all 0.2s;
     }
     .stButton > button:hover {
         background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%);
         box-shadow: 0 12px 24px rgba(0,128,255,0.3);
         transform: scale(1.02);
     }
-    /* Team credit */
     .team-credit {
         text-align: center;
         font-size: 0.95rem;
@@ -160,7 +138,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Health monitoring ---
+# --- Health monitoring (unchanged) ---
 def get_network_status():
     try:
         start = time.time()
@@ -187,7 +165,51 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Collaboration Feed ---
+# --- Sign up function ---
+def sign_up(email, password, name):
+    try:
+        # Create user in Supabase Auth
+        user = supabase.auth.sign_up({
+            "email": email,
+            "password": password,
+            "options": {
+                "data": {
+                    "full_name": name
+                }
+            }
+        })
+        if user.user:
+            st.success("Sign-up successful! Please log in.")
+            return True
+    except Exception as e:
+        st.error(f"Sign-up failed: {e}")
+        return False
+
+# --- Login function ---
+def log_in(email, password):
+    try:
+        user = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+        if user.user:
+            st.session_state.logged_in = True
+            st.session_state.user = user.user
+            # Update profile with user metadata
+            st.session_state.profile["name"] = user.user.user_metadata.get("full_name", email)
+            st.session_state.profile["email"] = email
+            st.session_state.connection_time = time.time()
+            st.rerun()
+    except Exception as e:
+        st.error(f"Login failed: {e}")
+
+# --- Logout ---
+def logout():
+    st.session_state.logged_in = False
+    st.session_state.user = None
+    st.rerun()
+
+# --- Main app pages (unchanged) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
     with st.form("post_form", clear_on_submit=True):
@@ -209,7 +231,6 @@ def render_feed():
             p['likes'] += 1
             st.rerun()
 
-# --- Satellite Map ---
 def render_map():
     st.header("🛰️ Satellite Network")
     sats = {
@@ -229,18 +250,17 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Profile Settings ---
 def render_profile():
     st.header("👤 Profile Settings")
     with st.form("profile_form"):
         name = st.text_input("Name", value=st.session_state.profile["name"])
-        bio = st.text_area("Bio", value=st.session_state.profile["bio"])
-        loc = st.text_input("Location", value=st.session_state.profile["location"])
+        bio = st.text_area("Bio", value=st.session_state.profile.get("bio", ""))
+        loc = st.text_input("Location", value=st.session_state.profile.get("location", ""))
         if st.form_submit_button("💾 Save"):
             st.session_state.profile.update({"name": name, "bio": bio, "location": loc})
+            # Optionally update Supabase user metadata here
             st.success("Profile updated!")
 
-# --- Owner's Reclaim ---
 def render_reclaim():
     st.header("🔐 Owner's Dashboard")
     duration = time.time() - st.session_state.connection_time
@@ -262,26 +282,20 @@ def render_reclaim():
             st.success(f"Transferred ${amount:.2f} via {method}")
             st.session_state.data_comp -= amount
 
-# --- Main app ---
-def main():
+def main_app():
     with st.sidebar:
-        # Blue & Red Logo
         st.markdown("""
         <div class='logo-container'>
             <span class='logo'>GLOBAL</span><span class='logo' style='background: linear-gradient(135deg, #cc0000 0%, #cc0000 100%); -webkit-background-clip: text;'>INTERNET</span>
         </div>
         <div class='logo-sub'>.PY</div>
         """, unsafe_allow_html=True)
-        
-        # Team credit
         st.markdown("""
         <div class='team-credit'>
             👥 Gesner Junior · Roosevelt · Zendaya Christelle
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-        
-        # Health monitor
         lat, sig, qual = get_network_status()
         st.markdown("### 🛡️ System Health")
         st.markdown(f"""
@@ -293,12 +307,13 @@ def main():
         🔒 Status: ENCRYPTED
         </div>
         """, unsafe_allow_html=True)
-        
         st.divider()
         st.markdown(f"💰 **Compensation:** ${st.session_state.data_comp:.4f}")
         st.divider()
-        
-        # Navigation
+        st.markdown(f"👤 **Logged in as:** {st.session_state.profile['name']}")
+        if st.button("🚪 Logout"):
+            logout()
+        st.divider()
         pages = {
             "📡 Collaboration Feed": render_feed,
             "🛰️ Satellite Map": render_map,
@@ -306,19 +321,12 @@ def main():
             "🔐 Owner's Reclaim": render_reclaim
         }
         choice = st.selectbox("Menu", list(pages.keys()))
-        st.divider()
-        
-        if st.button("🚪 Logout"):
-            st.session_state.logged_in = False
-            st.rerun()
-    
     pages[choice]()
 
-# --- Login ---
-def login():
+# --- Login / Sign-up interface ---
+def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # Blue & Red Logo on login
         st.markdown("""
         <div style='text-align: center; margin: 30px 0;'>
             <span style='font-size: 4rem; font-weight: 800; background: linear-gradient(135deg, #0044cc 0%, #0044cc 50%, #cc0000 50%, #cc0000 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>GLOBAL</span>
@@ -326,28 +334,50 @@ def login():
             <div style='font-size: 1.2rem; color: #1e2a3a;'>.PY</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # Full names on login
         st.markdown("""
         <p style='text-align: center; font-size: 1.1rem; background: rgba(0,68,204,0.1); padding: 12px; border-radius: 40px; border: 1px solid rgba(204,0,0,0.2);'>
         <b>Gesner Junior Deslandes</b> · Roosevelt Deslandes · Zendaya Christelle Deslandes
         </p>
         """, unsafe_allow_html=True)
         st.markdown("---")
-        
-        with st.form("login_form"):
-            pwd = st.text_input("Password", type="password")
-            if st.form_submit_button("🚀 Connect", use_container_width=True):
-                if pwd == GLOBAL_PASSWORD:
+
+        tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
+
+        with tab1:
+            with st.form("login_form"):
+                email = st.text_input("Email")
+                password = st.text_input("Password", type="password")
+                if st.form_submit_button("🚀 Login", use_container_width=True):
+                    log_in(email, password)
+
+        with tab2:
+            with st.form("signup_form"):
+                name = st.text_input("Full Name")
+                email = st.text_input("Email")
+                password = st.text_input("Password", type="password")
+                if st.form_submit_button("📝 Sign Up", use_container_width=True):
+                    if name and email and password:
+                        sign_up(email, password, name)
+                    else:
+                        st.warning("Please fill all fields")
+
+        # Optional: keep old admin password login
+        st.markdown("---")
+        with st.expander("Admin Access"):
+            admin_pwd = st.text_input("Admin Password", type="password")
+            if st.button("Admin Login"):
+                if admin_pwd == GLOBAL_PASSWORD:
                     st.session_state.logged_in = True
+                    st.session_state.user = {"email": "admin@local"}
+                    st.session_state.profile["name"] = "Admin"
                     st.session_state.connection_time = time.time()
                     st.rerun()
                 else:
-                    st.error("Access Denied")
+                    st.error("Invalid admin password")
 
-# --- Run ---
+# --- Main ---
 if __name__ == "__main__":
     if not st.session_state.logged_in:
-        login()
+        login_interface()
     else:
-        main()
+        main_app()
