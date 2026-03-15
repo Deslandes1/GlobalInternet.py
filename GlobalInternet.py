@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 5.1.0 (Fixed profile creation on post)
+Version: 6.0.0 (Email & Phone Signup)
 """
 import streamlit as st
 import pandas as pd
@@ -142,8 +142,11 @@ st.markdown("""
 
 # --- Helper functions for Supabase ---
 
-def get_or_create_profile(user_id, email):
-    """Fetch profile; if missing, create one with robust error handling."""
+def get_or_create_profile(user_id, identifier):
+    """
+    Fetch profile; if missing, create one.
+    identifier is either email or phone string (used for default name).
+    """
     if supabase is None:
         st.error("Supabase not configured.")
         return None
@@ -154,9 +157,15 @@ def get_or_create_profile(user_id, email):
             return response.data[0]
         else:
             # No profile exists – create one
+            # Use identifier (email or phone) to generate a default name
+            if '@' in identifier:
+                default_name = identifier.split('@')[0]
+            else:
+                # phone number – use last 4 digits or full number as name
+                default_name = f"User {identifier[-4:]}" if len(identifier) > 4 else "User"
             new_profile = {
                 "id": user_id,
-                "full_name": email.split('@')[0],
+                "full_name": default_name,
                 "avatar_url": None,
                 "bio": "",
                 "location": ""
@@ -219,15 +228,19 @@ def create_post(user_id, content, is_public=True):
         profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_check.data:
             st.warning("Profile missing – attempting to recreate...")
-            # Try to recreate profile using email from session
+            # Try to recreate profile using identifier from session
+            identifier = None
             if st.session_state.user and st.session_state.user.email:
-                email = st.session_state.user.email
-                profile = get_or_create_profile(user_id, email)
+                identifier = st.session_state.user.email
+            elif st.session_state.user and st.session_state.user.phone:
+                identifier = st.session_state.user.phone
+            if identifier:
+                profile = get_or_create_profile(user_id, identifier)
                 if not profile:
                     st.error("Could not create profile. Please contact support.")
                     return False
             else:
-                st.error("User email not found in session.")
+                st.error("User identifier not found in session.")
                 return False
         
         # Proceed with post creation
@@ -337,8 +350,8 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth (only Supabase) ---
-def sign_up(email, password, full_name):
+# --- Auth functions (email & phone) ---
+def sign_up_email(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable (Supabase not configured).")
         return False
@@ -355,7 +368,25 @@ def sign_up(email, password, full_name):
         st.error(f"Sign-up failed: {e}")
         return False
 
-def log_in(email, password):
+def sign_up_phone(phone, password, full_name):
+    if supabase is None:
+        st.error("Registration unavailable (Supabase not configured).")
+        return False
+    try:
+        # Phone must be in E.164 format, e.g., +1234567890
+        user = supabase.auth.sign_up({
+            "phone": phone,
+            "password": password,
+            "options": {"data": {"full_name": full_name}}
+        })
+        if user.user:
+            st.success("Sign-up successful! Please log in.")
+            return True
+    except Exception as e:
+        st.error(f"Sign-up failed: {e}")
+        return False
+
+def log_in_email(email, password):
     if supabase is None:
         st.error("Login unavailable (Supabase not configured).")
         return
@@ -368,6 +399,26 @@ def log_in(email, password):
             st.session_state.logged_in = True
             st.session_state.user = user.user
             profile = get_or_create_profile(user.user.id, email)
+            st.session_state.profile = profile
+            st.session_state.connection_time = time.time()
+            st.session_state.posts = load_posts()
+            st.rerun()
+    except Exception as e:
+        st.error(f"Login failed: {e}")
+
+def log_in_phone(phone, password):
+    if supabase is None:
+        st.error("Login unavailable (Supabase not configured).")
+        return
+    try:
+        user = supabase.auth.sign_in_with_password({
+            "phone": phone,
+            "password": password
+        })
+        if user.user:
+            st.session_state.logged_in = True
+            st.session_state.user = user.user
+            profile = get_or_create_profile(user.user.id, phone)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
@@ -582,24 +633,47 @@ def login_interface():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("---")
-        tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
-        with tab1:
-            with st.form("login_form"):
-                email = st.text_input("Email")
-                password = st.text_input("Password", type="password")
-                if st.form_submit_button("🚀 Login", use_container_width=True):
-                    log_in(email, password)
-        with tab2:
-            with st.form("signup_form"):
-                full_name = st.text_input("Full Name")
-                email = st.text_input("Email")
-                password = st.text_input("Password", type="password")
-                if st.form_submit_button("📝 Sign Up", use_container_width=True):
-                    if full_name and email and password:
-                        sign_up(email, password, full_name)
-                    else:
-                        st.warning("Please fill all fields")
-        # No admin login – only Supabase auth
+
+        # Choose authentication method
+        auth_method = st.radio("Choose method", ["Email", "Phone"], horizontal=True)
+
+        if auth_method == "Email":
+            tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
+            with tab1:
+                with st.form("login_email"):
+                    email = st.text_input("Email")
+                    password = st.text_input("Password", type="password")
+                    if st.form_submit_button("🚀 Login", use_container_width=True):
+                        log_in_email(email, password)
+            with tab2:
+                with st.form("signup_email"):
+                    full_name = st.text_input("Full Name")
+                    email = st.text_input("Email")
+                    password = st.text_input("Password", type="password")
+                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
+                        if full_name and email and password:
+                            sign_up_email(email, password, full_name)
+                        else:
+                            st.warning("Please fill all fields")
+        else:  # Phone
+            st.info("Phone number must be in international format, e.g., +1234567890")
+            tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
+            with tab1:
+                with st.form("login_phone"):
+                    phone = st.text_input("Phone (with country code)")
+                    password = st.text_input("Password", type="password")
+                    if st.form_submit_button("🚀 Login", use_container_width=True):
+                        log_in_phone(phone, password)
+            with tab2:
+                with st.form("signup_phone"):
+                    full_name = st.text_input("Full Name")
+                    phone = st.text_input("Phone (with country code)")
+                    password = st.text_input("Password", type="password")
+                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
+                        if full_name and phone and password:
+                            sign_up_phone(phone, password, full_name)
+                        else:
+                            st.warning("Please fill all fields")
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:
