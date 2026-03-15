@@ -20,9 +20,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Constants
-GLOBAL_PASSWORD = "20082021"
-OWNER_CIN = "1248795849"
+# --- SECRETS ---
+# Use st.secrets in production (set on Streamlit Cloud)
+# Fallback values for local testing (do not commit real secrets)
+GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
+OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 
 # Initialize session state
 if "logged_in" not in st.session_state:
@@ -158,7 +160,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Health monitoring (unchanged) ---
+# --- Health monitoring ---
 def get_network_status():
     try:
         start = time.time()
