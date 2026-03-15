@@ -1,25 +1,19 @@
 # GLOBALINTERNET.PY - Satellite Communication Platform
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
-![Python](https://img.shields.io/badge/python-3.9+-green)
-![Streamlit](https://img.shields.io/badge/streamlit-1.28.1-red)
+**Lead Developer:** Gesner Junior Deslandes  
+**Collaborators:** Roosevelt Deslandes, Zendaya Christelle Deslandes
 
-## 🚀 Overview
-Advanced satellite communication platform with real-time tracking, live broadcasting, and collaboration features.
+A professional satellite communication simulation platform built with Streamlit. Features include real-time network monitoring, collaboration feed, satellite tracking, and compensation dashboard.
 
 ## 🔑 Login
 - Password: `20082021`
-- Owner CIN: `1248795849` (for admin access)
 
-## ✨ Features
-- Real-time satellite tracking
-- Live video broadcasting
-- Professional collaboration feed
-- System health monitoring
-- Data compensation dashboard
-- Encrypted communications
+## 🚀 Deploy on Streamlit Cloud
+1. Push these files to a GitHub repository.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and deploy.
+3. Set main file to `GlobalInternet.py`.
 
-## 📦 Installation
+## 📦 Local Installation
 ```bash
 pip install -r requirements.txt
 streamlit run GlobalInternet.py
