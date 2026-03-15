@@ -17,23 +17,19 @@ from supabase import create_client, Client
 import io
 from PIL import Image
 
-# Page config
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
-# --- Supabase client with error handling ---
+# --- Supabase client ---
 @st.cache_resource
 def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
-    
     if not url or not key:
         st.warning("⚠️ Supabase credentials not found. User registration/login disabled.")
         return None
-    
     if not url.startswith(("http://", "https://")):
         st.error("❌ SUPABASE_URL must start with http:// or https://")
         return None
-    
     try:
         return create_client(url, key)
     except Exception as e:
@@ -43,28 +39,28 @@ def init_supabase():
 supabase = init_supabase()
 
 # --- Secrets ---
-GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")          # fallback admin
-OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")                    # owner's CIN
-MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")            # MonCash number
-OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025") # owner space password
+GLOBAL_PASSWORD = st.secrets.get("GLOBAL_PASSWORD", "20082021")
+OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
+MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
-# --- Session state initialization ---
+# --- Session state ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
-    st.session_state.user = None          # Supabase user object
+    st.session_state.user = None
 if "profile" not in st.session_state:
-    st.session_state.profile = None       # custom profile data
+    st.session_state.profile = None
 if "data_comp" not in st.session_state:
     st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
     st.session_state.connection_time = time.time()
 if "posts" not in st.session_state:
-    st.session_state.posts = []            # cache for posts
+    st.session_state.posts = []
 if "owner_space_access" not in st.session_state:
     st.session_state.owner_space_access = False
 
-# --- UI styling (Haitian symbol and collaborators) ---
+# --- UI styling (Haitian symbol + collaborators) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -76,7 +72,6 @@ st.markdown("""
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
-    /* Haitian flag colors in symbol */
     .haiti-symbol {
         font-size: 4rem;
         text-align: center;
@@ -146,9 +141,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Helper functions for Supabase data ---
+# --- Helper functions for Supabase ---
 def get_or_create_profile(user_id, email):
-    """Fetch profile from 'profiles' table; create if not exists."""
     if supabase is None:
         return None
     try:
@@ -156,7 +150,6 @@ def get_or_create_profile(user_id, email):
         if response.data:
             return response.data[0]
         else:
-            # Create new profile
             new_profile = {
                 "id": user_id,
                 "full_name": email.split('@')[0],
@@ -181,30 +174,23 @@ def update_profile(profile_data):
         return False
 
 def upload_avatar(user_id, image_file):
-    """Upload image to Supabase Storage bucket 'avatars'."""
     if supabase is None:
         return None
     try:
-        # Generate unique filename
         ext = image_file.name.split('.')[-1]
         file_name = f"{user_id}_{int(time.time())}.{ext}"
-        # Read file bytes
         image_bytes = image_file.getvalue()
-        # Upload to Supabase Storage
         supabase.storage.from_("avatars").upload(file_name, image_bytes)
-        # Get public URL
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
     except Exception as e:
         st.error(f"Avatar upload failed: {e}")
         return None
 
-# --- Post functions ---
 def load_posts():
     if supabase is None:
         return []
     try:
-        # Join with profiles to get user names and avatars
         response = supabase.table("posts").select(
             "*, profiles(full_name, avatar_url)"
         ).order("created_at", desc=True).execute()
@@ -226,7 +212,6 @@ def create_post(user_id, content, is_public=True):
             "created_at": datetime.now().isoformat()
         }
         supabase.table("posts").insert(post).execute()
-        # Refresh posts in session
         st.session_state.posts = load_posts()
         return True
     except Exception as e:
@@ -248,9 +233,7 @@ def share_post(original_post_id, user_id, is_public=True):
     if supabase is None:
         return False
     try:
-        # First increment shares count on original post
         supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
-        # Create new post as a share (you can add a reference)
         post = {
             "user_id": user_id,
             "content": f"(Shared post)",
@@ -295,7 +278,7 @@ def load_comments(post_id):
         st.error(f"Error loading comments: {e}")
         return []
 
-# --- Health monitoring (unchanged) ---
+# --- Health monitoring ---
 def get_network_status():
     try:
         start = time.time()
@@ -322,7 +305,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Authentication functions ---
+# --- Auth ---
 def sign_up(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable (Supabase not configured).")
@@ -334,7 +317,6 @@ def sign_up(email, password, full_name):
             "options": {"data": {"full_name": full_name}}
         })
         if user.user:
-            # Profile will be created on first login via get_or_create_profile
             st.success("Sign-up successful! Please log in.")
             return True
     except Exception as e:
@@ -353,11 +335,9 @@ def log_in(email, password):
         if user.user:
             st.session_state.logged_in = True
             st.session_state.user = user.user
-            # Load profile
             profile = get_or_create_profile(user.user.id, email)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
-            # Load posts
             st.session_state.posts = load_posts()
             st.rerun()
     except Exception as e:
@@ -372,12 +352,9 @@ def logout():
     st.session_state.owner_space_access = False
     st.rerun()
 
-# --- Page rendering functions ---
-
+# --- Page functions ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
-    
-    # New post form
     with st.form("new_post", clear_on_submit=True):
         col1, col2 = st.columns([4,1])
         with col1:
@@ -389,13 +366,9 @@ def render_feed():
                 if create_post(st.session_state.user.id, content, is_public):
                     st.success("Post published!")
                     st.rerun()
-    
     st.divider()
-    
-    # Display posts
     for post in st.session_state.posts:
         with st.container():
-            # Post header
             col_a, col_b, col_c = st.columns([1,5,2])
             with col_a:
                 avatar = post.get("profiles", {}).get("avatar_url")
@@ -407,33 +380,24 @@ def render_feed():
                 st.markdown(f"**{post['profiles']['full_name']}**")
             with col_c:
                 st.caption(post['created_at'][:16])
-            
-            # Post content
             st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
-            
-            # Actions
             col1, col2, col3, col4 = st.columns([1,1,1,4])
             with col1:
                 if st.button(f"👍 {post['likes_count']}", key=f"like_{post['id']}"):
                     like_post(post['id'], increment=True)
                     st.rerun()
             with col2:
-                # Comment toggle
                 if st.button(f"💬", key=f"comment_{post['id']}"):
                     st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
                     st.rerun()
             with col3:
                 if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
-                    # Share as new post (public by default)
                     share_post(post['id'], st.session_state.user.id, is_public=True)
                     st.rerun()
-            
-            # Comments section
             if st.session_state.get(f"show_comments_{post['id']}", False):
                 comments = load_comments(post['id'])
                 for c in comments:
                     st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
-                # Add comment form
                 with st.form(key=f"add_comment_{post['id']}"):
                     new_comment = st.text_input("Write a comment...")
                     if st.form_submit_button("Post Comment"):
@@ -446,7 +410,6 @@ def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
         return
-    
     profile = st.session_state.profile
     col1, col2 = st.columns([1,2])
     with col1:
@@ -454,7 +417,6 @@ def render_profile():
             st.image(profile["avatar_url"], width=150)
         else:
             st.image("https://via.placeholder.com/150", width=150)
-        # Avatar upload
         uploaded = st.file_uploader("Change profile picture", type=["png","jpg","jpeg"])
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
@@ -462,7 +424,6 @@ def render_profile():
                 profile["avatar_url"] = url
                 update_profile(profile)
                 st.rerun()
-    
     with col2:
         with st.form("edit_profile"):
             full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
@@ -495,10 +456,8 @@ def render_map():
 
 def render_reclaim():
     st.header("🔐 Owner's Dashboard")
-    # Update compensation
     duration = time.time() - st.session_state.connection_time
     st.session_state.data_comp = duration * 0.035
-    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Compensation", f"${st.session_state.data_comp:.4f}")
@@ -507,7 +466,6 @@ def render_reclaim():
     with col3:
         st.metric("Network Users", np.random.randint(100, 500))
     st.divider()
-    
     st.subheader("💰 Withdraw Funds")
     method = st.selectbox("Method", ["MonCash", "Bank Transfer", "Crypto"])
     amount = st.number_input("Amount ($)", 0.0, float(st.session_state.data_comp))
@@ -529,19 +487,15 @@ def owner_space():
                 else:
                     st.error("Invalid password")
         return
-    
     st.success("Welcome, Owner!")
-    # Display owner's credentials (from secrets)
     st.markdown("### 🔑 Your Private Credentials")
     st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
     st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
-    st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}` (stored in secrets)")
-    
+    st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}`")
     if st.button("Logout from Owner Space"):
         st.session_state.owner_space_access = False
         st.rerun()
 
-# --- Main app with sidebar ---
 def main_app():
     with st.sidebar:
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
@@ -554,8 +508,6 @@ def main_app():
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-        
-        # Health monitor
         lat, sig, qual = get_network_status()
         st.markdown("### 🛡️ System Health")
         st.markdown(f"""
@@ -575,8 +527,6 @@ def main_app():
         if st.button("🚪 Logout"):
             logout()
         st.divider()
-        
-        # Navigation
         pages = {
             "📡 Feed": render_feed,
             "🛰️ Satellite Map": render_map,
@@ -587,7 +537,6 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login / Sign-up interface (with Haitian symbol and collaborators) ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -601,16 +550,13 @@ def login_interface():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("---")
-
         tab1, tab2 = st.tabs(["🔑 Login", "📝 Sign Up"])
-
         with tab1:
             with st.form("login_form"):
                 email = st.text_input("Email")
                 password = st.text_input("Password", type="password")
                 if st.form_submit_button("🚀 Login", use_container_width=True):
                     log_in(email, password)
-
         with tab2:
             with st.form("signup_form"):
                 full_name = st.text_input("Full Name")
@@ -621,14 +567,11 @@ def login_interface():
                         sign_up(email, password, full_name)
                     else:
                         st.warning("Please fill all fields")
-
-        # Optional admin login (using GLOBAL_PASSWORD)
         st.markdown("---")
         with st.expander("Admin Access (Legacy)"):
             admin_pwd = st.text_input("Admin Password", type="password")
             if st.button("Admin Login"):
                 if admin_pwd == GLOBAL_PASSWORD:
-                    # Create a dummy session for admin
                     st.session_state.logged_in = True
                     st.session_state.user = {"id": "admin", "email": "admin@local"}
                     st.session_state.profile = {
@@ -644,7 +587,6 @@ def login_interface():
                 else:
                     st.error("Invalid admin password")
 
-# --- Main entry point ---
 if __name__ == "__main__":
     if not st.session_state.logged_in:
         login_interface()
