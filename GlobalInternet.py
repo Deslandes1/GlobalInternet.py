@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 12.0.0 (Real-time live video with comments)
+Version: 12.1.0 (Live with external video or placeholder)
 """
 import streamlit as st
 import pandas as pd
@@ -149,10 +149,6 @@ if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
 if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
-if "camera_active" not in st.session_state:
-    st.session_state.camera_active = False
-if "chat_refresh" not in st.session_state:
-    st.session_state.chat_refresh = 0
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -279,20 +275,6 @@ st.markdown("""
         0% { opacity: 1; transform: scale(1); }
         50% { opacity: 0.5; transform: scale(1.1); }
         100% { opacity: 1; transform: scale(1); }
-    }
-    .camera-icon {
-        font-size: 2rem;
-        text-align: center;
-        background: rgba(0,168,255,0.1);
-        padding: 20px;
-        border-radius: 50%;
-        display: inline-block;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    .camera-icon:hover {
-        background: rgba(0,168,255,0.2);
-        transform: scale(1.05);
     }
     .private-badge {
         background-color: #ffaa00;
@@ -565,7 +547,7 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (with stream URL) ---
+# --- Live session functions ---
 def start_live_session(title, stream_url):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
@@ -790,7 +772,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with real video embed and interactive chat ---
+# --- Live page with video embed ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -804,7 +786,6 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Video player
         stream_url = session.get("stream_url")
         if stream_url:
             # Try to embed YouTube, Twitch, or direct video URL
@@ -824,7 +805,6 @@ def render_live_page(session_id):
                     st.video(stream_url)
             elif "twitch.tv" in stream_url:
                 # Twitch embed
-                # Extract channel name from URL
                 channel = stream_url.split("/")[-1]
                 embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
                 st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
@@ -836,7 +816,7 @@ def render_live_page(session_id):
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
                 <h3>📡 Live Stream (No video URL)</h3>
-                <p>The streamer did not provide a video link.</p>
+                <p>The streamer did not provide a video link. If you are the streamer, start a stream on YouTube or Twitch and paste the link.</p>
                 <div style="font-size: 4rem; margin: 20px;">📹</div>
             </div>
             """, unsafe_allow_html=True)
@@ -864,7 +844,6 @@ def render_live_page(session_id):
 
         # Refresh button
         if st.button("🔄 Refresh Chat", key=f"refresh_{session_id}"):
-            st.session_state.chat_refresh += 1
             st.rerun()
 
         # Display comments
@@ -1153,6 +1132,10 @@ def main_app():
                         break
         else:
             with st.expander("Go Live"):
+                st.markdown("**How to go live:**")
+                st.markdown("1. Start a stream on [YouTube](https://youtube.com/live) or [Twitch](https://twitch.tv).")
+                st.markdown("2. Copy the stream URL and paste it below.")
+                st.markdown("3. If you leave the URL empty, a placeholder will appear.")
                 with st.form("go_live"):
                     title = st.text_input("Live title")
                     stream_url = st.text_input("Stream URL (YouTube, Twitch, or direct video link) - optional")
@@ -1160,7 +1143,7 @@ def main_app():
                         if title:
                             session_id = start_live_session(title, stream_url)
                             if session_id:
-                                st.success("Live started!")
+                                st.success("Live started! You are now live.")
                                 st.rerun()
                         else:
                             st.warning("Please enter a title")
