@@ -3,14 +3,9 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 11.1.0 (Simulated camera, no heavy dependencies)
+Version: 12.0.0 (Real-time live video with comments)
 """
 import streamlit as st
-
-# --- This MUST be the first Streamlit command ---
-st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
-
-# --- Rest of the imports ---
 import pandas as pd
 import numpy as np
 import time
@@ -27,8 +22,7 @@ import json
 import os
 import tempfile
 
-# --- WebRTC is disabled to avoid system dependencies ---
-WEBRTC_AVAILABLE = False
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
 # --- Supabase client ---
 @st.cache_resource
@@ -49,7 +43,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Schema detection: check if media_urls column exists in posts ---
+# --- Schema detection ---
 @st.cache_resource
 def check_media_urls_column():
     if supabase is None:
@@ -67,7 +61,7 @@ def check_media_urls_column():
 MEDIA_URLS_EXISTS = check_media_urls_column()
 if not MEDIA_URLS_EXISTS:
     st.warning("⚠️ The 'media_urls' column is missing from the 'posts' table. "
-               "Media uploads will be disabled. Please run the SQL setup script to enable them.")
+               "Media uploads will be disabled. Please run the SQL setup script.")
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -157,6 +151,8 @@ if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
 if "camera_active" not in st.session_state:
     st.session_state.camera_active = False
+if "chat_refresh" not in st.session_state:
+    st.session_state.chat_refresh = 0
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -375,11 +371,7 @@ def upload_post_media(user_id, file):
         ext = file.name.split('.')[-1]
         file_name = f"post_{user_id}_{int(time.time())}_{hashlib.md5(file.name.encode()).hexdigest()[:8]}.{ext}"
         file_bytes = file.getvalue()
-        supabase.storage.from_("post_media").upload(
-            file_name, 
-            file_bytes, 
-            {"content-type": content_type}
-        )
+        supabase.storage.from_("post_media").upload(file_name, file_bytes, {"content-type": content_type})
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         st.success(f"✅ {media_type.capitalize()} uploaded successfully!")
@@ -389,7 +381,7 @@ def upload_post_media(user_id, file):
         if "new row violates row-level security policy" in error_str:
             st.error("Storage permission error: Please ensure the 'post_media' bucket is public and RLS policies allow uploads.")
         elif "bucket not found" in error_str:
-            st.error("The 'post_media' storage bucket does not exist. Please create it in the Supabase Storage dashboard.")
+            st.error("The 'post_media' storage bucket does not exist. Please create it.")
         else:
             st.error(f"Media upload failed: {error_str}")
         return None
@@ -573,8 +565,8 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (simulated camera) ---
-def start_live_session(title):
+# --- Live session functions (with stream URL) ---
+def start_live_session(title, stream_url):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
         return None
@@ -588,7 +580,7 @@ def start_live_session(title):
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
-            "stream_url": None
+            "stream_url": stream_url if stream_url else None
         }
         result = supabase.table("live_sessions").insert(session_data).execute()
         if result.data:
@@ -798,7 +790,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with simulated camera ---
+# --- Live page with real video embed and interactive chat ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -812,29 +804,44 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Simulated video (no actual camera)
-        st.markdown("""
-        <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
-            <h3>📡 Live Stream (Simulated)</h3>
-            <p style="color: #ccc;">Camera access is simulated. In a production app, you would integrate a real video stream.</p>
-            <div style="font-size: 4rem; margin: 20px;">📹</div>
-            <p style="color: #aaa;">Stream key: <code>live_{}</code></p>
-        </div>
-        """.format(session_id), unsafe_allow_html=True)
-
-        # Record and upload to OneDrive (simulated)
-        if st.button("🎥 Record & Upload to OneDrive", key=f"record_{session_id}"):
-            with st.spinner("Recording and uploading... (simulated)"):
-                time.sleep(2)
-                # Simulate uploading a dummy video
-                dummy_video_url = "https://example.com/dummy_video.mp4"  # Replace with actual upload
-                # Create a post with the video
-                if create_post(st.session_state.user.id, f"Live recording from {session['title']}", [], is_public=True):
-                    st.success("Video saved and posted to feed! (simulated)")
+        # Video player
+        stream_url = session.get("stream_url")
+        if stream_url:
+            # Try to embed YouTube, Twitch, or direct video URL
+            if "youtube.com" in stream_url or "youtu.be" in stream_url:
+                # Convert to embed URL
+                if "youtu.be" in stream_url:
+                    video_id = stream_url.split("/")[-1].split("?")[0]
+                elif "watch?v=" in stream_url:
+                    video_id = stream_url.split("v=")[-1].split("&")[0]
                 else:
-                    st.error("Upload failed")
+                    video_id = None
+                if video_id:
+                    embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
+                    st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                else:
+                    st.warning("Could not parse YouTube URL. Using direct link.")
+                    st.video(stream_url)
+            elif "twitch.tv" in stream_url:
+                # Twitch embed
+                # Extract channel name from URL
+                channel = stream_url.split("/")[-1]
+                embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
+                st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
+            else:
+                # Assume direct video file
+                st.video(stream_url)
+        else:
+            st.info("No stream URL provided. Placeholder video.")
+            st.markdown("""
+            <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
+                <h3>📡 Live Stream (No video URL)</h3>
+                <p>The streamer did not provide a video link.</p>
+                <div style="font-size: 4rem; margin: 20px;">📹</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # Generate shareable link
+        # Share link
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -854,6 +861,13 @@ def render_live_page(session_id):
 
     with col2:
         st.subheader("Live Chat")
+
+        # Refresh button
+        if st.button("🔄 Refresh Chat", key=f"refresh_{session_id}"):
+            st.session_state.chat_refresh += 1
+            st.rerun()
+
+        # Display comments
         comments = load_comments(session_id)
         for c in comments:
             cols = st.columns([4, 1])
@@ -863,6 +877,7 @@ def render_live_page(session_id):
                 if st.button(f"👍 {c.get('likes', 0)}", key=f"like_comment_{c['id']}"):
                     like_comment(c['id'], increment=True)
                     st.rerun()
+        # New comment form
         with st.form(f"live_chat_{session_id}"):
             msg = st.text_input("Message")
             if st.form_submit_button("Send"):
@@ -1069,7 +1084,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Owner Space (now contains the dashboard) ---
+# --- Owner Space ---
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     if not st.session_state.owner_space_access:
@@ -1083,7 +1098,6 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # --- Owner's Dashboard ---
     st.subheader("🔐 Owner's Dashboard")
     duration = time.time() - st.session_state.connection_time
     st.session_state.data_comp = duration * 0.035
@@ -1141,9 +1155,10 @@ def main_app():
             with st.expander("Go Live"):
                 with st.form("go_live"):
                     title = st.text_input("Live title")
+                    stream_url = st.text_input("Stream URL (YouTube, Twitch, or direct video link) - optional")
                     if st.form_submit_button("Start Live"):
                         if title:
-                            session_id = start_live_session(title)
+                            session_id = start_live_session(title, stream_url)
                             if session_id:
                                 st.success("Live started!")
                                 st.rerun()
