@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 11.0.0 (Camera Access for Live Video)
+Version: 11.0.1 (Fixed missing av module)
 """
 import streamlit as st
 import pandas as pd
@@ -19,17 +19,17 @@ from PIL import Image
 import mimetypes
 import urllib.parse
 import json
-import av
 import os
 import tempfile
 
-# WebRTC for camera access
+# --- WebRTC for camera access (with graceful fallback) ---
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    import av
     WEBRTC_AVAILABLE = True
 except ImportError:
     WEBRTC_AVAILABLE = False
-    st.warning("streamlit-webrtc not installed. Camera features disabled. Install with: pip install streamlit-webrtc")
+    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
 
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
@@ -815,7 +815,6 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Camera access via WebRTC
         if WEBRTC_AVAILABLE:
             rtc_config = RTCConfiguration(
                 {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
@@ -836,7 +835,7 @@ def render_live_page(session_id):
             else:
                 st.info("Click 'Start' to enable camera")
         else:
-            st.warning("WebRTC not available. Install streamlit-webrtc for camera access.")
+            st.warning("Camera features disabled. Please install streamlit-webrtc and av.")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
                 <h3>📡 Live Stream (Simulated)</h3>
