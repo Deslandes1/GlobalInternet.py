@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 27.0.0 (Persistent errors, final media fix)
+Version: 28.0.0 (Fixed load_posts or_ error)
 """
 import streamlit as st
 
@@ -412,27 +412,31 @@ def delete_post(post_id):
         return False
 
 def load_posts():
+    """Load posts with visibility filtering (public + user's private)."""
     if supabase is None:
         return []
     try:
+        # Determine which columns to select based on schema
         if MEDIA_URLS_EXISTS:
-            query = supabase.table("posts").select(
-                "*, profiles(full_name, avatar_url, is_live)"
-            )
+            select_cols = "*, profiles(full_name, avatar_url, is_live)"
         else:
-            query = supabase.table("posts").select(
-                "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
-            )
+            select_cols = "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
 
+        # If user is logged in, fetch public posts and user's private posts separately
         if st.session_state.user:
-            query = query.or_(
-                f"is_public.eq.true,user_id.eq.{st.session_state.user.id}"
-            )
+            # Public posts (is_public = true)
+            public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).execute()
+            # Private posts owned by current user (is_public = false and user_id = current user)
+            private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", st.session_state.user.id).execute()
+            posts = public_resp.data + private_resp.data
+            # Sort by created_at descending
+            posts.sort(key=lambda x: x['created_at'], reverse=True)
         else:
-            query = query.eq("is_public", True)
+            # Not logged in: only public posts
+            resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).execute()
+            posts = resp.data
 
-        response = query.order("created_at", desc=True).execute()
-        posts = response.data
+        # For each post, add reactions
         for post in posts:
             if "media_urls" not in post:
                 post["media_urls"] = []
