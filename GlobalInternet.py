@@ -146,10 +146,17 @@ def check_reactions_table():
         supabase.table("reactions").select("id").limit(0).execute()
         return True
     except Exception as e:
-        st.warning("⚠️ 'reactions' table is missing. Reactions will be disabled. Please run the SQL setup script.")
-        return False
+        # If the error is "relation does not exist", table is missing.
+        if "relation" in str(e) and "does not exist" in str(e):
+            return False
+        else:
+            # Other error (e.g., permission) – we'll assume table exists but can't be queried.
+            # We'll still return True to avoid false warning, but the feature may fail later.
+            return True
 
 REACTIONS_TABLE_EXISTS = check_reactions_table()
+if not REACTIONS_TABLE_EXISTS:
+    st.warning("⚠️ 'reactions' table is missing. Reactions will be disabled. Please run the SQL setup script.")
 
 # --- Check if increment_shares function exists ---
 @st.cache_resource
@@ -160,17 +167,23 @@ def check_share_function():
         supabase.rpc("increment_shares", {"post_id": 1}).execute()
         return True
     except Exception as e:
-        st.warning("⚠️ 'increment_shares' function is missing. Sharing posts will fail. Please run the SQL setup script.")
-        return False
+        # If the error says function does not exist, it's missing.
+        if "function" in str(e) and "does not exist" in str(e):
+            return False
+        else:
+            # Other error (permission, etc.) – assume it exists.
+            return True
 
 SHARE_FUNCTION_EXISTS = check_share_function()
+if not SHARE_FUNCTION_EXISTS:
+    st.warning("⚠️ 'increment_shares' function is missing. Sharing posts will fail. Please run the SQL setup script.")
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
-# --- Cookie helpers (unchanged) ---
+# --- Cookie helpers ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -278,9 +291,12 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling ---
+# --- UI styling (includes zoom adjustment) ---
 st.markdown("""
     <style>
+    html {
+        font-size: 14px; /* Slightly smaller base font for comfortable zoom on all devices */
+    }
     [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
@@ -1400,7 +1416,7 @@ def render_feed():
 
                 st.divider()
 
-# --- Profile, Map, Owner Space (unchanged) ---
+# --- Profile, Map, Owner Space ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
