@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 18.0.0 (Real streaming with live URL update)
+Version: 19.0.0 (Threaded comments, replies, delete)
 """
 import streamlit as st
 
@@ -295,6 +295,15 @@ st.markdown("""
         display: inline-block;
         margin-left: 8px;
     }
+    .comment-indent {
+        margin-left: 2rem;
+        border-left: 2px solid #ddd;
+        padding-left: 1rem;
+    }
+    .comment-meta {
+        font-size: 0.8rem;
+        color: #666;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -518,7 +527,8 @@ def share_post(original_post_id, user_id, is_public=True):
         st.error(f"Error sharing post: {e}")
         return False
 
-def add_comment(post_id, user_id, content):
+# --- Enhanced comment functions with threading and delete ---
+def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         return False
     try:
@@ -529,6 +539,8 @@ def add_comment(post_id, user_id, content):
             "likes": 0,
             "created_at": datetime.now().isoformat()
         }
+        if parent_id is not None:
+            comment["parent_id"] = parent_id
         supabase.table("comments").insert(comment).execute()
         return True
     except Exception as e:
@@ -536,16 +548,46 @@ def add_comment(post_id, user_id, content):
         return False
 
 def load_comments(post_id):
+    """Load comments in threaded order (top-level first, then replies)."""
     if supabase is None:
         return []
     try:
+        # Fetch all comments for this post
         response = supabase.table("comments").select(
             "*, profiles(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
-        return response.data
+        comments = response.data
+
+        # Organize into a tree (parent_id -> list of children)
+        tree = {}
+        for c in comments:
+            pid = c.get("parent_id")
+            if pid not in tree:
+                tree[pid] = []
+            tree[pid].append(c)
+
+        # Recursive function to flatten in display order (top-level then children)
+        def flatten(parent_id):
+            result = []
+            for c in tree.get(parent_id, []):
+                result.append(c)
+                result.extend(flatten(c["id"]))
+            return result
+
+        return flatten(None)  # None = top-level comments
     except Exception as e:
         st.error(f"Error loading comments: {e}")
         return []
+
+def delete_comment(comment_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("comments").delete().eq("id", comment_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting comment: {e}")
+        return False
 
 def like_comment(comment_id, increment=True):
     if supabase is None:
@@ -603,7 +645,6 @@ def update_live_stream_url(session_id, stream_url):
         supabase.table("live_sessions").update({
             "stream_url": stream_url
         }).eq("id", session_id).execute()
-        # Refresh live sessions
         st.session_state.live_sessions = load_live_sessions()
         return True
     except Exception as e:
@@ -807,7 +848,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with real streaming and URL update ---
+# --- Live page with interactive comments ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -825,7 +866,6 @@ def render_live_page(session_id):
         platform = session.get("platform")
         is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
 
-        # If broadcaster and no URL yet, show input to paste URL
         if is_broadcaster:
             with st.expander("📹 Set Stream URL", expanded=not stream_url):
                 with st.form("update_stream_url"):
@@ -839,7 +879,7 @@ def render_live_page(session_id):
                             st.warning("Please enter a URL")
 
         if stream_url:
-            # Facebook Live embed
+            # Embedding code (same as before)
             if "facebook.com" in stream_url:
                 embed_code = f"""
                 <div id="fb-root"></div>
@@ -848,7 +888,6 @@ def render_live_page(session_id):
                      data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
                 """
                 st.components.v1.html(embed_code, height=450)
-            # YouTube Live embed
             elif "youtube.com" in stream_url or "youtu.be" in stream_url:
                 if "youtu.be" in stream_url:
                     video_id = stream_url.split("/")[-1].split("?")[0]
@@ -861,16 +900,13 @@ def render_live_page(session_id):
                     st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
                 else:
                     st.video(stream_url)
-            # Twitch Live embed
             elif "twitch.tv" in stream_url:
                 channel = stream_url.split("/")[-1]
                 embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
                 st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
             else:
-                # Assume direct video file
                 st.video(stream_url)
         else:
-            # No URL yet – show waiting message
             st.info("The streamer has not provided a video URL yet. Please wait.")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
@@ -900,30 +936,52 @@ def render_live_page(session_id):
 
     with col2:
         st.subheader("Live Chat")
-        # Refresh button
         if st.button("🔄 Refresh Chat", key=f"refresh_{session_id}"):
             st.rerun()
-        comments = load_comments(session_id)
-        for c in comments:
-            cols = st.columns([4, 1])
-            with cols[0]:
-                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
-            with cols[1]:
-                if st.button(f"👍 {c.get('likes', 0)}", key=f"like_comment_{c['id']}"):
-                    like_comment(c['id'], increment=True)
-                    st.rerun()
-        with st.form(f"live_chat_{session_id}"):
-            msg = st.text_input("Message")
+
+        # Comment form (top-level)
+        with st.form(f"new_comment_{session_id}", clear_on_submit=True):
+            msg = st.text_input("Write a comment...")
             if st.form_submit_button("Send"):
                 if msg:
                     if add_comment(session_id, st.session_state.user.id, msg):
                         st.rerun()
 
-    if st.button("Back to Feed", key=f"back_{session_id}"):
-        st.session_state.viewing_live = None
-        st.rerun()
+        # Display threaded comments
+        comments = load_comments(session_id)
+        for c in comments:
+            indent = "comment-indent" if c.get("parent_id") else ""
+            st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+            cols = st.columns([4, 1, 1])
+            with cols[0]:
+                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+            with cols[1]:
+                # Like button
+                if st.button(f"👍 {c.get('likes', 0)}", key=f"like_{c['id']}"):
+                    like_comment(c['id'], increment=True)
+                    st.rerun()
+            with cols[2]:
+                # Delete button (only for own comments)
+                if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                    if st.button("🗑️", key=f"del_{c['id']}"):
+                        delete_comment(c['id'])
+                        st.rerun()
+            # Reply button – opens a form
+            if st.button(f"💬 Reply", key=f"reply_{c['id']}"):
+                st.session_state[f"replying_to_{c['id']}"] = True
+                st.rerun()
+            if st.session_state.get(f"replying_to_{c['id']}", False):
+                with st.form(f"reply_form_{c['id']}"):
+                    reply = st.text_input("Your reply")
+                    if st.form_submit_button("Post Reply"):
+                        if reply:
+                            add_comment(session_id, st.session_state.user.id, reply, parent_id=c['id'])
+                            del st.session_state[f"replying_to_{c['id']}"]
+                            st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed ---
+# --- Feed (with enhanced comments) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1020,6 +1078,7 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
+            # Reactions
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
@@ -1040,18 +1099,50 @@ def render_feed():
                     st.rerun()
 
             if st.session_state.get(f"show_comments_{post['id']}", False):
+                st.markdown("#### Comments")
+                # Comment form (top-level)
+                with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
+                    msg = st.text_input("Write a comment...")
+                    if st.form_submit_button("Post Comment"):
+                        if msg:
+                            if add_comment(post['id'], st.session_state.user.id, msg):
+                                st.rerun()
+
+                # Display threaded comments
                 comments = load_comments(post['id'])
                 for c in comments:
-                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
-                with st.form(key=f"add_comment_{post['id']}"):
-                    new_comment = st.text_input("Write a comment...")
-                    if st.form_submit_button("Post Comment"):
-                        if new_comment:
-                            add_comment(post['id'], st.session_state.user.id, new_comment)
+                    indent = "comment-indent" if c.get("parent_id") else ""
+                    st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+                    col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                    with col1:
+                        st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                        st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                    with col2:
+                        if st.button(f"👍 {c.get('likes', 0)}", key=f"like_post_{c['id']}"):
+                            like_comment(c['id'], increment=True)
                             st.rerun()
+                    with col3:
+                        if st.button(f"💬 Reply", key=f"reply_post_{c['id']}"):
+                            st.session_state[f"replying_to_post_{c['id']}"] = True
+                            st.rerun()
+                    with col4:
+                        if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                            if st.button("🗑️", key=f"del_post_{c['id']}"):
+                                delete_comment(c['id'])
+                                st.rerun()
+                    if st.session_state.get(f"replying_to_post_{c['id']}", False):
+                        with st.form(f"reply_form_post_{c['id']}"):
+                            reply = st.text_input("Your reply")
+                            if st.form_submit_button("Post Reply"):
+                                if reply:
+                                    add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                    del st.session_state[f"replying_to_post_{c['id']}"]
+                                    st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
             st.divider()
 
-# --- Profile ---
+# --- Profile, Map, Owner Space (unchanged) ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
@@ -1098,7 +1189,6 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# --- Satellite Map ---
 def render_map():
     st.header("🛰️ Satellite Network")
     sats = {
@@ -1118,7 +1208,6 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Owner Space ---
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     if not st.session_state.owner_space_access:
@@ -1162,7 +1251,6 @@ def owner_space():
         st.session_state.owner_space_access = False
         st.rerun()
 
-# --- Main app ---
 def main_app():
     with st.sidebar:
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
@@ -1176,7 +1264,6 @@ def main_app():
         """, unsafe_allow_html=True)
         st.divider()
 
-        # Live controls (real streaming)
         if st.session_state.profile and st.session_state.profile.get("is_live"):
             st.markdown("🔴 **You are live!**")
             if st.button("End Live Session"):
@@ -1210,7 +1297,7 @@ def main_app():
                             if title:
                                 session_id = create_live_session(title, platform)
                                 if session_id:
-                                    st.success(f"Live session created! You are now live.")
+                                    st.success("Live session created! You are now live.")
                                     st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
                                     st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
                                     st.rerun()
@@ -1248,7 +1335,6 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login interface with Remember Me ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
