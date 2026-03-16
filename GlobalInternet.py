@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 13.0.0 (Final: Facebook/YouTube/Twitch Live + Full Social)
+Version: 14.0.0 (One-click live stream setup)
 """
 import streamlit as st
 
@@ -26,6 +26,8 @@ import urllib.parse
 import json
 import os
 import tempfile
+import random
+import string
 
 # --- WebRTC is disabled to avoid system dependencies ---
 WEBRTC_AVAILABLE = False
@@ -155,6 +157,10 @@ if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
 if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
+if "stream_key" not in st.session_state:
+    st.session_state.stream_key = None
+if "selected_platform" not in st.session_state:
+    st.session_state.selected_platform = None
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -558,7 +564,7 @@ def like_comment(comment_id, increment=True):
         return False
 
 # --- Live session functions ---
-def start_live_session(title, stream_url):
+def start_live_session(title, platform=None, stream_key=None):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
         return None
@@ -567,18 +573,36 @@ def start_live_session(title, stream_url):
         if active.data:
             st.warning("You already have an active live session. End it first.")
             return None
+
+        # Generate a stream key if not provided (for simulation)
+        if not stream_key:
+            stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
+
+        # Build stream URL based on platform (for embedding later)
+        stream_url = None
+        if platform == "YouTube":
+            stream_url = f"https://youtu.be/live/{stream_key}"  # placeholder
+        elif platform == "Facebook":
+            stream_url = f"https://facebook.com/watch/live/?v={stream_key}"
+        elif platform == "Twitch":
+            stream_url = f"https://twitch.tv/{stream_key}"
+
         session_data = {
             "user_id": st.session_state.user.id,
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
-            "stream_url": stream_url if stream_url else None
+            "stream_url": stream_url,
+            "platform": platform,
+            "stream_key": stream_key
         }
         result = supabase.table("live_sessions").insert(session_data).execute()
         if result.data:
             supabase.table("profiles").update({"is_live": True}).eq("id", st.session_state.user.id).execute()
             st.session_state.profile["is_live"] = True
             st.session_state.live_sessions = load_live_sessions()
+            st.session_state.stream_key = stream_key
+            st.session_state.selected_platform = platform
             return result.data[0]["id"]
         else:
             st.error("Failed to start live session.")
@@ -598,6 +622,8 @@ def end_live_session(session_id):
         supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
         st.session_state.profile["is_live"] = False
         st.session_state.live_sessions = load_live_sessions()
+        st.session_state.stream_key = None
+        st.session_state.selected_platform = None
         return True
     except Exception as e:
         st.error(f"Error ending live session: {e}")
@@ -797,6 +823,7 @@ def render_live_page(session_id):
 
     with col1:
         stream_url = session.get("stream_url")
+        platform = session.get("platform")
         if stream_url:
             # Facebook Live embed
             if "facebook.com" in stream_url:
@@ -1144,24 +1171,36 @@ def main_app():
                         st.rerun()
                         break
         else:
-            with st.expander("Go Live"):
+            with st.expander("Go Live (One‑Click Setup)"):
                 st.markdown("""
-                **How to go live:**
-                1. Start a live stream on [YouTube](https://youtube.com/live), [Twitch](https://twitch.tv), or [Facebook](https://facebook.com/live/create)
-                2. Copy the stream URL
-                3. Paste it below
+                **Choose your platform:**
                 """)
-                with st.form("go_live"):
-                    title = st.text_input("Live title")
-                    stream_url = st.text_input("Stream URL (YouTube, Twitch, Facebook, or leave empty)")
-                    if st.form_submit_button("Start Live"):
-                        if title:
-                            session_id = start_live_session(title, stream_url)
-                            if session_id:
-                                st.success("Live started! You are now live.")
-                                st.rerun()
-                        else:
-                            st.warning("Please enter a title")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("📺 YouTube", key="yt"):
+                        st.session_state.selected_platform = "YouTube"
+                with col2:
+                    if st.button("📘 Facebook", key="fb"):
+                        st.session_state.selected_platform = "Facebook"
+                with col3:
+                    if st.button("🎮 Twitch", key="tw"):
+                        st.session_state.selected_platform = "Twitch"
+
+                if st.session_state.selected_platform:
+                    platform = st.session_state.selected_platform
+                    st.markdown(f"**Selected: {platform}**")
+                    with st.form("go_live_form"):
+                        title = st.text_input("Live title")
+                        if st.form_submit_button("Start Live"):
+                            if title:
+                                session_id = start_live_session(title, platform)
+                                if session_id:
+                                    st.success(f"Live started on {platform}! Use the stream key below in your broadcasting software.")
+                                    st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
+                                    st.markdown(f"**Setup Link:** [Start streaming on {platform}](https://www.{platform.lower()}.com/live)")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a title")
 
         st.divider()
 
