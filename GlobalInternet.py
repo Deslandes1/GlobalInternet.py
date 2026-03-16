@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 28.0.0 (Fixed load_posts or_ error)
+Version: 29.0.0 (Deep debug – media upload)
 """
 import streamlit as st
 
@@ -46,6 +46,23 @@ def init_supabase():
         return None
 
 supabase = init_supabase()
+
+# --- Check if post_media bucket exists and is accessible ---
+@st.cache_resource
+def check_post_media_bucket():
+    if supabase is None:
+        return False
+    try:
+        # Try to list files in bucket (if any) – this checks bucket existence and permissions
+        supabase.storage.from_("post_media").list()
+        return True
+    except Exception as e:
+        st.error(f"❌ 'post_media' bucket check failed: {e}")
+        return False
+
+POST_MEDIA_BUCKET_OK = check_post_media_bucket() if MEDIA_URLS_EXISTS else False
+if MEDIA_URLS_EXISTS and not POST_MEDIA_BUCKET_OK:
+    st.warning("⚠️ 'post_media' bucket is not accessible. Media uploads will fail. Please create the bucket and set it to public.")
 
 # --- Schema detection ---
 @st.cache_resource
@@ -322,6 +339,15 @@ st.markdown("""
         font-family: monospace;
         white-space: pre-wrap;
     }
+    .debug-box {
+        background-color: #e0f7fa;
+        border-left: 6px solid #00bcd4;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-family: monospace;
+        white-space: pre-wrap;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -381,24 +407,51 @@ def upload_avatar(user_id, image_file):
         return None
 
 def upload_post_media(user_id, file):
-    if supabase is None or not MEDIA_URLS_EXISTS:
+    """Upload a file to post_media bucket with extensive error checking."""
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
         return None
+    if not MEDIA_URLS_EXISTS:
+        st.session_state.last_error = "media_urls column missing."
+        return None
+    if not POST_MEDIA_BUCKET_OK:
+        st.session_state.last_error = "post_media bucket is not accessible."
+        return None
+
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
-        file_name = f"post_{user_id}_{int(time.time())}_{hashlib.md5(file.name.encode()).hexdigest()[:8]}.{ext}"
+        # Generate a unique filename
+        timestamp = int(time.time())
+        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
+        file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
+
+        st.toast(f"Uploading {file.name} as {file_name}...", icon="📤")
+
         file_bytes = file.getvalue()
-        supabase.storage.from_("post_media").upload(
+        # Upload
+        upload_result = supabase.storage.from_("post_media").upload(
             file_name, 
             file_bytes, 
             {"content-type": content_type}
         )
+        # Get public URL
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
+
+        # Verify that the URL is accessible (optional)
+        try:
+            r = requests.head(public_url, timeout=5)
+            if r.status_code != 200:
+                st.warning(f"Uploaded file URL {public_url} returned status {r.status_code}")
+        except Exception as e:
+            st.warning(f"Could not verify uploaded file: {e}")
+
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
         error_str = str(e)
         st.session_state.last_error = f"Media upload failed: {error_str}"
+        st.error(f"❌ Media upload error: {error_str}")
         return None
 
 def delete_post(post_id):
@@ -488,6 +541,7 @@ def create_post(user_id, content, media_files, is_public):
                     media_urls.append(media_info)
                 else:
                     upload_errors.append(f.name)
+                    # error already set in session_state.last_error
 
         post = {
             "user_id": user_id,
@@ -501,6 +555,9 @@ def create_post(user_id, content, media_files, is_public):
             post["media_urls"] = media_urls
 
         st.toast(f"Attempting to post: {content[:30]}...", icon="📤")
+        # Show debug info
+        with st.expander("Debug: Post data being sent"):
+            st.json(post)
 
         result = supabase.table("posts").insert(post).execute()
 
@@ -511,6 +568,9 @@ def create_post(user_id, content, media_files, is_public):
             else:
                 st.success("✅ Post published! Refreshing feed...")
             st.session_state.last_error = None  # clear any previous error
+            # Show debug info
+            with st.expander("Debug: Insert result"):
+                st.json(result.data)
             return True
         else:
             st.session_state.last_error = "Post insertion failed – no data returned."
