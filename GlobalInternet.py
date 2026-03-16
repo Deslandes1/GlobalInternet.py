@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 22.1.0 (Demo post for empty feed)
+Version: 23.0.0 (Reliable posting, immediate feed update)
 """
 import streamlit as st
 
@@ -386,7 +386,6 @@ def upload_post_media(user_id, file):
         )
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
-        st.success(f"✅ {media_type.capitalize()} uploaded successfully!")
         return {"url": public_url, "type": media_type}
     except Exception as e:
         error_str = str(e)
@@ -473,13 +472,15 @@ def create_post(user_id, content, media_files, is_public):
                 return False
 
         media_urls = []
+        upload_failed = False
         if MEDIA_URLS_EXISTS and media_files:
             for f in media_files:
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
                 else:
-                    st.warning("One file failed to upload, skipped.")
+                    upload_failed = True
+                    st.warning(f"One file failed to upload, skipped.")
 
         post = {
             "user_id": user_id,
@@ -494,7 +495,11 @@ def create_post(user_id, content, media_files, is_public):
 
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            st.session_state.posts = load_posts()
+            st.session_state.posts = load_posts()  # immediately refresh
+            if upload_failed:
+                st.warning("Post created, but some media files failed to upload.")
+            else:
+                st.success("Post published!")
             return True
         else:
             st.error("Post insertion failed.")
@@ -984,7 +989,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with enhanced post composer and demo post) ---
+# --- Feed (with enhanced post composer and immediate update) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1046,8 +1051,7 @@ def render_feed():
         if posted:
             if content or (MEDIA_URLS_EXISTS and media_files):
                 if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
-                    st.success("Post published!")
-                    st.rerun()
+                    st.rerun()  # Force immediate rerun to show new post
             else:
                 st.warning("Please add a caption or media.")
     st.divider()
@@ -1091,11 +1095,11 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    # --- If no posts, show a demo post for illustration ---
+    # --- If no real posts, show demo post ---
     if not st.session_state.posts:
         # Create a sample post in memory (not saved to DB) to demonstrate interactivity
         demo_post = {
-            "id": -1,  # dummy ID
+            "id": -1,
             "user_id": st.session_state.user.id if st.session_state.user else "demo",
             "content": "Welcome to GLOBALINTERNET.PY! This is a sample post to show how the feed works. You can react with emojis, comment, and share. Try it out!",
             "is_public": True,
@@ -1106,14 +1110,13 @@ def render_feed():
                 "is_live": False
             },
             "media_urls": [
-                {"type": "video", "url": "https://www.w3schools.com/html/mov_bbb.mp4"}  # sample video
+                {"type": "video", "url": "https://www.w3schools.com/html/mov_bbb.mp4"}
             ] if MEDIA_URLS_EXISTS else [],
             "reactions": {"👍": 3, "❤️": 2, "😂": 1},
             "user_reactions": ["👍"] if st.session_state.user else [],
             "shares_count": 1
         }
 
-        # Display demo post with same layout as real posts
         with st.container():
             col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
             with col_a:
@@ -1128,12 +1131,11 @@ def render_feed():
             with col_c:
                 st.caption(demo_post['created_at'])
             with col_d:
-                # No delete for demo post
                 pass
 
-            st.markdown(f"<div class='post-card'>{demo_post['content']}</div>", unsafe_allow_html=True)
+            if demo_post['content']:
+                st.markdown(f"<div class='post-card'>{demo_post['content']}</div>", unsafe_allow_html=True)
 
-            # Media
             if demo_post["media_urls"]:
                 for media in demo_post["media_urls"]:
                     if media["type"] == "image":
@@ -1148,7 +1150,6 @@ def render_feed():
                 with cols[i]:
                     count = demo_post["reactions"].get(emoji, 0)
                     btn_label = f"{emoji} {count}" if count > 0 else emoji
-                    # For demo, reactions are not saved; just increment locally
                     if st.button(btn_label, key=f"demo_react_{i}"):
                         demo_post["reactions"][emoji] = demo_post["reactions"].get(emoji, 0) + 1
                         st.rerun()
@@ -1160,7 +1161,6 @@ def render_feed():
             with cols[len(emojis)+1]:
                 st.button("🔄 1", key="demo_share")
 
-            # Demo comments
             if st.session_state.get("show_demo_comments", False):
                 st.markdown("#### Comments")
                 with st.form("demo_comment_form", clear_on_submit=True):
@@ -1170,7 +1170,6 @@ def render_feed():
                             st.info("Demo comment posted! (not saved)")
                             st.session_state["demo_comment_posted"] = True
                             st.rerun()
-                # Show some dummy comments
                 st.markdown("**User123**: Great app!")
                 st.markdown("**Jane**: Love the video 😍")
                 st.markdown("**Mike**: 🔥🔥🔥")
@@ -1180,7 +1179,7 @@ def render_feed():
         st.info("👆 This is a demo post to show you the interactive features. Create a real post to start building your feed!")
 
     else:
-        # --- Display real posts ---
+        # --- Display real posts (multiple allowed) ---
         for post in st.session_state.posts:
             with st.container():
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
