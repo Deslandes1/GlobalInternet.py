@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 31.0.0 (Handles missing reactions table gracefully)
+Version: 32.0.0 (Full interactive comments)
 """
 import streamlit as st
 
@@ -352,15 +352,6 @@ st.markdown("""
         font-family: monospace;
         white-space: pre-wrap;
     }
-    .debug-box {
-        background-color: #e0f7fa;
-        border-left: 6px solid #00bcd4;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 5px;
-        font-family: monospace;
-        white-space: pre-wrap;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -420,7 +411,6 @@ def upload_avatar(user_id, image_file):
         return None
 
 def upload_post_media(user_id, file):
-    """Upload a file to post_media bucket with extensive error checking."""
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
         return None
@@ -430,35 +420,19 @@ def upload_post_media(user_id, file):
     if not POST_MEDIA_BUCKET_OK:
         st.session_state.last_error = "post_media bucket is not accessible."
         return None
-
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
-        # Generate a unique filename
         timestamp = int(time.time())
         random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
         file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
-
-        st.toast(f"Uploading {file.name} as {file_name}...", icon="📤")
-
         file_bytes = file.getvalue()
-        # Upload
         supabase.storage.from_("post_media").upload(
             file_name, 
             file_bytes, 
             {"content-type": content_type}
         )
-        # Get public URL
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
-
-        # Verify that the URL is accessible (optional)
-        try:
-            r = requests.head(public_url, timeout=5)
-            if r.status_code != 200:
-                st.warning(f"Uploaded file URL {public_url} returned status {r.status_code}")
-        except Exception as e:
-            st.warning(f"Could not verify uploaded file: {e}")
-
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
@@ -478,31 +452,23 @@ def delete_post(post_id):
         return False
 
 def load_posts():
-    """Load posts with visibility filtering (public + user's private)."""
     if supabase is None:
         return []
     try:
-        # Determine which columns to select based on schema
         if MEDIA_URLS_EXISTS:
             select_cols = "*, profiles(full_name, avatar_url, is_live)"
         else:
             select_cols = "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
 
-        # If user is logged in, fetch public posts and user's private posts separately
         if st.session_state.user:
-            # Public posts (is_public = true)
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).execute()
-            # Private posts owned by current user (is_public = false and user_id = current user)
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", st.session_state.user.id).execute()
             posts = public_resp.data + private_resp.data
-            # Sort by created_at descending
             posts.sort(key=lambda x: x['created_at'], reverse=True)
         else:
-            # Not logged in: only public posts
             resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).execute()
             posts = resp.data
 
-        # For each post, try to add reactions (if table exists)
         for post in posts:
             if "media_urls" not in post:
                 post["media_urls"] = []
@@ -520,8 +486,7 @@ def load_posts():
                     if st.session_state.user:
                         user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
                         post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
-                except Exception as e:
-                    # If reactions table query fails, ignore (treat as no reactions)
+                except:
                     pass
         return posts
     except Exception as e:
@@ -559,7 +524,6 @@ def create_post(user_id, content, media_files, is_public):
                     media_urls.append(media_info)
                 else:
                     upload_errors.append(f.name)
-                    # error already set in session_state.last_error
 
         post = {
             "user_id": user_id,
@@ -572,23 +536,14 @@ def create_post(user_id, content, media_files, is_public):
         if MEDIA_URLS_EXISTS:
             post["media_urls"] = media_urls
 
-        st.toast(f"Attempting to post: {content[:30]}...", icon="📤")
-        # Show debug info
-        with st.expander("Debug: Post data being sent"):
-            st.json(post)
-
         result = supabase.table("posts").insert(post).execute()
-
         if result.data:
             st.session_state.posts = load_posts()
             if upload_errors:
                 st.warning(f"✅ Post created, but the following files failed to upload: {', '.join(upload_errors)}. Check bucket permissions.")
             else:
-                st.success("✅ Post published! Refreshing feed...")
-            st.session_state.last_error = None  # clear any previous error
-            # Show debug info
-            with st.expander("Debug: Insert result"):
-                st.json(result.data)
+                st.success("✅ Post published!")
+            st.session_state.last_error = None
             return True
         else:
             st.session_state.last_error = "Post insertion failed – no data returned."
@@ -599,7 +554,7 @@ def create_post(user_id, content, media_files, is_public):
 
 def toggle_reaction(post_id, user_id, emoji):
     if supabase is None or not REACTIONS_TABLE_EXISTS:
-        st.error("Reactions are disabled because the 'reactions' table is missing.")
+        st.error("Reactions are disabled.")
         return False
     try:
         check = supabase.table("reactions").select("id").eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
@@ -640,8 +595,10 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
+# --- Enhanced comment functions ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         comment = {
@@ -667,6 +624,7 @@ def load_comments(post_id):
             "*, profiles(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         comments = response.data
+        # Build a tree structure
         tree = {}
         for c in comments:
             pid = c.get("parent_id")
@@ -681,7 +639,7 @@ def load_comments(post_id):
                 result.extend(flatten(c["id"]))
             return result
 
-        return flatten(None)
+        return flatten(None)  # None = top-level comments
     except Exception as e:
         st.session_state.last_error = f"Error loading comments: {e}"
         return []
@@ -709,6 +667,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
+# --- Live session functions (unchanged) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -825,6 +784,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
+# --- Auth functions (unchanged) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.session_state.last_error = "Registration unavailable."
@@ -948,6 +908,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
+# --- Live page (unchanged) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -1073,11 +1034,10 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed ---
+# --- Feed with interactive comments ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
-    # Display any persistent error
     if st.session_state.last_error:
         st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
         if st.button("Clear error"):
@@ -1265,7 +1225,7 @@ def render_feed():
         st.info("👆 This is a demo post to show you the interactive features. Create a real post to start building your feed!")
 
     else:
-        # --- Display real posts ---
+        # --- Display real posts with full comment interaction ---
         for post in st.session_state.posts:
             with st.container():
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
@@ -1302,6 +1262,7 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
+                # Reactions
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 cols = st.columns(len(emojis) + 2)
                 for i, emoji in enumerate(emojis):
@@ -1323,6 +1284,7 @@ def render_feed():
 
                 if st.session_state.get(f"show_comments_{post['id']}", False):
                     st.markdown("#### Comments")
+                    # Top-level comment form
                     with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
                         msg = st.text_input("Write a comment...")
                         if st.form_submit_button("Post Comment"):
@@ -1330,10 +1292,13 @@ def render_feed():
                                 if add_comment(post['id'], st.session_state.user.id, msg):
                                     st.rerun()
 
+                    # Display threaded comments
                     comments = load_comments(post['id'])
                     for c in comments:
                         indent = "comment-indent" if c.get("parent_id") else ""
                         st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+
+                        # Comment header (avatar, name, time)
                         col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
                         with col1:
                             st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
@@ -1351,6 +1316,8 @@ def render_feed():
                                 if st.button("🗑️", key=f"del_post_{c['id']}"):
                                     delete_comment(c['id'])
                                     st.rerun()
+
+                        # Reply form (appears when reply button clicked)
                         if st.session_state.get(f"replying_to_post_{c['id']}", False):
                             with st.form(f"reply_form_post_{c['id']}"):
                                 reply = st.text_input("Your reply")
