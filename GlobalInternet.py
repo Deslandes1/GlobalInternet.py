@@ -4,6 +4,60 @@ Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
 Version: 33.0.0 (Full interactive feed – reactions, comments, shares)
+
+===============================================================================
+⚠️  BEFORE RUNNING THE APP, EXECUTE THIS SQL IN YOUR SUPABASE SQL EDITOR:
+===============================================================================
+
+-- 1. Create the 'reactions' table
+CREATE TABLE IF NOT EXISTS reactions (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT REFERENCES posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(post_id, user_id, emoji)
+);
+
+-- 2. Create the 'comments' table (if not already present)
+CREATE TABLE IF NOT EXISTS comments (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT REFERENCES posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    parent_id BIGINT REFERENCES comments(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    likes INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Create RPC function to increment shares on a post
+CREATE OR REPLACE FUNCTION increment_shares(post_id BIGINT)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE posts SET shares_count = shares_count + 1 WHERE id = post_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Create RPC functions to increment/decrement comment likes
+CREATE OR REPLACE FUNCTION increment_comment_likes(comment_id BIGINT)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE comments SET likes = likes + 1 WHERE id = comment_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION decrement_comment_likes(comment_id BIGINT)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE comments SET likes = GREATEST(likes - 1, 0) WHERE id = comment_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. (Optional) Create 'post_media' storage bucket – do this via Supabase Dashboard:
+--    Storage → Create bucket → name: post_media → public ✅
+--    Then set CORS rules if needed.
+
+===============================================================================
 """
 import streamlit as st
 
