@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 29.0.0 (Deep debug – media upload)
+Version: 30.0.0 (Fixed NameError, deep debug)
 """
 import streamlit as st
 
@@ -47,23 +47,6 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Check if post_media bucket exists and is accessible ---
-@st.cache_resource
-def check_post_media_bucket():
-    if supabase is None:
-        return False
-    try:
-        # Try to list files in bucket (if any) – this checks bucket existence and permissions
-        supabase.storage.from_("post_media").list()
-        return True
-    except Exception as e:
-        st.error(f"❌ 'post_media' bucket check failed: {e}")
-        return False
-
-POST_MEDIA_BUCKET_OK = check_post_media_bucket() if MEDIA_URLS_EXISTS else False
-if MEDIA_URLS_EXISTS and not POST_MEDIA_BUCKET_OK:
-    st.warning("⚠️ 'post_media' bucket is not accessible. Media uploads will fail. Please create the bucket and set it to public.")
-
 # --- Schema detection ---
 @st.cache_resource
 def check_media_urls_column():
@@ -83,6 +66,23 @@ MEDIA_URLS_EXISTS = check_media_urls_column()
 if not MEDIA_URLS_EXISTS:
     st.warning("⚠️ The 'media_urls' column is missing from the 'posts' table. "
                "Media uploads will be disabled. Please run the SQL setup script to enable them.")
+
+# --- Check if post_media bucket exists and is accessible ---
+@st.cache_resource
+def check_post_media_bucket():
+    if supabase is None:
+        return False
+    try:
+        # Try to list files in bucket (if any) – this checks bucket existence and permissions
+        supabase.storage.from_("post_media").list()
+        return True
+    except Exception as e:
+        st.error(f"❌ 'post_media' bucket check failed: {e}")
+        return False
+
+POST_MEDIA_BUCKET_OK = check_post_media_bucket() if MEDIA_URLS_EXISTS else False
+if MEDIA_URLS_EXISTS and not POST_MEDIA_BUCKET_OK:
+    st.warning("⚠️ 'post_media' bucket is not accessible. Media uploads will fail. Please create the bucket and set it to public.")
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
