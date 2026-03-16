@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 19.0.0 (Threaded comments, replies, delete)
+Version: 20.0.0 (Public interactive feed, threaded comments, live streaming)
 """
 import streamlit as st
 
@@ -391,6 +391,10 @@ def upload_post_media(user_id, file):
         return None
 
 def load_posts():
+    """Load posts with visibility filtering:
+       - Public posts visible to everyone.
+       - Private posts visible only to the author.
+    """
     if supabase is None:
         return []
     try:
@@ -879,7 +883,6 @@ def render_live_page(session_id):
                             st.warning("Please enter a URL")
 
         if stream_url:
-            # Embedding code (same as before)
             if "facebook.com" in stream_url:
                 embed_code = f"""
                 <div id="fb-root"></div>
@@ -957,17 +960,15 @@ def render_live_page(session_id):
                 st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
                 st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
             with cols[1]:
-                # Like button
                 if st.button(f"👍 {c.get('likes', 0)}", key=f"like_{c['id']}"):
                     like_comment(c['id'], increment=True)
                     st.rerun()
             with cols[2]:
-                # Delete button (only for own comments)
                 if st.session_state.user and c['user_id'] == st.session_state.user.id:
                     if st.button("🗑️", key=f"del_{c['id']}"):
                         delete_comment(c['id'])
                         st.rerun()
-            # Reply button – opens a form
+            # Reply button
             if st.button(f"💬 Reply", key=f"reply_{c['id']}"):
                 st.session_state[f"replying_to_{c['id']}"] = True
                 st.rerun()
@@ -981,7 +982,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with enhanced comments) ---
+# --- Feed (public and interactive) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1078,7 +1079,7 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
-            # Reactions
+            # Reactions (emoji buttons)
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
