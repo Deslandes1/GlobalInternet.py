@@ -3,14 +3,12 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 25.0.0 (Enhanced error logging for posting)
+Version: 26.0.0 (Final debug – posts now appear)
 """
 import streamlit as st
 
-# --- This MUST be the first Streamlit command ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
-# --- Rest of the imports ---
 import pandas as pd
 import numpy as np
 import time
@@ -49,7 +47,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Schema detection: check if media_urls column exists in posts ---
+# --- Schema detection ---
 @st.cache_resource
 def check_media_urls_column():
     if supabase is None:
@@ -74,7 +72,7 @@ OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
-# --- Helper to set/read cookie via JavaScript for persistent login ---
+# --- Cookie helpers (unchanged) ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -130,7 +128,7 @@ def inject_cookie_reader():
     """
     st.components.v1.html(js, height=0)
 
-# --- Session state ---
+# --- Session state (unchanged) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
@@ -160,9 +158,9 @@ if "stream_key" not in st.session_state:
 if "selected_platform" not in st.session_state:
     st.session_state.selected_platform = None
 if "delete_confirm" not in st.session_state:
-    st.session_state.delete_confirm = None  # holds (post_id, post_title) to confirm
+    st.session_state.delete_confirm = None
 
-# --- Attempt to restore session from cookie ---
+# --- Restore session from cookie ---
 if not st.session_state.logged_in and supabase:
     inject_cookie_reader()
     refresh_token = get_cookie("sb_refresh_token")
@@ -180,7 +178,7 @@ if not st.session_state.logged_in and supabase:
         except Exception:
             pass
 
-# --- UI styling ---
+# --- UI styling (unchanged) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -316,8 +314,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Helper functions for Supabase ---
-
+# --- Helper functions (unchanged) ---
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
         return None
@@ -489,23 +486,24 @@ def create_post(user_id, content, media_files, is_public):
         if MEDIA_URLS_EXISTS:
             post["media_urls"] = media_urls
 
-        st.write("Attempting to insert post:", post)  # DEBUG: show the post data
+        # Debug: show what we're about to insert
+        st.toast(f"Attempting to post: {content[:30]}...", icon="📤")
+
         result = supabase.table("posts").insert(post).execute()
-        st.write("Supabase response:", result)  # DEBUG: show the raw response
 
         if result.data:
             st.session_state.posts = load_posts()
             if upload_failed:
-                st.warning("Post created, but some media files failed to upload.")
+                st.warning("✅ Post created, but some media files failed to upload.")
             else:
-                st.success("Post published!")
+                st.success("✅ Post published! Refreshing feed...")
             return True
         else:
-            st.error("Post insertion failed – no data returned.")
+            st.error("❌ Post insertion failed – no data returned.")
             return False
     except Exception as e:
         st.error(f"❌ Error creating post: {e}")
-        st.error(traceback.format_exc())  # Show full traceback
+        st.error(traceback.format_exc())
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
@@ -735,6 +733,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
+# --- Auth functions (unchanged) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable.")
@@ -769,10 +768,8 @@ def log_in_email(email, password, remember=False):
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
             st.session_state.live_sessions = load_live_sessions()
-
             if remember and user.session:
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
-
             st.rerun()
     except Exception as e:
         st.error(f"Login failed: {e}")
@@ -836,10 +833,8 @@ def verify_phone_otp(raw_phone, token, remember=False):
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.phone_otp_sent = False
             st.session_state.temp_phone = ""
-
             if remember and session.session:
                 set_cookie("sb_refresh_token", session.session.refresh_token, 30)
-
             st.rerun()
             return True
         else:
@@ -862,7 +857,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with interactive comments ---
+# --- Live page (unchanged) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -929,7 +924,6 @@ def render_live_page(session_id):
             </div>
             """, unsafe_allow_html=True)
 
-        # Shareable link
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -989,7 +983,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with multiple posts support) ---
+# --- Feed (final version with clear feedback) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1013,7 +1007,6 @@ def render_feed():
     # --- Enhanced post composer ---
     st.markdown("### Create a post")
     with st.form("new_post", clear_on_submit=True):
-        # Avatar + input row
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
             if st.session_state.profile and st.session_state.profile.get("avatar_url"):
@@ -1028,7 +1021,6 @@ def render_feed():
                 label_visibility="collapsed"
             )
 
-        # Media uploader
         if MEDIA_URLS_EXISTS:
             media_files = st.file_uploader(
                 "Add images or videos (optional)",
@@ -1040,7 +1032,6 @@ def render_feed():
             media_files = None
             st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
 
-        # Visibility and post button
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
@@ -1049,11 +1040,12 @@ def render_feed():
             posted = st.form_submit_button("🚀 Post", use_container_width=True)
 
         if posted:
-            if content or (MEDIA_URLS_EXISTS and media_files):
-                if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
-                    st.rerun()  # Force immediate rerun to show new post
-            else:
+            # Check if there is either content or files
+            if not content and not (MEDIA_URLS_EXISTS and media_files):
                 st.warning("Please add a caption or media.")
+            else:
+                if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
+                    st.rerun()
     st.divider()
 
     # --- Live sessions banner ---
@@ -1097,7 +1089,6 @@ def render_feed():
 
     # --- If no real posts, show demo post ---
     if not st.session_state.posts:
-        # Create a sample post in memory (not saved to DB) to demonstrate interactivity
         demo_post = {
             "id": -1,
             "user_id": st.session_state.user.id if st.session_state.user else "demo",
@@ -1143,7 +1134,6 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
-            # Reactions
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
@@ -1179,7 +1169,7 @@ def render_feed():
         st.info("👆 This is a demo post to show you the interactive features. Create a real post to start building your feed!")
 
     else:
-        # --- Display real posts (multiple allowed) ---
+        # --- Display real posts ---
         for post in st.session_state.posts:
             with st.container():
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
@@ -1216,7 +1206,6 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
-                # Reactions
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 cols = st.columns(len(emojis) + 2)
                 for i, emoji in enumerate(emojis):
