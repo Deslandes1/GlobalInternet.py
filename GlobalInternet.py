@@ -3,21 +3,12 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 11.0.2 (Fixed WebRTC dependencies & page_config order)
+Version: 11.1.0 (Simulated camera, no heavy dependencies)
 """
 import streamlit as st
 
 # --- This MUST be the first Streamlit command ---
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
-
-# --- Conditional imports for WebRTC (with graceful fallback) ---
-try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-    import av
-    WEBRTC_AVAILABLE = True
-except ImportError:
-    WEBRTC_AVAILABLE = False
-    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
 
 # --- Rest of the imports ---
 import pandas as pd
@@ -35,6 +26,9 @@ import urllib.parse
 import json
 import os
 import tempfile
+
+# --- WebRTC is disabled to avoid system dependencies ---
+WEBRTC_AVAILABLE = False
 
 # --- Supabase client ---
 @st.cache_resource
@@ -579,7 +573,7 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (updated with camera) ---
+# --- Live session functions (simulated camera) ---
 def start_live_session(title):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
@@ -804,7 +798,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with camera access ---
+# --- Live page with simulated camera ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -818,34 +812,15 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        if WEBRTC_AVAILABLE:
-            rtc_config = RTCConfiguration(
-                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-            )
-            webrtc_ctx = webrtc_streamer(
-                key=f"live_{session_id}",
-                mode=WebRtcMode.SENDRECV,
-                rtc_configuration=rtc_config,
-                media_stream_constraints={"video": True, "audio": True},
-                video_html_attrs={
-                    "style": {"width": "100%", "border-radius": "10px"},
-                    "controls": True,
-                    "autoPlay": True,
-                }
-            )
-            if webrtc_ctx.state.playing:
-                st.success("🔴 Camera is live")
-            else:
-                st.info("Click 'Start' to enable camera")
-        else:
-            st.warning("Camera features disabled. Please install streamlit-webrtc and av (requires system dependencies).")
-            st.markdown("""
-            <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
-                <h3>📡 Live Stream (Simulated)</h3>
-                <p style="color: #ccc;">Camera access would be here.</p>
-                <div style="font-size: 4rem; margin: 20px;">📹</div>
-            </div>
-            """, unsafe_allow_html=True)
+        # Simulated video (no actual camera)
+        st.markdown("""
+        <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
+            <h3>📡 Live Stream (Simulated)</h3>
+            <p style="color: #ccc;">Camera access is simulated. In a production app, you would integrate a real video stream.</p>
+            <div style="font-size: 4rem; margin: 20px;">📹</div>
+            <p style="color: #aaa;">Stream key: <code>live_{}</code></p>
+        </div>
+        """.format(session_id), unsafe_allow_html=True)
 
         # Record and upload to OneDrive (simulated)
         if st.button("🎥 Record & Upload to OneDrive", key=f"record_{session_id}"):
