@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 26.0.0 (Final debug – posts now appear)
+Version: 27.0.0 (Persistent errors, final media fix)
 """
 import streamlit as st
 
@@ -128,7 +128,7 @@ def inject_cookie_reader():
     """
     st.components.v1.html(js, height=0)
 
-# --- Session state (unchanged) ---
+# --- Session state ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
@@ -159,6 +159,8 @@ if "selected_platform" not in st.session_state:
     st.session_state.selected_platform = None
 if "delete_confirm" not in st.session_state:
     st.session_state.delete_confirm = None
+if "last_error" not in st.session_state:
+    st.session_state.last_error = None
 
 # --- Restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -175,8 +177,8 @@ if not st.session_state.logged_in and supabase:
                 st.session_state.connection_time = time.time()
                 st.session_state.posts = load_posts()
                 st.session_state.live_sessions = load_live_sessions()
-        except Exception:
-            pass
+        except Exception as e:
+            st.session_state.last_error = str(e)
 
 # --- UI styling (unchanged) ---
 st.markdown("""
@@ -311,10 +313,19 @@ st.markdown("""
         padding: 10px;
         margin: 10px 0;
     }
+    .error-box {
+        background-color: #ffdddd;
+        border-left: 6px solid #ff4444;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-family: monospace;
+        white-space: pre-wrap;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Helper functions (unchanged) ---
+# --- Helper functions ---
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
         return None
@@ -339,10 +350,10 @@ def get_or_create_profile(user_id, identifier):
             if insert_response.data:
                 return insert_response.data[0]
             else:
-                st.error("Failed to create profile.")
+                st.session_state.last_error = "Failed to create profile."
                 return None
     except Exception as e:
-        st.error(f"Error in get_or_create_profile: {e}")
+        st.session_state.last_error = f"Error in get_or_create_profile: {e}"
         return None
 
 def update_profile(profile_data):
@@ -352,7 +363,7 @@ def update_profile(profile_data):
         supabase.table("profiles").update(profile_data).eq("id", profile_data["id"]).execute()
         return True
     except Exception as e:
-        st.error(f"Error updating profile: {e}")
+        st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
 def upload_avatar(user_id, image_file):
@@ -366,7 +377,7 @@ def upload_avatar(user_id, image_file):
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
     except Exception as e:
-        st.error(f"Avatar upload failed: {e}")
+        st.session_state.last_error = f"Avatar upload failed: {e}"
         return None
 
 def upload_post_media(user_id, file):
@@ -387,7 +398,7 @@ def upload_post_media(user_id, file):
         return {"url": public_url, "type": media_type}
     except Exception as e:
         error_str = str(e)
-        st.error(f"❌ Media upload failed: {error_str}")
+        st.session_state.last_error = f"Media upload failed: {error_str}"
         return None
 
 def delete_post(post_id):
@@ -397,7 +408,7 @@ def delete_post(post_id):
         supabase.table("posts").delete().eq("id", post_id).execute()
         return True
     except Exception as e:
-        st.error(f"Error deleting post: {e}")
+        st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
 def load_posts():
@@ -439,12 +450,12 @@ def load_posts():
                 post["user_reactions"] = []
         return posts
     except Exception as e:
-        st.error(f"Error loading posts: {e}")
+        st.session_state.last_error = f"Error loading posts: {e}"
         return []
 
 def create_post(user_id, content, media_files, is_public):
     if supabase is None:
-        st.error("Supabase not configured.")
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
@@ -458,22 +469,21 @@ def create_post(user_id, content, media_files, is_public):
             if identifier:
                 profile = get_or_create_profile(user_id, identifier)
                 if not profile:
-                    st.error("Could not create profile.")
+                    st.session_state.last_error = "Could not create profile."
                     return False
             else:
-                st.error("User identifier not found.")
+                st.session_state.last_error = "User identifier not found."
                 return False
 
         media_urls = []
-        upload_failed = False
+        upload_errors = []
         if MEDIA_URLS_EXISTS and media_files:
             for f in media_files:
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
                 else:
-                    upload_failed = True
-                    # error already shown inside upload_post_media
+                    upload_errors.append(f.name)
 
         post = {
             "user_id": user_id,
@@ -486,24 +496,23 @@ def create_post(user_id, content, media_files, is_public):
         if MEDIA_URLS_EXISTS:
             post["media_urls"] = media_urls
 
-        # Debug: show what we're about to insert
         st.toast(f"Attempting to post: {content[:30]}...", icon="📤")
 
         result = supabase.table("posts").insert(post).execute()
 
         if result.data:
             st.session_state.posts = load_posts()
-            if upload_failed:
-                st.warning("✅ Post created, but some media files failed to upload.")
+            if upload_errors:
+                st.warning(f"✅ Post created, but the following files failed to upload: {', '.join(upload_errors)}. Check bucket permissions.")
             else:
                 st.success("✅ Post published! Refreshing feed...")
+            st.session_state.last_error = None  # clear any previous error
             return True
         else:
-            st.error("❌ Post insertion failed – no data returned.")
+            st.session_state.last_error = "Post insertion failed – no data returned."
             return False
     except Exception as e:
-        st.error(f"❌ Error creating post: {e}")
-        st.error(traceback.format_exc())
+        st.session_state.last_error = f"❌ Error creating post: {e}\n{traceback.format_exc()}"
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
@@ -522,7 +531,7 @@ def toggle_reaction(post_id, user_id, emoji):
         st.session_state.posts = load_posts()
         return True
     except Exception as e:
-        st.error(f"Error toggling reaction: {e}")
+        st.session_state.last_error = f"Error toggling reaction: {e}"
         return False
 
 def share_post(original_post_id, user_id, is_public=True):
@@ -545,7 +554,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.posts = load_posts()
         return True
     except Exception as e:
-        st.error(f"Error sharing post: {e}")
+        st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
 def add_comment(post_id, user_id, content, parent_id=None):
@@ -564,7 +573,7 @@ def add_comment(post_id, user_id, content, parent_id=None):
         supabase.table("comments").insert(comment).execute()
         return True
     except Exception as e:
-        st.error(f"Error adding comment: {e}")
+        st.session_state.last_error = f"Error adding comment: {e}"
         return False
 
 def load_comments(post_id):
@@ -591,7 +600,7 @@ def load_comments(post_id):
 
         return flatten(None)
     except Exception as e:
-        st.error(f"Error loading comments: {e}")
+        st.session_state.last_error = f"Error loading comments: {e}"
         return []
 
 def delete_comment(comment_id):
@@ -601,7 +610,7 @@ def delete_comment(comment_id):
         supabase.table("comments").delete().eq("id", comment_id).execute()
         return True
     except Exception as e:
-        st.error(f"Error deleting comment: {e}")
+        st.session_state.last_error = f"Error deleting comment: {e}"
         return False
 
 def like_comment(comment_id, increment=True):
@@ -614,12 +623,12 @@ def like_comment(comment_id, increment=True):
             supabase.rpc("decrement_comment_likes", {"comment_id": comment_id}).execute()
         return True
     except Exception as e:
-        st.error(f"Error toggling comment like: {e}")
+        st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
-        st.error("Cannot start live session.")
+        st.session_state.last_error = "Cannot start live session."
         return None
     try:
         active = supabase.table("live_sessions").select("id").eq("user_id", st.session_state.user.id).eq("is_live", True).execute()
@@ -646,10 +655,10 @@ def create_live_session(title, platform):
             st.session_state.selected_platform = platform
             return result.data[0]["id"]
         else:
-            st.error("Failed to start live session.")
+            st.session_state.last_error = "Failed to start live session."
             return None
     except Exception as e:
-        st.error(f"Error starting live session: {e}")
+        st.session_state.last_error = f"Error starting live session: {e}"
         return None
 
 def update_live_stream_url(session_id, stream_url):
@@ -662,7 +671,7 @@ def update_live_stream_url(session_id, stream_url):
         st.session_state.live_sessions = load_live_sessions()
         return True
     except Exception as e:
-        st.error(f"Error updating stream URL: {e}")
+        st.session_state.last_error = f"Error updating stream URL: {e}"
         return False
 
 def end_live_session(session_id):
@@ -680,7 +689,7 @@ def end_live_session(session_id):
         st.session_state.selected_platform = None
         return True
     except Exception as e:
-        st.error(f"Error ending live session: {e}")
+        st.session_state.last_error = f"Error ending live session: {e}"
         return False
 
 def load_live_sessions():
@@ -692,7 +701,7 @@ def load_live_sessions():
         ).eq("is_live", True).order("started_at", desc=True).execute()
         return response.data
     except Exception as e:
-        st.error(f"Error loading live sessions: {e}")
+        st.session_state.last_error = f"Error loading live sessions: {e}"
         return []
 
 def get_live_session(session_id):
@@ -704,7 +713,7 @@ def get_live_session(session_id):
         ).eq("id", session_id).single().execute()
         return response.data
     except Exception as e:
-        st.error(f"Error fetching live session: {e}")
+        st.session_state.last_error = f"Error fetching live session: {e}"
         return None
 
 def get_network_status():
@@ -733,10 +742,9 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions (unchanged) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
-        st.error("Registration unavailable.")
+        st.session_state.last_error = "Registration unavailable."
         return False
     try:
         user = supabase.auth.sign_up({
@@ -748,12 +756,12 @@ def sign_up_email(email, password, full_name):
             st.success("Sign-up successful! Please log in.")
             return True
     except Exception as e:
-        st.error(f"Sign-up failed: {e}")
+        st.session_state.last_error = f"Sign-up failed: {e}"
         return False
 
 def log_in_email(email, password, remember=False):
     if supabase is None:
-        st.error("Login unavailable.")
+        st.session_state.last_error = "Login unavailable."
         return
     try:
         user = supabase.auth.sign_in_with_password({
@@ -772,18 +780,18 @@ def log_in_email(email, password, remember=False):
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
             st.rerun()
     except Exception as e:
-        st.error(f"Login failed: {e}")
+        st.session_state.last_error = f"Login failed: {e}"
 
 def reset_password_email(email):
     if supabase is None:
-        st.error("Supabase not configured.")
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         supabase.auth.reset_password_for_email(email)
         st.success("Password reset email sent. Please check your inbox.")
         return True
     except Exception as e:
-        st.error(f"Failed to send reset email: {e}")
+        st.session_state.last_error = f"Failed to send reset email: {e}"
         return False
 
 def format_phone(phone: str) -> str:
@@ -794,7 +802,7 @@ def format_phone(phone: str) -> str:
 
 def send_phone_otp(raw_phone):
     if supabase is None:
-        st.error("Supabase not configured.")
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         phone = format_phone(raw_phone)
@@ -809,12 +817,12 @@ def send_phone_otp(raw_phone):
         if "Phone logins are disabled" in error_msg:
             st.error("Phone authentication is disabled in Supabase. Please enable it in Authentication → Providers.")
         else:
-            st.error(f"Failed to send OTP: {error_msg}")
+            st.session_state.last_error = f"Failed to send OTP: {error_msg}"
         return False
 
 def verify_phone_otp(raw_phone, token, remember=False):
     if supabase is None:
-        st.error("Supabase not configured.")
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         phone = format_phone(raw_phone)
@@ -838,10 +846,10 @@ def verify_phone_otp(raw_phone, token, remember=False):
             st.rerun()
             return True
         else:
-            st.error("Verification failed – no user returned.")
+            st.session_state.last_error = "Verification failed – no user returned."
             return False
     except Exception as e:
-        st.error(f"Verification failed: {e}")
+        st.session_state.last_error = f"Verification failed: {e}"
         return False
 
 def logout():
@@ -857,7 +865,6 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page (unchanged) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -983,9 +990,16 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (final version with clear feedback) ---
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
+
+    # Display any persistent error
+    if st.session_state.last_error:
+        st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
+        if st.button("Clear error"):
+            st.session_state.last_error = None
+            st.rerun()
 
     try:
         params = st.query_params
@@ -1040,7 +1054,6 @@ def render_feed():
             posted = st.form_submit_button("🚀 Post", use_container_width=True)
 
         if posted:
-            # Check if there is either content or files
             if not content and not (MEDIA_URLS_EXISTS and media_files):
                 st.warning("Please add a caption or media.")
             else:
@@ -1069,7 +1082,7 @@ def render_feed():
 
     st.divider()
 
-    # --- Delete confirmation (if any) ---
+    # --- Delete confirmation ---
     if st.session_state.delete_confirm:
         post_id, post_preview = st.session_state.delete_confirm
         st.warning(f"Are you sure you want to delete this post?")
