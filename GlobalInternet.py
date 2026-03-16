@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 23.0.0 (Multiple posts, full interactive feed)
+Version: 24.0.0 (Robust posting, immediate feed update)
 """
 import streamlit as st
 
@@ -480,7 +480,7 @@ def create_post(user_id, content, media_files, is_public):
                     media_urls.append(media_info)
                 else:
                     upload_failed = True
-                    st.warning(f"One file failed to upload, skipped.")
+                    # error already shown inside upload_post_media
 
         post = {
             "user_id": user_id,
@@ -502,7 +502,7 @@ def create_post(user_id, content, media_files, is_public):
                 st.success("Post published!")
             return True
         else:
-            st.error("Post insertion failed.")
+            st.error("Post insertion failed – no data returned.")
             return False
     except Exception as e:
         st.error(f"Error creating post: {e}")
