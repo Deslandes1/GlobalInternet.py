@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 21.0.0 (Persistent feed with delete, full interactivity)
+Version: 21.1.0 (Empty feed message)
 """
 import streamlit as st
 
@@ -984,7 +984,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed ---
+# --- Feed (with empty state message) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1005,6 +1005,7 @@ def render_feed():
         render_live_page(st.session_state.viewing_live)
         return
 
+    # New post form
     with st.form("new_post", clear_on_submit=True):
         content = st.text_area("Caption", height=100, placeholder="Write a caption...")
         if MEDIA_URLS_EXISTS:
@@ -1028,6 +1029,7 @@ def render_feed():
             else:
                 st.warning("Please add a caption or media.")
 
+    # Live sessions banner
     active_lives = st.session_state.live_sessions
     if active_lives:
         st.markdown("### 🔴 Live Now")
@@ -1048,6 +1050,7 @@ def render_feed():
 
     st.divider()
 
+    # Handle delete confirmation
     if st.session_state.delete_confirm:
         post_id, post_preview = st.session_state.delete_confirm
         st.warning(f"Are you sure you want to delete this post?")
@@ -1065,6 +1068,18 @@ def render_feed():
                 st.rerun()
         st.divider()
 
+    # If there are no posts, show a friendly message
+    if not st.session_state.posts:
+        st.info("👋 No posts yet. Be the first to share something!")
+        st.markdown("""
+        <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.5); border-radius: 20px;">
+            <h3>Welcome to GLOBALINTERNET.PY!</h3>
+            <p>This is the beginning of your community. Post a message, share a photo or video, and start interacting.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        return  # Skip the rest of the loop (no posts to display)
+
+    # Display posts
     for post in st.session_state.posts:
         with st.container():
             col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
