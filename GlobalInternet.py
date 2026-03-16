@@ -2,22 +2,6 @@
 GLOBALINTERNET.PY - Satellite Communication Platform with Real Money Transfers
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Version: 34.0.0 (Real MonCash Integration)
-
-===============================================================================
-REQUIRED SETUP FOR REAL MONEY TRANSFERS:
-===============================================================================
-
-1. Register for MonCash Business: https://moncash.digicelgroup.com/business
-2. Get your Client ID and Client Secret from MonCash dashboard
-3. Set up a backend API service (Flask/FastAPI) with these endpoints:
-   - POST /api/auth - Returns access token
-   - GET /api/balance - Returns business balance
-   - POST /api/transfer - Initiates P2P transfer
-   - POST /api/webhook/moncash - Receives payment notifications
-
-4. Add these to your Streamlit secrets (see .streamlit/secrets.toml example above)
-
-===============================================================================
 """
 import streamlit as st
 
@@ -46,7 +30,7 @@ import hmac
 # --- Configuration for Real Payments ---
 BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
-MONCASH_MODE = st.secrets.get("MONCASH_MODE", "sandbox")  # Change to "live" for production
+MONCASH_MODE = st.secrets.get("MONCASH_MODE", "sandbox")
 
 # --- Supabase client ---
 @st.cache_resource
@@ -67,7 +51,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Schema detection ---
+# --- Schema detection (unchanged) ---
 @st.cache_resource
 def check_media_urls_column():
     if supabase is None:
@@ -183,7 +167,7 @@ if "withdrawal_in_progress" not in st.session_state:
 if "current_transaction" not in st.session_state:
     st.session_state.current_transaction = None
 
-# --- Cookie helpers ---
+# --- Cookie helpers (unchanged) ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -260,9 +244,7 @@ if not st.session_state.logged_in and supabase:
 # --- UI styling (with zoom adjustment) ---
 st.markdown("""
     <style>
-    html {
-        font-size: 14px;
-    }
+    html { font-size: 14px; }
     [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
@@ -976,24 +958,11 @@ def logout():
 
 # --- Real Money Transfer Functions ---
 def get_real_balance():
-    """
-    Fetch real MonCash business balance from backend API.
-    Returns tuple (success: bool, balance: float, message: str)
-    """
     if not BACKEND_API_URL:
         return False, 0.0, "Backend API not configured"
-    
     try:
-        headers = {
-            "X-API-Key": BACKEND_API_KEY,
-            "Content-Type": "application/json"
-        }
-        response = requests.get(
-            f"{BACKEND_API_URL}/api/balance",
-            headers=headers,
-            timeout=10
-        )
-        
+        headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+        response = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             return True, float(data.get("balance", 0)), "Success"
@@ -1003,37 +972,16 @@ def get_real_balance():
         return False, 0.0, str(e)
 
 def initiate_withdrawal(amount, method, phone_number=None, bank_details=None):
-    """
-    Initiate a real money transfer to MonCash or bank account.
-    Returns tuple (success: bool, transaction_id: str, message: str)
-    """
     if not BACKEND_API_URL:
         return False, "", "Backend API not configured"
-    
     try:
-        headers = {
-            "X-API-Key": BACKEND_API_KEY,
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "amount": amount,
-            "method": method.lower(),
-            "owner_cin": OWNER_CIN
-        }
-        
+        headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+        payload = {"amount": amount, "method": method.lower(), "owner_cin": OWNER_CIN}
         if method == "MonCash" and phone_number:
             payload["recipient_phone"] = phone_number
         elif method == "Bank Transfer" and bank_details:
             payload["bank_details"] = bank_details
-        
-        response = requests.post(
-            f"{BACKEND_API_URL}/api/transfer",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
+        response = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=30)
         if response.status_code == 200:
             data = response.json()
             return True, data.get("transaction_id", ""), data.get("message", "Transfer initiated")
@@ -1043,21 +991,11 @@ def initiate_withdrawal(amount, method, phone_number=None, bank_details=None):
         return False, "", str(e)
 
 def verify_transaction(transaction_id):
-    """
-    Verify the status of a transaction.
-    Returns tuple (success: bool, status: str, details: dict)
-    """
     if not BACKEND_API_URL:
         return False, "error", {}
-    
     try:
         headers = {"X-API-Key": BACKEND_API_KEY}
-        response = requests.get(
-            f"{BACKEND_API_URL}/api/transaction/{transaction_id}",
-            headers=headers,
-            timeout=10
-        )
-        
+        response = requests.get(f"{BACKEND_API_URL}/api/transaction/{transaction_id}", headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             return True, data.get("status", "unknown"), data
@@ -1066,7 +1004,7 @@ def verify_transaction(transaction_id):
     except Exception as e:
         return False, "error", {"error": str(e)}
 
-# --- Live page (unchanged) ---
+# --- Live page ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -1192,7 +1130,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed with interactive comments ---
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1581,10 +1519,8 @@ def owner_space():
     # --- Real balance display with refresh button ---
     col_balance, col_refresh = st.columns([3, 1])
     with col_balance:
-        # Format balance with commas for thousands
         balance_str = f"${st.session_state.real_balance:,.2f}"
         st.metric("MonCash Business Balance", balance_str, delta=None)
-        
         if st.session_state.last_balance_check:
             st.caption(f"Last updated: {st.session_state.last_balance_check.strftime('%Y-%m-%d %H:%M:%S')}")
     
@@ -1604,7 +1540,7 @@ def owner_space():
     
     # --- Compensation display (from app usage) ---
     duration = time.time() - st.session_state.connection_time
-    simulated_comp = duration * 0.035  # This is separate from real balance
+    simulated_comp = duration * 0.035
     st.subheader("📊 App Usage Metrics")
     col1, col2, col3 = st.columns(3)
     with col1:
