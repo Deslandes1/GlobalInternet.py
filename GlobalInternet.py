@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 30.0.0 (Fixed NameError, deep debug)
+Version: 31.0.0 (Handles missing reactions table gracefully)
 """
 import streamlit as st
 
@@ -73,7 +73,6 @@ def check_post_media_bucket():
     if supabase is None:
         return False
     try:
-        # Try to list files in bucket (if any) – this checks bucket existence and permissions
         supabase.storage.from_("post_media").list()
         return True
     except Exception as e:
@@ -83,6 +82,20 @@ def check_post_media_bucket():
 POST_MEDIA_BUCKET_OK = check_post_media_bucket() if MEDIA_URLS_EXISTS else False
 if MEDIA_URLS_EXISTS and not POST_MEDIA_BUCKET_OK:
     st.warning("⚠️ 'post_media' bucket is not accessible. Media uploads will fail. Please create the bucket and set it to public.")
+
+# --- Check if reactions table exists ---
+@st.cache_resource
+def check_reactions_table():
+    if supabase is None:
+        return False
+    try:
+        supabase.table("reactions").select("id").limit(0).execute()
+        return True
+    except Exception as e:
+        st.warning("⚠️ 'reactions' table is missing. Reactions will be disabled. Please run the SQL setup script.")
+        return False
+
+REACTIONS_TABLE_EXISTS = check_reactions_table()
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -430,7 +443,7 @@ def upload_post_media(user_id, file):
 
         file_bytes = file.getvalue()
         # Upload
-        upload_result = supabase.storage.from_("post_media").upload(
+        supabase.storage.from_("post_media").upload(
             file_name, 
             file_bytes, 
             {"content-type": content_type}
@@ -489,22 +502,27 @@ def load_posts():
             resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).execute()
             posts = resp.data
 
-        # For each post, add reactions
+        # For each post, try to add reactions (if table exists)
         for post in posts:
             if "media_urls" not in post:
                 post["media_urls"] = []
-            reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
-            counts = {}
-            if reactions_resp.data:
-                for r in reactions_resp.data:
-                    emoji = r["emoji"]
-                    counts[emoji] = counts.get(emoji, 0) + 1
-            post["reactions"] = counts
-            if st.session_state.user:
-                user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
-                post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
-            else:
-                post["user_reactions"] = []
+            post["reactions"] = {}
+            post["user_reactions"] = []
+            if REACTIONS_TABLE_EXISTS:
+                try:
+                    reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
+                    counts = {}
+                    if reactions_resp.data:
+                        for r in reactions_resp.data:
+                            emoji = r["emoji"]
+                            counts[emoji] = counts.get(emoji, 0) + 1
+                    post["reactions"] = counts
+                    if st.session_state.user:
+                        user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
+                        post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
+                except Exception as e:
+                    # If reactions table query fails, ignore (treat as no reactions)
+                    pass
         return posts
     except Exception as e:
         st.session_state.last_error = f"Error loading posts: {e}"
@@ -580,7 +598,8 @@ def create_post(user_id, content, media_files, is_public):
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
-    if supabase is None:
+    if supabase is None or not REACTIONS_TABLE_EXISTS:
+        st.error("Reactions are disabled because the 'reactions' table is missing.")
         return False
     try:
         check = supabase.table("reactions").select("id").eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
