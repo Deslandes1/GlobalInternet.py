@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 20.0.0 (Public interactive feed, threaded comments, live streaming)
+Version: 21.0.0 (Persistent feed with delete, full interactivity)
 """
 import streamlit as st
 
@@ -158,6 +158,8 @@ if "stream_key" not in st.session_state:
     st.session_state.stream_key = None
 if "selected_platform" not in st.session_state:
     st.session_state.selected_platform = None
+if "delete_confirm" not in st.session_state:
+    st.session_state.delete_confirm = None  # holds (post_id, post_title) to confirm
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -304,6 +306,12 @@ st.markdown("""
         font-size: 0.8rem;
         color: #666;
     }
+    .delete-confirm {
+        background-color: #ffdddd;
+        border-left: 3px solid red;
+        padding: 10px;
+        margin: 10px 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -390,11 +398,26 @@ def upload_post_media(user_id, file):
             st.error(f"Media upload failed: {error_str}")
         return None
 
+def delete_post_media(media_urls):
+    """Delete media files from storage (optional). Not critical if we just delete the post record."""
+    # This would require listing bucket objects and deleting by name – can be implemented later.
+    pass
+
+def delete_post(post_id):
+    """Delete a post and its associated data (cascades will handle comments/reactions)."""
+    if supabase is None:
+        return False
+    try:
+        # Optionally delete media files from storage first
+        # For now, just delete the post – foreign keys will remove comments/reactions automatically
+        supabase.table("posts").delete().eq("id", post_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting post: {e}")
+        return False
+
 def load_posts():
-    """Load posts with visibility filtering:
-       - Public posts visible to everyone.
-       - Private posts visible only to the author.
-    """
+    """Load posts with visibility filtering."""
     if supabase is None:
         return []
     try:
@@ -552,17 +575,13 @@ def add_comment(post_id, user_id, content, parent_id=None):
         return False
 
 def load_comments(post_id):
-    """Load comments in threaded order (top-level first, then replies)."""
     if supabase is None:
         return []
     try:
-        # Fetch all comments for this post
         response = supabase.table("comments").select(
             "*, profiles(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         comments = response.data
-
-        # Organize into a tree (parent_id -> list of children)
         tree = {}
         for c in comments:
             pid = c.get("parent_id")
@@ -570,7 +589,6 @@ def load_comments(post_id):
                 tree[pid] = []
             tree[pid].append(c)
 
-        # Recursive function to flatten in display order (top-level then children)
         def flatten(parent_id):
             result = []
             for c in tree.get(parent_id, []):
@@ -578,7 +596,7 @@ def load_comments(post_id):
                 result.extend(flatten(c["id"]))
             return result
 
-        return flatten(None)  # None = top-level comments
+        return flatten(None)
     except Exception as e:
         st.error(f"Error loading comments: {e}")
         return []
@@ -606,7 +624,7 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (real streaming) ---
+# --- Live session functions ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
@@ -852,7 +870,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with interactive comments ---
+# --- Live page (unchanged from previous version) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -982,7 +1000,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (public and interactive) ---
+# --- Feed (with delete post functionality) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1048,9 +1066,28 @@ def render_feed():
 
     st.divider()
 
+    # Handle delete confirmation
+    if st.session_state.delete_confirm:
+        post_id, post_preview = st.session_state.delete_confirm
+        st.warning(f"Are you sure you want to delete this post?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes, delete"):
+                if delete_post(post_id):
+                    st.success("Post deleted.")
+                    st.session_state.posts = load_posts()
+                st.session_state.delete_confirm = None
+                st.rerun()
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.delete_confirm = None
+                st.rerun()
+        st.divider()
+
     for post in st.session_state.posts:
         with st.container():
-            col_a, col_b, col_c = st.columns([1,5,2])
+            # Header row with avatar, name, timestamp, and delete button
+            col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
             with col_a:
                 avatar = post.get("profiles", {}).get("avatar_url")
                 if avatar:
@@ -1067,10 +1104,18 @@ def render_feed():
                     st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
             with col_c:
                 st.caption(post['created_at'][:16])
+            with col_d:
+                # Delete button (only for author)
+                if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                    if st.button("🗑️", key=f"del_post_{post['id']}"):
+                        st.session_state.delete_confirm = (post['id'], post['content'][:30])
+                        st.rerun()
 
+            # Post content
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
+            # Media
             media_urls = post.get("media_urls", [])
             if media_urls:
                 for media in media_urls:
@@ -1079,7 +1124,7 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
-            # Reactions (emoji buttons)
+            # Reactions
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
@@ -1099,9 +1144,10 @@ def render_feed():
                     share_post(post['id'], st.session_state.user.id, is_public=True)
                     st.rerun()
 
+            # Comments section
             if st.session_state.get(f"show_comments_{post['id']}", False):
                 st.markdown("#### Comments")
-                # Comment form (top-level)
+                # Top-level comment form
                 with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
                     msg = st.text_input("Write a comment...")
                     if st.form_submit_button("Post Comment"):
