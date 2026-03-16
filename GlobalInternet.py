@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 23.0.0 (Reliable posting, immediate feed update)
+Version: 23.0.0 (Multiple posts, full interactive feed)
 """
 import streamlit as st
 
@@ -495,7 +495,7 @@ def create_post(user_id, content, media_files, is_public):
 
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            st.session_state.posts = load_posts()  # immediately refresh
+            st.session_state.posts = load_posts()
             if upload_failed:
                 st.warning("Post created, but some media files failed to upload.")
             else:
@@ -989,7 +989,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with enhanced post composer and immediate update) ---
+# --- Feed (with multiple posts support) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
