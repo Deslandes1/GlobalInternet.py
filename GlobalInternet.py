@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 22.0.0 (Enhanced post composer)
+Version: 22.1.0 (Demo post for empty feed)
 """
 import streamlit as st
 
@@ -984,7 +984,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with enhanced post composer) ---
+# --- Feed (with enhanced post composer and demo post) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1091,49 +1091,51 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    # --- Empty state message ---
+    # --- If no posts, show a demo post for illustration ---
     if not st.session_state.posts:
-        st.info("👋 No posts yet. Be the first to share something!")
-        st.markdown("""
-        <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.5); border-radius: 20px;">
-            <h3>Welcome to GLOBALINTERNET.PY!</h3>
-            <p>This is the beginning of your community. Post a message, share a photo or video, and start interacting.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        return  # Skip displaying posts
+        # Create a sample post in memory (not saved to DB) to demonstrate interactivity
+        demo_post = {
+            "id": -1,  # dummy ID
+            "user_id": st.session_state.user.id if st.session_state.user else "demo",
+            "content": "Welcome to GLOBALINTERNET.PY! This is a sample post to show how the feed works. You can react with emojis, comment, and share. Try it out!",
+            "is_public": True,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "profiles": {
+                "full_name": st.session_state.profile["full_name"] if st.session_state.profile else "Demo User",
+                "avatar_url": st.session_state.profile.get("avatar_url") if st.session_state.profile else None,
+                "is_live": False
+            },
+            "media_urls": [
+                {"type": "video", "url": "https://www.w3schools.com/html/mov_bbb.mp4"}  # sample video
+            ] if MEDIA_URLS_EXISTS else [],
+            "reactions": {"👍": 3, "❤️": 2, "😂": 1},
+            "user_reactions": ["👍"] if st.session_state.user else [],
+            "shares_count": 1
+        }
 
-    # --- Display posts ---
-    for post in st.session_state.posts:
+        # Display demo post with same layout as real posts
         with st.container():
             col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
             with col_a:
-                avatar = post.get("profiles", {}).get("avatar_url")
+                avatar = demo_post.get("profiles", {}).get("avatar_url")
                 if avatar:
                     st.image(avatar, width=40)
                 else:
                     st.markdown("👤")
             with col_b:
-                name = post['profiles']['full_name']
-                if post.get("profiles", {}).get("is_live"):
-                    st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"**{name}**")
-                if not post.get("is_public", True):
-                    st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                name = demo_post['profiles']['full_name']
+                st.markdown(f"**{name}**")
             with col_c:
-                st.caption(post['created_at'][:16])
+                st.caption(demo_post['created_at'])
             with col_d:
-                if st.session_state.user and post['user_id'] == st.session_state.user.id:
-                    if st.button("🗑️", key=f"del_post_{post['id']}"):
-                        st.session_state.delete_confirm = (post['id'], post['content'][:30])
-                        st.rerun()
+                # No delete for demo post
+                pass
 
-            if post['content']:
-                st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='post-card'>{demo_post['content']}</div>", unsafe_allow_html=True)
 
-            media_urls = post.get("media_urls", [])
-            if media_urls:
-                for media in media_urls:
+            # Media
+            if demo_post["media_urls"]:
+                for media in demo_post["media_urls"]:
                     if media["type"] == "image":
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
@@ -1144,62 +1146,138 @@ def render_feed():
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
                 with cols[i]:
-                    count = post.get("reactions", {}).get(emoji, 0)
+                    count = demo_post["reactions"].get(emoji, 0)
                     btn_label = f"{emoji} {count}" if count > 0 else emoji
-                    if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
-                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                    # For demo, reactions are not saved; just increment locally
+                    if st.button(btn_label, key=f"demo_react_{i}"):
+                        demo_post["reactions"][emoji] = demo_post["reactions"].get(emoji, 0) + 1
                         st.rerun()
 
             with cols[len(emojis)]:
-                if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
-                    st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
+                if st.button("💬 2", key="demo_comment"):
+                    st.session_state["show_demo_comments"] = not st.session_state.get("show_demo_comments", False)
                     st.rerun()
             with cols[len(emojis)+1]:
-                if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
-                    share_post(post['id'], st.session_state.user.id, is_public=True)
-                    st.rerun()
+                st.button("🔄 1", key="demo_share")
 
-            if st.session_state.get(f"show_comments_{post['id']}", False):
+            # Demo comments
+            if st.session_state.get("show_demo_comments", False):
                 st.markdown("#### Comments")
-                with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
+                with st.form("demo_comment_form", clear_on_submit=True):
                     msg = st.text_input("Write a comment...")
                     if st.form_submit_button("Post Comment"):
                         if msg:
-                            if add_comment(post['id'], st.session_state.user.id, msg):
-                                st.rerun()
-
-                comments = load_comments(post['id'])
-                for c in comments:
-                    indent = "comment-indent" if c.get("parent_id") else ""
-                    st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
-                    col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
-                    with col1:
-                        st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
-                        st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
-                    with col2:
-                        if st.button(f"👍 {c.get('likes', 0)}", key=f"like_post_{c['id']}"):
-                            like_comment(c['id'], increment=True)
+                            st.info("Demo comment posted! (not saved)")
+                            st.session_state["demo_comment_posted"] = True
                             st.rerun()
-                    with col3:
-                        if st.button(f"💬 Reply", key=f"reply_post_{c['id']}"):
-                            st.session_state[f"replying_to_post_{c['id']}"] = True
-                            st.rerun()
-                    with col4:
-                        if st.session_state.user and c['user_id'] == st.session_state.user.id:
-                            if st.button("🗑️", key=f"del_post_{c['id']}"):
-                                delete_comment(c['id'])
-                                st.rerun()
-                    if st.session_state.get(f"replying_to_post_{c['id']}", False):
-                        with st.form(f"reply_form_post_{c['id']}"):
-                            reply = st.text_input("Your reply")
-                            if st.form_submit_button("Post Reply"):
-                                if reply:
-                                    add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
-                                    del st.session_state[f"replying_to_post_{c['id']}"]
-                                    st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
+                # Show some dummy comments
+                st.markdown("**User123**: Great app!")
+                st.markdown("**Jane**: Love the video 😍")
+                st.markdown("**Mike**: 🔥🔥🔥")
 
             st.divider()
+
+        st.info("👆 This is a demo post to show you the interactive features. Create a real post to start building your feed!")
+
+    else:
+        # --- Display real posts ---
+        for post in st.session_state.posts:
+            with st.container():
+                col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
+                with col_a:
+                    avatar = post.get("profiles", {}).get("avatar_url")
+                    if avatar:
+                        st.image(avatar, width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    name = post['profiles']['full_name']
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**{name}**")
+                    if not post.get("is_public", True):
+                        st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                with col_c:
+                    st.caption(post['created_at'][:16])
+                with col_d:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("🗑️", key=f"del_post_{post['id']}"):
+                            st.session_state.delete_confirm = (post['id'], post['content'][:30])
+                            st.rerun()
+
+                if post['content']:
+                    st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+
+                # Reactions
+                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                cols = st.columns(len(emojis) + 2)
+                for i, emoji in enumerate(emojis):
+                    with cols[i]:
+                        count = post.get("reactions", {}).get(emoji, 0)
+                        btn_label = f"{emoji} {count}" if count > 0 else emoji
+                        if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
+                            toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                            st.rerun()
+
+                with cols[len(emojis)]:
+                    if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
+                        st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
+                        st.rerun()
+                with cols[len(emojis)+1]:
+                    if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                        share_post(post['id'], st.session_state.user.id, is_public=True)
+                        st.rerun()
+
+                if st.session_state.get(f"show_comments_{post['id']}", False):
+                    st.markdown("#### Comments")
+                    with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
+                        msg = st.text_input("Write a comment...")
+                        if st.form_submit_button("Post Comment"):
+                            if msg:
+                                if add_comment(post['id'], st.session_state.user.id, msg):
+                                    st.rerun()
+
+                    comments = load_comments(post['id'])
+                    for c in comments:
+                        indent = "comment-indent" if c.get("parent_id") else ""
+                        st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+                        col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                        with col1:
+                            st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                            st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with col2:
+                            if st.button(f"👍 {c.get('likes', 0)}", key=f"like_post_{c['id']}"):
+                                like_comment(c['id'], increment=True)
+                                st.rerun()
+                        with col3:
+                            if st.button(f"💬 Reply", key=f"reply_post_{c['id']}"):
+                                st.session_state[f"replying_to_post_{c['id']}"] = True
+                                st.rerun()
+                        with col4:
+                            if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_post_{c['id']}"):
+                                    delete_comment(c['id'])
+                                    st.rerun()
+                        if st.session_state.get(f"replying_to_post_{c['id']}", False):
+                            with st.form(f"reply_form_post_{c['id']}"):
+                                reply = st.text_input("Your reply")
+                                if st.form_submit_button("Post Reply"):
+                                    if reply:
+                                        add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                        del st.session_state[f"replying_to_post_{c['id']}"]
+                                        st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                st.divider()
 
 # --- Profile, Map, Owner Space (unchanged) ---
 def render_profile():
