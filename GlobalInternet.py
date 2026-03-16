@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 9.2.1 (Live page URL fix)
+Version: 10.0.0 (Persistent Login with Remember Me)
 """
 import streamlit as st
 import pandas as pd
@@ -18,6 +18,7 @@ import io
 from PIL import Image
 import mimetypes
 import urllib.parse
+import json
 
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
@@ -65,6 +66,69 @@ OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
+# --- Helper to set/read cookie via JavaScript ---
+def set_cookie(name, value, days=30):
+    """Set a cookie using JavaScript injection."""
+    js = f"""
+    <script>
+    function setCookie(name, value, days) {{
+        var expires = "";
+        if (days) {{
+            var date = new Date();
+            date.setTime(date.getTime() + (days*24*60*60*1000));
+            expires = "; expires=" + date.toUTCString();
+        }}
+        document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+    }}
+    setCookie("{name}", "{value}", {days});
+    </script>
+    """
+    st.components.v1.html(js, height=0)
+
+def get_cookie(name):
+    """Retrieve a cookie value (reads from query param set by JS)."""
+    # We'll pass cookie values via query param from a JS snippet
+    # This is a workaround: on load, JS reads cookie and sets ?cookie_xxx=value
+    # Then we can read it from st.query_params
+    cookie_val = None
+    try:
+        params = st.query_params
+        if f"cookie_{name}" in params:
+            cookie_val = params[f"cookie_{name}"][0]
+    except:
+        try:
+            params = st.experimental_get_query_params()
+            if f"cookie_{name}" in params:
+                cookie_val = params[f"cookie_{name}"][0]
+        except:
+            pass
+    return cookie_val
+
+def inject_cookie_reader():
+    """Inject JS to read cookies and append to URL as query params."""
+    js = """
+    <script>
+    function getCookie(name) {
+        var nameEQ = name + "=";
+        var ca = document.cookie.split(';');
+        for(var i=0;i < ca.length;i++) {
+            var c = ca[i];
+            while (c.charAt(0)==' ') c = c.substring(1,c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+        }
+        return null;
+    }
+    var refreshToken = getCookie("sb_refresh_token");
+    if (refreshToken) {
+        // Append to URL as query param
+        var url = new URL(window.location.href);
+        url.searchParams.set('cookie_sb_refresh_token', refreshToken);
+        window.history.replaceState({}, '', url);
+    }
+    </script>
+    """
+    st.components.v1.html(js, height=0)
+
 # --- Session state ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -90,6 +154,28 @@ if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
 if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
+
+# --- Attempt to restore session from cookie ---
+if not st.session_state.logged_in and supabase:
+    inject_cookie_reader()
+    refresh_token = get_cookie("sb_refresh_token")
+    if refresh_token:
+        try:
+            # Use Supabase to set session from refresh token
+            # Note: This requires the refresh token to be valid
+            # We'll attempt to get the user
+            user = supabase.auth.get_user(refresh_token)
+            if user.user:
+                st.session_state.logged_in = True
+                st.session_state.user = user.user
+                profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
+                st.session_state.profile = profile
+                st.session_state.connection_time = time.time()
+                st.session_state.posts = load_posts()
+                st.session_state.live_sessions = load_live_sessions()
+        except Exception as e:
+            # Token invalid or expired
+            pass
 
 # --- UI styling ---
 st.markdown("""
@@ -585,7 +671,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions with password reset ---
+# --- Auth functions with password reset and remember me ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable.")
@@ -603,7 +689,7 @@ def sign_up_email(email, password, full_name):
         st.error(f"Sign-up failed: {e}")
         return False
 
-def log_in_email(email, password):
+def log_in_email(email, password, remember=False):
     if supabase is None:
         st.error("Login unavailable.")
         return
@@ -620,6 +706,11 @@ def log_in_email(email, password):
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
             st.session_state.live_sessions = load_live_sessions()
+
+            # If remember me, store refresh token in cookie
+            if remember and user.session:
+                set_cookie("sb_refresh_token", user.session.refresh_token, 30)
+
             st.rerun()
     except Exception as e:
         st.error(f"Login failed: {e}")
@@ -662,7 +753,7 @@ def send_phone_otp(raw_phone):
             st.error(f"Failed to send OTP: {error_msg}")
         return False
 
-def verify_phone_otp(raw_phone, token):
+def verify_phone_otp(raw_phone, token, remember=False):
     if supabase is None:
         st.error("Supabase not configured.")
         return False
@@ -683,6 +774,11 @@ def verify_phone_otp(raw_phone, token):
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.phone_otp_sent = False
             st.session_state.temp_phone = ""
+
+            # If remember me, store refresh token in cookie
+            if remember and session.session:
+                set_cookie("sb_refresh_token", session.session.refresh_token, 30)
+
             st.rerun()
             return True
         else:
@@ -693,6 +789,8 @@ def verify_phone_otp(raw_phone, token):
         return False
 
 def logout():
+    # Clear the remember-me cookie
+    set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
     st.session_state.logged_in = False
@@ -718,7 +816,7 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Simulated video player – in a real app, you'd embed an actual video stream
+        # Simulated video player
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
@@ -732,7 +830,6 @@ def render_live_page(session_id):
         try:
             base_url = st.request.url.split('?')[0]
         except:
-            # Fallback for environments where st.request.url is not available
             base_url = "https://globalinternetpy.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
         st.text_input("Shareable link", value=share_url, key=f"share_{session_id}")
@@ -769,7 +866,7 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed (with video and image display) ---
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -860,18 +957,16 @@ def render_feed():
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
-            # Display media (images and videos)
+            # Display media
             media_urls = post.get("media_urls", [])
             if media_urls:
                 for media in media_urls:
                     if media["type"] == "image":
-                        # Display image with full width
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
-                        # Display video with controls (play/pause, volume, fullscreen)
                         st.video(media["url"])
 
-            # Reactions (now including 👎)
+            # Reactions (including 👎)
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
@@ -1082,7 +1177,7 @@ def main_app():
         choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
-# --- Login interface ---
+# --- Login interface with Remember Me ---
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -1105,8 +1200,12 @@ def login_interface():
                 with st.form("login_email"):
                     email = st.text_input("Email")
                     password = st.text_input("Password", type="password")
+                    remember = st.checkbox("Remember me (stay logged in)")
                     if st.form_submit_button("🚀 Login", use_container_width=True):
-                        log_in_email(email, password)
+                        if email and password:
+                            log_in_email(email, password, remember)
+                        else:
+                            st.warning("Please enter email and password")
             with tab2:
                 with st.form("signup_email"):
                     full_name = st.text_input("Full Name")
@@ -1126,15 +1225,17 @@ def login_interface():
                         else:
                             st.warning("Please enter your email")
         else:
-            st.info("Phone users: You will receive a 6‑digit OTP each time you log in. No password needed.")
+            st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
             if not st.session_state.phone_otp_sent:
                 with st.form("phone_request"):
                     phone = st.text_input("Phone number (digits only, e.g., 50947385663)")
+                    remember = st.checkbox("Remember me (stay logged in)")
                     if st.form_submit_button("📲 Send OTP", use_container_width=True):
                         if phone:
                             if send_phone_otp(phone):
                                 st.session_state.phone_otp_sent = True
                                 st.session_state.temp_phone = phone
+                                st.session_state.phone_remember = remember
                                 st.rerun()
                         else:
                             st.warning("Please enter a phone number")
@@ -1144,7 +1245,8 @@ def login_interface():
                     otp = st.text_input("Enter 6-digit OTP code")
                     if st.form_submit_button("✅ Verify & Login", use_container_width=True):
                         if otp:
-                            verify_phone_otp(st.session_state.temp_phone, otp)
+                            remember = st.session_state.get("phone_remember", False)
+                            verify_phone_otp(st.session_state.temp_phone, otp, remember)
                         else:
                             st.warning("Please enter the OTP")
                 if st.button("← Back / Resend OTP"):
