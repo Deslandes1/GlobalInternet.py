@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 10.3.0 (Video display fixed)
+Version: 11.0.0 (Camera Access for Live Video)
 """
 import streamlit as st
 import pandas as pd
@@ -19,6 +19,17 @@ from PIL import Image
 import mimetypes
 import urllib.parse
 import json
+import av
+import os
+import tempfile
+
+# WebRTC for camera access
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
+    st.warning("streamlit-webrtc not installed. Camera features disabled. Install with: pip install streamlit-webrtc")
 
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
@@ -147,6 +158,8 @@ if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
 if "reset_email_sent" not in st.session_state:
     st.session_state.reset_email_sent = False
+if "camera_active" not in st.session_state:
+    st.session_state.camera_active = False
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -365,7 +378,6 @@ def upload_post_media(user_id, file):
         ext = file.name.split('.')[-1]
         file_name = f"post_{user_id}_{int(time.time())}_{hashlib.md5(file.name.encode()).hexdigest()[:8]}.{ext}"
         file_bytes = file.getvalue()
-        # Upload to post_media bucket
         supabase.storage.from_("post_media").upload(
             file_name, 
             file_bytes, 
@@ -386,15 +398,9 @@ def upload_post_media(user_id, file):
         return None
 
 def load_posts():
-    """
-    Load posts with visibility filtering:
-    - Public posts are visible to everyone.
-    - Private posts are visible only to the author.
-    """
     if supabase is None:
         return []
     try:
-        # Build query based on schema
         if MEDIA_URLS_EXISTS:
             query = supabase.table("posts").select(
                 "*, profiles(full_name, avatar_url, is_live)"
@@ -404,14 +410,11 @@ def load_posts():
                 "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
             )
 
-        # Apply visibility filter: public posts + private posts owned by current user
         if st.session_state.user:
-            # Show all public posts + private posts from current user
             query = query.or_(
                 f"is_public.eq.true,user_id.eq.{st.session_state.user.id}"
             )
         else:
-            # Not logged in: only public posts
             query = query.eq("is_public", True)
 
         response = query.order("created_at", desc=True).execute()
@@ -419,7 +422,6 @@ def load_posts():
         for post in posts:
             if "media_urls" not in post:
                 post["media_urls"] = []
-            # Fetch reactions
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -481,7 +483,7 @@ def create_post(user_id, content, media_files, is_public):
 
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            st.session_state.posts = load_posts()  # Immediately refresh posts
+            st.session_state.posts = load_posts()
             return True
         else:
             st.error("Post insertion failed.")
@@ -574,7 +576,7 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions ---
+# --- Live session functions (updated with camera) ---
 def start_live_session(title):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
@@ -671,7 +673,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions with password reset and remember me ---
+# --- Auth functions ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.error("Registration unavailable.")
@@ -799,7 +801,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page ---
+# --- Live page with camera access ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -813,15 +815,49 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown("""
-        <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
-            <h3>📡 Live Stream (Simulated)</h3>
-            <p style="color: #ccc;">In a real implementation, this would be a live video player.</p>
-            <div style="font-size: 4rem; margin: 20px;">📹</div>
-            <p style="color: #aaa;">Stream key: <code>live_{}</code></p>
-        </div>
-        """.format(session_id), unsafe_allow_html=True)
+        # Camera access via WebRTC
+        if WEBRTC_AVAILABLE:
+            rtc_config = RTCConfiguration(
+                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            )
+            webrtc_ctx = webrtc_streamer(
+                key=f"live_{session_id}",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=rtc_config,
+                media_stream_constraints={"video": True, "audio": True},
+                video_html_attrs={
+                    "style": {"width": "100%", "border-radius": "10px"},
+                    "controls": True,
+                    "autoPlay": True,
+                }
+            )
+            if webrtc_ctx.state.playing:
+                st.success("🔴 Camera is live")
+            else:
+                st.info("Click 'Start' to enable camera")
+        else:
+            st.warning("WebRTC not available. Install streamlit-webrtc for camera access.")
+            st.markdown("""
+            <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
+                <h3>📡 Live Stream (Simulated)</h3>
+                <p style="color: #ccc;">Camera access would be here.</p>
+                <div style="font-size: 4rem; margin: 20px;">📹</div>
+            </div>
+            """, unsafe_allow_html=True)
 
+        # Record and upload to OneDrive (simulated)
+        if st.button("🎥 Record & Upload to OneDrive", key=f"record_{session_id}"):
+            with st.spinner("Recording and uploading... (simulated)"):
+                time.sleep(2)
+                # Simulate uploading a dummy video
+                dummy_video_url = "https://example.com/dummy_video.mp4"  # Replace with actual upload
+                # Create a post with the video
+                if create_post(st.session_state.user.id, f"Live recording from {session['title']}", [], is_public=True):
+                    st.success("Video saved and posted to feed! (simulated)")
+                else:
+                    st.error("Upload failed")
+
+        # Generate shareable link
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -861,11 +897,10 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed with full interactions and video playback ---
+# --- Feed ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
-    # Handle live session redirection
     try:
         params = st.query_params
     except AttributeError:
@@ -883,7 +918,7 @@ def render_feed():
         render_live_page(st.session_state.viewing_live)
         return
 
-    # New post form with visibility options
+    # New post form
     with st.form("new_post", clear_on_submit=True):
         content = st.text_area("Caption", height=100, placeholder="Write a caption...")
         if MEDIA_URLS_EXISTS:
@@ -928,10 +963,8 @@ def render_feed():
 
     st.divider()
 
-    # Display posts
     for post in st.session_state.posts:
         with st.container():
-            # Post header
             col_a, col_b, col_c = st.columns([1,5,2])
             with col_a:
                 avatar = post.get("profiles", {}).get("avatar_url")
@@ -945,27 +978,22 @@ def render_feed():
                     st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"**{name}**")
-                # Show private badge if post is not public
                 if not post.get("is_public", True):
                     st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
             with col_c:
                 st.caption(post['created_at'][:16])
 
-            # Post content (text)
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
-            # Display media (images and videos)
             media_urls = post.get("media_urls", [])
             if media_urls:
                 for media in media_urls:
                     if media["type"] == "image":
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
-                        # HTML5 video player with controls
                         st.video(media["url"])
 
-            # Reactions (including 👎)
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
@@ -976,7 +1004,6 @@ def render_feed():
                         toggle_reaction(post['id'], st.session_state.user.id, emoji)
                         st.rerun()
 
-            # Comment and share buttons
             with cols[len(emojis)]:
                 if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
                     st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
@@ -986,7 +1013,6 @@ def render_feed():
                     share_post(post['id'], st.session_state.user.id, is_public=True)
                     st.rerun()
 
-            # Comments section (expandable)
             if st.session_state.get(f"show_comments_{post['id']}", False):
                 comments = load_comments(post['id'])
                 for c in comments:
@@ -1066,9 +1092,22 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Owner's Dashboard ---
-def render_reclaim():
-    st.header("🔐 Owner's Dashboard")
+# --- Owner Space (now contains the dashboard) ---
+def owner_space():
+    st.header("🕊️ Owner Space (Private)")
+    if not st.session_state.owner_space_access:
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
+            if st.form_submit_button("Access"):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+
+    # --- Owner's Dashboard (formerly render_reclaim) ---
+    st.subheader("🔐 Owner's Dashboard")
     duration = time.time() - st.session_state.connection_time
     st.session_state.data_comp = duration * 0.035
     col1, col2, col3 = st.columns(3)
@@ -1087,25 +1126,13 @@ def render_reclaim():
             st.balloons()
             st.success(f"Transferred ${amount:.2f} via {method}")
             st.session_state.data_comp -= amount
+    st.divider()
 
-# --- Owner Space ---
-def owner_space():
-    st.header("🕊️ Owner Space (Private)")
-    if not st.session_state.owner_space_access:
-        with st.form("owner_space_login"):
-            pwd = st.text_input("Enter Owner Space Password", type="password")
-            if st.form_submit_button("Access"):
-                if pwd == OWNSPACE_PASSWORD:
-                    st.session_state.owner_space_access = True
-                    st.rerun()
-                else:
-                    st.error("Invalid password")
-        return
-    st.success("Welcome, Owner!")
     st.markdown("### 🔑 Your Private Credentials")
     st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
     st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
     st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}`")
+
     if st.button("Logout from Owner Space"):
         st.session_state.owner_space_access = False
         st.rerun()
@@ -1172,7 +1199,6 @@ def main_app():
             "📡 Feed": render_feed,
             "🛰️ Satellite Map": render_map,
             "👤 Profile": render_profile,
-            "🔐 Owner's Dashboard": render_reclaim,
             "🕊️ Owner Space": owner_space
         }
         choice = st.selectbox("Menu", list(pages.keys()))
