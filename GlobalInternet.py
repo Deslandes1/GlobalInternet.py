@@ -3,9 +3,23 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 11.0.1 (Fixed missing av module)
+Version: 11.0.2 (Fixed WebRTC dependencies & page_config order)
 """
 import streamlit as st
+
+# --- This MUST be the first Streamlit command ---
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
+
+# --- Conditional imports for WebRTC (with graceful fallback) ---
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    import av
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
+    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
+
+# --- Rest of the imports ---
 import pandas as pd
 import numpy as np
 import time
@@ -21,17 +35,6 @@ import urllib.parse
 import json
 import os
 import tempfile
-
-# --- WebRTC for camera access (with graceful fallback) ---
-try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-    import av
-    WEBRTC_AVAILABLE = True
-except ImportError:
-    WEBRTC_AVAILABLE = False
-    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
-
-st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
 # --- Supabase client ---
 @st.cache_resource
@@ -835,7 +838,7 @@ def render_live_page(session_id):
             else:
                 st.info("Click 'Start' to enable camera")
         else:
-            st.warning("Camera features disabled. Please install streamlit-webrtc and av.")
+            st.warning("Camera features disabled. Please install streamlit-webrtc and av (requires system dependencies).")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
                 <h3>📡 Live Stream (Simulated)</h3>
@@ -1105,7 +1108,7 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # --- Owner's Dashboard (formerly render_reclaim) ---
+    # --- Owner's Dashboard ---
     st.subheader("🔐 Owner's Dashboard")
     duration = time.time() - st.session_state.connection_time
     st.session_state.data_comp = duration * 0.035
