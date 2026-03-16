@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 21.1.0 (Empty feed message)
+Version: 22.0.0 (Enhanced post composer)
 """
 import streamlit as st
 
@@ -984,7 +984,7 @@ def render_live_page(session_id):
                             st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Feed (with empty state message) ---
+# --- Feed (with enhanced post composer) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -1005,31 +1005,54 @@ def render_feed():
         render_live_page(st.session_state.viewing_live)
         return
 
-    # New post form
+    # --- Enhanced post composer ---
+    st.markdown("### Create a post")
     with st.form("new_post", clear_on_submit=True):
-        content = st.text_area("Caption", height=100, placeholder="Write a caption...")
+        # Avatar + input row
+        col_avatar, col_input = st.columns([1, 8])
+        with col_avatar:
+            if st.session_state.profile and st.session_state.profile.get("avatar_url"):
+                st.image(st.session_state.profile["avatar_url"], width=50)
+            else:
+                st.markdown("👤", unsafe_allow_html=True)
+        with col_input:
+            content = st.text_area(
+                "What's on your mind?",
+                height=100,
+                placeholder="Share your thoughts, ideas, or media...",
+                label_visibility="collapsed"
+            )
+
+        # Media uploader
         if MEDIA_URLS_EXISTS:
             media_files = st.file_uploader(
                 "Add images or videos (optional)",
                 type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
-                accept_multiple_files=True
+                accept_multiple_files=True,
+                help="You can select multiple files. Max 200MB per file."
             )
         else:
             media_files = None
             st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
-        col1, col2 = st.columns([4,1])
-        with col2:
+
+        # Visibility and post button
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
             visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
             is_public = (visibility == "Public")
-        if st.form_submit_button("🚀 Post"):
+        with col3:
+            posted = st.form_submit_button("🚀 Post", use_container_width=True)
+
+        if posted:
             if content or (MEDIA_URLS_EXISTS and media_files):
                 if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
                     st.success("Post published!")
                     st.rerun()
             else:
                 st.warning("Please add a caption or media.")
+    st.divider()
 
-    # Live sessions banner
+    # --- Live sessions banner ---
     active_lives = st.session_state.live_sessions
     if active_lives:
         st.markdown("### 🔴 Live Now")
@@ -1050,7 +1073,7 @@ def render_feed():
 
     st.divider()
 
-    # Handle delete confirmation
+    # --- Delete confirmation (if any) ---
     if st.session_state.delete_confirm:
         post_id, post_preview = st.session_state.delete_confirm
         st.warning(f"Are you sure you want to delete this post?")
@@ -1068,7 +1091,7 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    # If there are no posts, show a friendly message
+    # --- Empty state message ---
     if not st.session_state.posts:
         st.info("👋 No posts yet. Be the first to share something!")
         st.markdown("""
@@ -1077,9 +1100,9 @@ def render_feed():
             <p>This is the beginning of your community. Post a message, share a photo or video, and start interacting.</p>
         </div>
         """, unsafe_allow_html=True)
-        return  # Skip the rest of the loop (no posts to display)
+        return  # Skip displaying posts
 
-    # Display posts
+    # --- Display posts ---
     for post in st.session_state.posts:
         with st.container():
             col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
@@ -1116,6 +1139,7 @@ def render_feed():
                     elif media["type"] == "video":
                         st.video(media["url"])
 
+            # Reactions
             emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(emojis) + 2)
             for i, emoji in enumerate(emojis):
