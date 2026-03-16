@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 32.0.0 (Full interactive comments)
+Version: 33.0.0 (Full interactive feed – reactions, comments, shares)
 """
 import streamlit as st
 
@@ -96,6 +96,20 @@ def check_reactions_table():
         return False
 
 REACTIONS_TABLE_EXISTS = check_reactions_table()
+
+# --- Check if increment_shares function exists ---
+@st.cache_resource
+def check_share_function():
+    if supabase is None:
+        return False
+    try:
+        supabase.rpc("increment_shares", {"post_id": 1}).execute()
+        return True
+    except Exception as e:
+        st.warning("⚠️ 'increment_shares' function is missing. Sharing posts will fail. Please run the SQL setup script.")
+        return False
+
+SHARE_FUNCTION_EXISTS = check_share_function()
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -210,7 +224,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (unchanged) ---
+# --- UI styling ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -486,7 +500,7 @@ def load_posts():
                     if st.session_state.user:
                         user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
                         post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
-                except:
+                except Exception as e:
                     pass
         return posts
     except Exception as e:
@@ -574,6 +588,10 @@ def toggle_reaction(post_id, user_id, emoji):
 
 def share_post(original_post_id, user_id, is_public=True):
     if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    if not SHARE_FUNCTION_EXISTS:
+        st.error("Share function is disabled (increment_shares missing).")
         return False
     try:
         supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
@@ -624,7 +642,6 @@ def load_comments(post_id):
             "*, profiles(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         comments = response.data
-        # Build a tree structure
         tree = {}
         for c in comments:
             pid = c.get("parent_id")
@@ -639,7 +656,7 @@ def load_comments(post_id):
                 result.extend(flatten(c["id"]))
             return result
 
-        return flatten(None)  # None = top-level comments
+        return flatten(None)
     except Exception as e:
         st.session_state.last_error = f"Error loading comments: {e}"
         return []
@@ -667,7 +684,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (unchanged) ---
+# --- Live session functions ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -784,7 +801,6 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Auth functions (unchanged) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.session_state.last_error = "Registration unavailable."
@@ -908,7 +924,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page (unchanged) ---
+# --- Live page ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
