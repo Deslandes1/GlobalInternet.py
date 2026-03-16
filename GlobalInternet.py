@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 15.0.0 (Direct WebRTC live broadcasting)
+Version: 16.0.0 (Simulated live, no external deps)
 """
 import streamlit as st
 
@@ -29,14 +29,8 @@ import tempfile
 import random
 import string
 
-# --- WebRTC for camera access ---
-try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-    import av
-    WEBRTC_AVAILABLE = True
-except ImportError:
-    WEBRTC_AVAILABLE = False
-    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
+# --- WebRTC is disabled to avoid system dependencies ---
+WEBRTC_AVAILABLE = False
 
 # --- Supabase client ---
 @st.cache_resource
@@ -571,7 +565,7 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (WebRTC broadcast) ---
+# --- Live session functions (simulated) ---
 def start_broadcast(title):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
@@ -588,8 +582,8 @@ def start_broadcast(title):
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
-            "stream_url": None,  # not used for WebRTC
-            "platform": "WebRTC",
+            "stream_url": None,
+            "platform": "Simulated",
             "stream_key": stream_key
         }
         result = supabase.table("live_sessions").insert(session_data).execute()
@@ -803,7 +797,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with WebRTC broadcast ---
+# --- Live page with simulated video (no actual camera) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -817,58 +811,16 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Determine if current user is the broadcaster
-        is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
-
-        if WEBRTC_AVAILABLE:
-            # RTC configuration with public STUN servers
-            rtc_config = RTCConfiguration(
-                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-            )
-
-            # For broadcaster, we send video; for viewers, we receive
-            if is_broadcaster:
-                webrtc_ctx = webrtc_streamer(
-                    key=f"broadcast_{session_id}",
-                    mode=WebRtcMode.SENDRECV,
-                    rtc_configuration=rtc_config,
-                    media_stream_constraints={"video": True, "audio": True},
-                    video_html_attrs={
-                        "style": {"width": "100%", "border-radius": "10px"},
-                        "controls": False,
-                        "autoPlay": True,
-                        "muted": True,  # avoid echo for broadcaster
-                    }
-                )
-                if webrtc_ctx.state.playing:
-                    st.success("🔴 You are live! Your camera is broadcasting.")
-                else:
-                    st.info("Click 'Start' to begin broadcasting your camera.")
-            else:
-                # Viewer: receive stream
-                webrtc_ctx = webrtc_streamer(
-                    key=f"view_{session_id}",
-                    mode=WebRtcMode.RECVONLY,
-                    rtc_configuration=rtc_config,
-                    video_html_attrs={
-                        "style": {"width": "100%", "border-radius": "10px"},
-                        "controls": True,
-                        "autoPlay": True,
-                    }
-                )
-                if webrtc_ctx.state.playing:
-                    st.success("Connected to live stream.")
-                else:
-                    st.info("Waiting for broadcaster...")
-        else:
-            st.warning("WebRTC is not available. Install streamlit-webrtc and av.")
+        if not WEBRTC_AVAILABLE:
+            st.info("Camera streaming is currently in simulation mode. To enable real camera, install streamlit-webrtc and av (system dependencies required).")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
                 <h3>📡 Live Stream (Simulated)</h3>
-                <p>WebRTC not installed.</p>
+                <p>In a production app, this would show your live camera feed.</p>
                 <div style="font-size: 4rem; margin: 20px;">📹</div>
+                <p style="color: #aaa;">Stream key: <code>{}</code></p>
             </div>
-            """, unsafe_allow_html=True)
+            """.format(session.get("stream_key", "N/A")), unsafe_allow_html=True)
 
         # Shareable link
         try:
@@ -1176,21 +1128,18 @@ def main_app():
                         st.rerun()
                         break
         else:
-            with st.expander("Go Live (Camera)"):
+            with st.expander("Go Live (Simulated)"):
                 st.markdown("""
-                **Broadcast directly from your camera**
+                **Broadcast in simulation mode**
                 """)
                 with st.form("go_live_form"):
                     title = st.text_input("Live title")
                     if st.form_submit_button("Start Broadcasting"):
                         if title:
-                            if not WEBRTC_AVAILABLE:
-                                st.error("WebRTC is not installed. Cannot start broadcast.")
-                            else:
-                                session_id = start_broadcast(title)
-                                if session_id:
-                                    st.success("You are now live! Your camera is broadcasting.")
-                                    st.rerun()
+                            session_id = start_broadcast(title)
+                            if session_id:
+                                st.success("You are now live! (simulated)")
+                                st.rerun()
                         else:
                             st.warning("Please enter a title")
 
