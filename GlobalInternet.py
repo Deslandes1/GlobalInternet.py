@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 24.0.0 (Robust posting, immediate feed update)
+Version: 25.0.0 (Enhanced error logging for posting)
 """
 import streamlit as st
 
@@ -28,6 +28,7 @@ import os
 import tempfile
 import random
 import string
+import traceback
 
 # --- Supabase client ---
 @st.cache_resource
@@ -389,12 +390,7 @@ def upload_post_media(user_id, file):
         return {"url": public_url, "type": media_type}
     except Exception as e:
         error_str = str(e)
-        if "new row violates row-level security policy" in error_str:
-            st.error("Storage permission error: Please ensure the 'post_media' bucket is public and RLS policies allow uploads.")
-        elif "bucket not found" in error_str:
-            st.error("The 'post_media' storage bucket does not exist. Please create it in the Supabase Storage dashboard.")
-        else:
-            st.error(f"Media upload failed: {error_str}")
+        st.error(f"❌ Media upload failed: {error_str}")
         return None
 
 def delete_post(post_id):
@@ -493,7 +489,10 @@ def create_post(user_id, content, media_files, is_public):
         if MEDIA_URLS_EXISTS:
             post["media_urls"] = media_urls
 
+        st.write("Attempting to insert post:", post)  # DEBUG: show the post data
         result = supabase.table("posts").insert(post).execute()
+        st.write("Supabase response:", result)  # DEBUG: show the raw response
+
         if result.data:
             st.session_state.posts = load_posts()
             if upload_failed:
@@ -505,7 +504,8 @@ def create_post(user_id, content, media_files, is_public):
             st.error("Post insertion failed – no data returned.")
             return False
     except Exception as e:
-        st.error(f"Error creating post: {e}")
+        st.error(f"❌ Error creating post: {e}")
+        st.error(traceback.format_exc())  # Show full traceback
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
