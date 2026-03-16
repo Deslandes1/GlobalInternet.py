@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 10.1.0 (Full visibility: public/private posts)
+Version: 10.2.0 (Video playback in feed with full interactions)
 """
 import streamlit as st
 import pandas as pd
@@ -792,7 +792,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page (fixed) ---
+# --- Live page ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -854,10 +854,11 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed with full visibility control ---
+# --- Feed with full interactions and video playback ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
+    # Handle live session redirection
     try:
         params = st.query_params
     except AttributeError:
@@ -920,8 +921,10 @@ def render_feed():
 
     st.divider()
 
+    # Display posts
     for post in st.session_state.posts:
         with st.container():
+            # Post header
             col_a, col_b, col_c = st.columns([1,5,2])
             with col_a:
                 avatar = post.get("profiles", {}).get("avatar_url")
@@ -941,6 +944,7 @@ def render_feed():
             with col_c:
                 st.caption(post['created_at'][:16])
 
+            # Post content (text)
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
@@ -951,6 +955,7 @@ def render_feed():
                     if media["type"] == "image":
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
+                        # HTML5 video player with controls
                         st.video(media["url"])
 
             # Reactions (including 👎)
@@ -964,6 +969,7 @@ def render_feed():
                         toggle_reaction(post['id'], st.session_state.user.id, emoji)
                         st.rerun()
 
+            # Comment and share buttons
             with cols[len(emojis)]:
                 if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
                     st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
@@ -973,6 +979,7 @@ def render_feed():
                     share_post(post['id'], st.session_state.user.id, is_public=True)
                     st.rerun()
 
+            # Comments section (expandable)
             if st.session_state.get(f"show_comments_{post['id']}", False):
                 comments = load_comments(post['id'])
                 for c in comments:
@@ -1110,6 +1117,7 @@ def main_app():
         """, unsafe_allow_html=True)
         st.divider()
 
+        # Live controls
         if st.session_state.profile and st.session_state.profile.get("is_live"):
             st.markdown("🔴 **You are live!**")
             if st.button("End Live Session"):
