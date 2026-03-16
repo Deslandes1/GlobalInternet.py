@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 10.2.0 (Video playback in feed with full interactions)
+Version: 10.3.0 (Video display fixed)
 """
 import streamlit as st
 import pandas as pd
@@ -365,9 +365,16 @@ def upload_post_media(user_id, file):
         ext = file.name.split('.')[-1]
         file_name = f"post_{user_id}_{int(time.time())}_{hashlib.md5(file.name.encode()).hexdigest()[:8]}.{ext}"
         file_bytes = file.getvalue()
-        supabase.storage.from_("post_media").upload(file_name, file_bytes, {"content-type": content_type})
+        # Upload to post_media bucket
+        supabase.storage.from_("post_media").upload(
+            file_name, 
+            file_bytes, 
+            {"content-type": content_type}
+        )
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
-        return {"url": public_url, "type": "video" if content_type.startswith("video") else "image"}
+        media_type = "video" if content_type.startswith("video") else "image"
+        st.success(f"✅ {media_type.capitalize()} uploaded successfully!")
+        return {"url": public_url, "type": media_type}
     except Exception as e:
         error_str = str(e)
         if "new row violates row-level security policy" in error_str:
@@ -474,7 +481,7 @@ def create_post(user_id, content, media_files, is_public):
 
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            st.session_state.posts = load_posts()
+            st.session_state.posts = load_posts()  # Immediately refresh posts
             return True
         else:
             st.error("Post insertion failed.")
