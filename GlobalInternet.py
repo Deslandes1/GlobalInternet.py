@@ -1,7 +1,7 @@
 """
 GLOBALINTERNET.PY - Satellite Communication Platform with Real Money Transfers
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-Version: 34.0.0 (Real MonCash Integration)
+Version: 34.0.0 (Real MonCash Integration + Responsive UI)
 """
 import streamlit as st
 
@@ -51,7 +51,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Schema detection (unchanged) ---
+# --- Schema detection ---
 @st.cache_resource
 def check_media_urls_column():
     if supabase is None:
@@ -167,7 +167,7 @@ if "withdrawal_in_progress" not in st.session_state:
 if "current_transaction" not in st.session_state:
     st.session_state.current_transaction = None
 
-# --- Cookie helpers (unchanged) ---
+# --- Cookie helpers ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -241,18 +241,40 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (with zoom adjustment) ---
+# --- ENHANCED RESPONSIVE UI STYLING ---
 st.markdown("""
     <style>
-    html { font-size: 14px; }
+    /* Base responsive settings */
+    html {
+        font-size: 14px;
+    }
+    @media (max-width: 600px) {
+        html {
+            font-size: 12px;
+        }
+    }
     [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
     }
+    /* Sidebar - thinner on mobile, scrollable */
     [data-testid="stSidebar"] {
         background: rgba(255,255,255,0.75);
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
+        width: 100%;
+        max-width: 250px;
+    }
+    @media (max-width: 600px) {
+        [data-testid="stSidebar"] {
+            max-width: 200px;
+            font-size: 0.9rem;
+        }
+    }
+    /* Main content area - full width with padding */
+    .main > div {
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
     .haiti-symbol {
         font-size: 4rem;
@@ -288,6 +310,7 @@ st.markdown("""
         border: 1px solid rgba(0,168,255,0.3);
         box-shadow: 0 8px 20px rgba(0,20,50,0.1);
     }
+    /* Post cards - responsive */
     .post-card {
         background: rgba(255,255,255,0.7);
         backdrop-filter: blur(8px);
@@ -302,6 +325,11 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 12px 25px rgba(0,0,0,0.1);
     }
+    @media (max-width: 600px) {
+        .post-card {
+            padding: 15px;
+        }
+    }
     .health-text {
         font-family: 'Courier New', monospace;
         color: #0a2a44;
@@ -311,6 +339,7 @@ st.markdown("""
         border-radius: 16px;
         border-left: 4px solid #00a8ff;
     }
+    /* Buttons - full width on mobile */
     .stButton > button {
         background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%);
         color: white;
@@ -320,11 +349,18 @@ st.markdown("""
         font-weight: 600;
         box-shadow: 0 8px 16px rgba(0,128,255,0.2);
         transition: all 0.2s;
+        width: auto;
     }
     .stButton > button:hover {
         background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%);
         box-shadow: 0 12px 24px rgba(0,128,255,0.3);
         transform: scale(1.02);
+    }
+    @media (max-width: 600px) {
+        .stButton > button {
+            width: 100%;
+            margin: 5px 0;
+        }
     }
     .live-badge {
         background-color: #ff4444;
@@ -398,10 +434,39 @@ st.markdown("""
         margin: 10px 0;
         border-radius: 5px;
     }
+    /* Ensure images/videos are responsive */
+    img, video {
+        max-width: 100%;
+        height: auto;
+    }
+    /* Streamlit default columns fix on mobile */
+    .stColumn {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100%;
+    }
+    @media (min-width: 601px) {
+        .stColumn {
+            width: auto !important;
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+        }
+    }
+    /* Make text inputs full width on mobile */
+    .stTextInput > div, .stTextArea > div, .stSelectbox > div {
+        width: 100%;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Helper functions (unchanged from working version) ---
+# --- Helper functions (unchanged from previous version) ---
+# [All your existing helper functions remain exactly the same - get_or_create_profile, 
+#  update_profile, upload_avatar, upload_post_media, delete_post, load_posts, 
+#  create_post, toggle_reaction, share_post, add_comment, load_comments, 
+#  delete_comment, like_comment, create_live_session, etc.]
+
+# ... (keep all your existing helper functions unchanged) ...
+
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
         return None
