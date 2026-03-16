@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 17.0.0 (Real streaming via YouTube/Facebook/Twitch)
+Version: 18.0.0 (Real streaming with live URL update)
 """
 import streamlit as st
 
@@ -560,8 +560,8 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions (real streaming via external platforms) ---
-def start_live_session(title, platform, stream_url):
+# --- Live session functions (real streaming) ---
+def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
         return None
@@ -571,15 +571,13 @@ def start_live_session(title, platform, stream_url):
             st.warning("You already have an active live session. End it first.")
             return None
 
-        # Generate a stream key (for display purposes)
         stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
-
         session_data = {
             "user_id": st.session_state.user.id,
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
-            "stream_url": stream_url if stream_url else None,
+            "stream_url": None,
             "platform": platform,
             "stream_key": stream_key
         }
@@ -597,6 +595,20 @@ def start_live_session(title, platform, stream_url):
     except Exception as e:
         st.error(f"Error starting live session: {e}")
         return None
+
+def update_live_stream_url(session_id, stream_url):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_sessions").update({
+            "stream_url": stream_url
+        }).eq("id", session_id).execute()
+        # Refresh live sessions
+        st.session_state.live_sessions = load_live_sessions()
+        return True
+    except Exception as e:
+        st.error(f"Error updating stream URL: {e}")
+        return False
 
 def end_live_session(session_id):
     if supabase is None:
@@ -795,7 +807,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with video embed (real streaming) ---
+# --- Live page with real streaming and URL update ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -811,6 +823,20 @@ def render_live_page(session_id):
     with col1:
         stream_url = session.get("stream_url")
         platform = session.get("platform")
+        is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
+
+        # If broadcaster and no URL yet, show input to paste URL
+        if is_broadcaster:
+            with st.expander("📹 Set Stream URL", expanded=not stream_url):
+                with st.form("update_stream_url"):
+                    new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
+                    if st.form_submit_button("Update Stream URL"):
+                        if new_url:
+                            if update_live_stream_url(session_id, new_url):
+                                st.success("Stream URL updated! Refreshing...")
+                                st.rerun()
+                        else:
+                            st.warning("Please enter a URL")
 
         if stream_url:
             # Facebook Live embed
@@ -844,8 +870,8 @@ def render_live_page(session_id):
                 # Assume direct video file
                 st.video(stream_url)
         else:
-            # No URL provided – show instructions
-            st.info("Stream URL not provided. If you are the streamer, go to your chosen platform and start streaming, then paste the URL.")
+            # No URL yet – show waiting message
+            st.info("The streamer has not provided a video URL yet. Please wait.")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
                 <h3>📡 Awaiting Stream URL</h3>
@@ -1180,10 +1206,9 @@ def main_app():
                     st.markdown(f"**Selected: {platform}**")
                     with st.form("go_live_form"):
                         title = st.text_input("Live title")
-                        stream_url = st.text_input("Stream URL (paste after starting your stream)")
                         if st.form_submit_button("Create Live Session"):
                             if title:
-                                session_id = start_live_session(title, platform, stream_url)
+                                session_id = create_live_session(title, platform)
                                 if session_id:
                                     st.success(f"Live session created! You are now live.")
                                     st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
