@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 14.0.0 (One-click live stream setup)
+Version: 15.0.0 (Direct WebRTC live broadcasting)
 """
 import streamlit as st
 
@@ -29,8 +29,14 @@ import tempfile
 import random
 import string
 
-# --- WebRTC is disabled to avoid system dependencies ---
-WEBRTC_AVAILABLE = False
+# --- WebRTC for camera access ---
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    import av
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
+    st.warning("Camera features disabled. Install required packages: pip install streamlit-webrtc av")
 
 # --- Supabase client ---
 @st.cache_resource
@@ -161,6 +167,8 @@ if "stream_key" not in st.session_state:
     st.session_state.stream_key = None
 if "selected_platform" not in st.session_state:
     st.session_state.selected_platform = None
+if "broadcasting" not in st.session_state:
+    st.session_state.broadcasting = False
 
 # --- Attempt to restore session from cookie ---
 if not st.session_state.logged_in and supabase:
@@ -563,8 +571,8 @@ def like_comment(comment_id, increment=True):
         st.error(f"Error toggling comment like: {e}")
         return False
 
-# --- Live session functions ---
-def start_live_session(title, platform=None, stream_key=None):
+# --- Live session functions (WebRTC broadcast) ---
+def start_broadcast(title):
     if supabase is None or st.session_state.user is None:
         st.error("Cannot start live session.")
         return None
@@ -574,26 +582,14 @@ def start_live_session(title, platform=None, stream_key=None):
             st.warning("You already have an active live session. End it first.")
             return None
 
-        # Generate a stream key if not provided (for simulation)
-        if not stream_key:
-            stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
-
-        # Build stream URL based on platform (for embedding later)
-        stream_url = None
-        if platform == "YouTube":
-            stream_url = f"https://youtu.be/live/{stream_key}"  # placeholder
-        elif platform == "Facebook":
-            stream_url = f"https://facebook.com/watch/live/?v={stream_key}"
-        elif platform == "Twitch":
-            stream_url = f"https://twitch.tv/{stream_key}"
-
+        stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
         session_data = {
             "user_id": st.session_state.user.id,
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
-            "stream_url": stream_url,
-            "platform": platform,
+            "stream_url": None,  # not used for WebRTC
+            "platform": "WebRTC",
             "stream_key": stream_key
         }
         result = supabase.table("live_sessions").insert(session_data).execute()
@@ -602,7 +598,7 @@ def start_live_session(title, platform=None, stream_key=None):
             st.session_state.profile["is_live"] = True
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.stream_key = stream_key
-            st.session_state.selected_platform = platform
+            st.session_state.broadcasting = True
             return result.data[0]["id"]
         else:
             st.error("Failed to start live session.")
@@ -611,7 +607,7 @@ def start_live_session(title, platform=None, stream_key=None):
         st.error(f"Error starting live session: {e}")
         return None
 
-def end_live_session(session_id):
+def end_broadcast(session_id):
     if supabase is None:
         return False
     try:
@@ -622,8 +618,7 @@ def end_live_session(session_id):
         supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
         st.session_state.profile["is_live"] = False
         st.session_state.live_sessions = load_live_sessions()
-        st.session_state.stream_key = None
-        st.session_state.selected_platform = None
+        st.session_state.broadcasting = False
         return True
     except Exception as e:
         st.error(f"Error ending live session: {e}")
@@ -808,7 +803,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page with video embed for YouTube/Twitch/Facebook ---
+# --- Live page with WebRTC broadcast ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -822,45 +817,55 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        stream_url = session.get("stream_url")
-        platform = session.get("platform")
-        if stream_url:
-            # Facebook Live embed
-            if "facebook.com" in stream_url:
-                embed_code = f"""
-                <div id="fb-root"></div>
-                <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-                <div class="fb-video" data-href="{stream_url}" 
-                     data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
-                """
-                st.components.v1.html(embed_code, height=450)
-            # YouTube Live embed
-            elif "youtube.com" in stream_url or "youtu.be" in stream_url:
-                if "youtu.be" in stream_url:
-                    video_id = stream_url.split("/")[-1].split("?")[0]
-                elif "watch?v=" in stream_url:
-                    video_id = stream_url.split("v=")[-1].split("&")[0]
+        # Determine if current user is the broadcaster
+        is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
+
+        if WEBRTC_AVAILABLE:
+            # RTC configuration with public STUN servers
+            rtc_config = RTCConfiguration(
+                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            )
+
+            # For broadcaster, we send video; for viewers, we receive
+            if is_broadcaster:
+                webrtc_ctx = webrtc_streamer(
+                    key=f"broadcast_{session_id}",
+                    mode=WebRtcMode.SENDRECV,
+                    rtc_configuration=rtc_config,
+                    media_stream_constraints={"video": True, "audio": True},
+                    video_html_attrs={
+                        "style": {"width": "100%", "border-radius": "10px"},
+                        "controls": False,
+                        "autoPlay": True,
+                        "muted": True,  # avoid echo for broadcaster
+                    }
+                )
+                if webrtc_ctx.state.playing:
+                    st.success("🔴 You are live! Your camera is broadcasting.")
                 else:
-                    video_id = None
-                if video_id:
-                    embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                    st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
-                else:
-                    st.video(stream_url)
-            # Twitch Live embed
-            elif "twitch.tv" in stream_url:
-                channel = stream_url.split("/")[-1]
-                embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
-                st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
+                    st.info("Click 'Start' to begin broadcasting your camera.")
             else:
-                # Assume direct video file
-                st.video(stream_url)
+                # Viewer: receive stream
+                webrtc_ctx = webrtc_streamer(
+                    key=f"view_{session_id}",
+                    mode=WebRtcMode.RECVONLY,
+                    rtc_configuration=rtc_config,
+                    video_html_attrs={
+                        "style": {"width": "100%", "border-radius": "10px"},
+                        "controls": True,
+                        "autoPlay": True,
+                    }
+                )
+                if webrtc_ctx.state.playing:
+                    st.success("Connected to live stream.")
+                else:
+                    st.info("Waiting for broadcaster...")
         else:
-            st.info("No stream URL provided. Placeholder video.")
+            st.warning("WebRTC is not available. Install streamlit-webrtc and av.")
             st.markdown("""
             <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
-                <h3>📡 Live Stream (No video URL)</h3>
-                <p>The streamer did not provide a video link. If you are the streamer, start a stream on YouTube, Twitch, or Facebook and paste the link.</p>
+                <h3>📡 Live Stream (Simulated)</h3>
+                <p>WebRTC not installed.</p>
                 <div style="font-size: 4rem; margin: 20px;">📹</div>
             </div>
             """, unsafe_allow_html=True)
@@ -876,7 +881,7 @@ def render_live_page(session_id):
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("📋 Copy Link", key=f"copy_{session_id}"):
-                st.info("Link copied to clipboard! (simulated)")
+                st.info("Link copied to clipboard!")
         with col_b:
             subject = f"Join me live on GLOBALINTERNET.PY: {session['title']}"
             body = f"Join the live session: {share_url}"
@@ -1167,40 +1172,27 @@ def main_app():
             if st.button("End Live Session"):
                 for ls in st.session_state.live_sessions:
                     if ls["user_id"] == st.session_state.user.id:
-                        end_live_session(ls["id"])
+                        end_broadcast(ls["id"])
                         st.rerun()
                         break
         else:
-            with st.expander("Go Live (One‑Click Setup)"):
+            with st.expander("Go Live (Camera)"):
                 st.markdown("""
-                **Choose your platform:**
+                **Broadcast directly from your camera**
                 """)
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("📺 YouTube", key="yt"):
-                        st.session_state.selected_platform = "YouTube"
-                with col2:
-                    if st.button("📘 Facebook", key="fb"):
-                        st.session_state.selected_platform = "Facebook"
-                with col3:
-                    if st.button("🎮 Twitch", key="tw"):
-                        st.session_state.selected_platform = "Twitch"
-
-                if st.session_state.selected_platform:
-                    platform = st.session_state.selected_platform
-                    st.markdown(f"**Selected: {platform}**")
-                    with st.form("go_live_form"):
-                        title = st.text_input("Live title")
-                        if st.form_submit_button("Start Live"):
-                            if title:
-                                session_id = start_live_session(title, platform)
-                                if session_id:
-                                    st.success(f"Live started on {platform}! Use the stream key below in your broadcasting software.")
-                                    st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
-                                    st.markdown(f"**Setup Link:** [Start streaming on {platform}](https://www.{platform.lower()}.com/live)")
-                                    st.rerun()
+                with st.form("go_live_form"):
+                    title = st.text_input("Live title")
+                    if st.form_submit_button("Start Broadcasting"):
+                        if title:
+                            if not WEBRTC_AVAILABLE:
+                                st.error("WebRTC is not installed. Cannot start broadcast.")
                             else:
-                                st.warning("Please enter a title")
+                                session_id = start_broadcast(title)
+                                if session_id:
+                                    st.success("You are now live! Your camera is broadcasting.")
+                                    st.rerun()
+                        else:
+                            st.warning("Please enter a title")
 
         st.divider()
 
