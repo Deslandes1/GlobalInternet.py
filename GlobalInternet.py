@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 9.1.0 (Private posts, dislike reaction)
+Version: 9.2.1 (Live page URL fix)
 """
 import streamlit as st
 import pandas as pd
@@ -704,7 +704,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Live page ---
+# --- Live page (fixed) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -718,20 +718,29 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # Simulated video player – in a real app, you'd embed an actual video stream
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
-            <p>In a real implementation, this would be a video player.</p>
-            <div style="font-size: 3rem;">📹</div>
+            <p style="color: #ccc;">In a real implementation, this would be a live video player.</p>
+            <div style="font-size: 4rem; margin: 20px;">📹</div>
+            <p style="color: #aaa;">Stream key: <code>live_{}</code></p>
         </div>
-        """, unsafe_allow_html=True)
+        """.format(session_id), unsafe_allow_html=True)
 
-        share_url = f"{st.get_option('server.baseUrlPath') or st.request.url.split('?')[0]}?live={session_id}"
-        st.text_input("Shareable link", value=share_url)
+        # Generate shareable link safely
+        try:
+            base_url = st.request.url.split('?')[0]
+        except:
+            # Fallback for environments where st.request.url is not available
+            base_url = "https://globalinternetpy.streamlit.app"
+        share_url = f"{base_url}?live={session_id}"
+        st.text_input("Shareable link", value=share_url, key=f"share_{session_id}")
+
         col_a, col_b = st.columns(2)
         with col_a:
-            if st.button("📋 Copy Link"):
-                st.info("Link copied! (simulated)")
+            if st.button("📋 Copy Link", key=f"copy_{session_id}"):
+                st.info("Link copied to clipboard! (simulated)")
         with col_b:
             subject = f"Join me live on GLOBALINTERNET.PY: {session['title']}"
             body = f"Join the live session: {share_url}"
@@ -749,18 +758,18 @@ def render_live_page(session_id):
                 if st.button(f"👍 {c.get('likes', 0)}", key=f"like_comment_{c['id']}"):
                     like_comment(c['id'], increment=True)
                     st.rerun()
-        with st.form("live_chat"):
+        with st.form(f"live_chat_{session_id}"):
             msg = st.text_input("Message")
             if st.form_submit_button("Send"):
                 if msg:
                     if add_comment(session_id, st.session_state.user.id, msg):
                         st.rerun()
 
-    if st.button("Back to Feed"):
+    if st.button("Back to Feed", key=f"back_{session_id}"):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed ---
+# --- Feed (with video and image display) ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -851,12 +860,15 @@ def render_feed():
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
+            # Display media (images and videos)
             media_urls = post.get("media_urls", [])
             if media_urls:
                 for media in media_urls:
                     if media["type"] == "image":
+                        # Display image with full width
                         st.image(media["url"], use_column_width=True)
                     elif media["type"] == "video":
+                        # Display video with controls (play/pause, volume, fullscreen)
                         st.video(media["url"])
 
             # Reactions (now including 👎)
