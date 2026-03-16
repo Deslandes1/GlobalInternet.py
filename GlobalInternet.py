@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 10.0.0 (Persistent Login with Remember Me)
+Version: 10.1.0 (Full visibility: public/private posts)
 """
 import streamlit as st
 import pandas as pd
@@ -66,9 +66,8 @@ OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
-# --- Helper to set/read cookie via JavaScript ---
+# --- Helper to set/read cookie via JavaScript for persistent login ---
 def set_cookie(name, value, days=30):
-    """Set a cookie using JavaScript injection."""
     js = f"""
     <script>
     function setCookie(name, value, days) {{
@@ -86,10 +85,6 @@ def set_cookie(name, value, days=30):
     st.components.v1.html(js, height=0)
 
 def get_cookie(name):
-    """Retrieve a cookie value (reads from query param set by JS)."""
-    # We'll pass cookie values via query param from a JS snippet
-    # This is a workaround: on load, JS reads cookie and sets ?cookie_xxx=value
-    # Then we can read it from st.query_params
     cookie_val = None
     try:
         params = st.query_params
@@ -105,7 +100,6 @@ def get_cookie(name):
     return cookie_val
 
 def inject_cookie_reader():
-    """Inject JS to read cookies and append to URL as query params."""
     js = """
     <script>
     function getCookie(name) {
@@ -120,7 +114,6 @@ def inject_cookie_reader():
     }
     var refreshToken = getCookie("sb_refresh_token");
     if (refreshToken) {
-        // Append to URL as query param
         var url = new URL(window.location.href);
         url.searchParams.set('cookie_sb_refresh_token', refreshToken);
         window.history.replaceState({}, '', url);
@@ -161,9 +154,6 @@ if not st.session_state.logged_in and supabase:
     refresh_token = get_cookie("sb_refresh_token")
     if refresh_token:
         try:
-            # Use Supabase to set session from refresh token
-            # Note: This requires the refresh token to be valid
-            # We'll attempt to get the user
             user = supabase.auth.get_user(refresh_token)
             if user.user:
                 st.session_state.logged_in = True
@@ -173,8 +163,7 @@ if not st.session_state.logged_in and supabase:
                 st.session_state.connection_time = time.time()
                 st.session_state.posts = load_posts()
                 st.session_state.live_sessions = load_live_sessions()
-        except Exception as e:
-            # Token invalid or expired
+        except Exception:
             pass
 
 # --- UI styling ---
@@ -390,7 +379,11 @@ def upload_post_media(user_id, file):
         return None
 
 def load_posts():
-    """Load posts with visibility filtering."""
+    """
+    Load posts with visibility filtering:
+    - Public posts are visible to everyone.
+    - Private posts are visible only to the author.
+    """
     if supabase is None:
         return []
     try:
@@ -707,7 +700,6 @@ def log_in_email(email, password, remember=False):
             st.session_state.posts = load_posts()
             st.session_state.live_sessions = load_live_sessions()
 
-            # If remember me, store refresh token in cookie
             if remember and user.session:
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
 
@@ -775,7 +767,6 @@ def verify_phone_otp(raw_phone, token, remember=False):
             st.session_state.phone_otp_sent = False
             st.session_state.temp_phone = ""
 
-            # If remember me, store refresh token in cookie
             if remember and session.session:
                 set_cookie("sb_refresh_token", session.session.refresh_token, 30)
 
@@ -789,7 +780,6 @@ def verify_phone_otp(raw_phone, token, remember=False):
         return False
 
 def logout():
-    # Clear the remember-me cookie
     set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
@@ -816,7 +806,6 @@ def render_live_page(session_id):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Simulated video player
         st.markdown("""
         <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
             <h3>📡 Live Stream (Simulated)</h3>
@@ -826,7 +815,6 @@ def render_live_page(session_id):
         </div>
         """.format(session_id), unsafe_allow_html=True)
 
-        # Generate shareable link safely
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -866,7 +854,7 @@ def render_live_page(session_id):
         st.session_state.viewing_live = None
         st.rerun()
 
-# --- Feed ---
+# --- Feed with full visibility control ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -901,7 +889,6 @@ def render_feed():
             st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
         col1, col2 = st.columns([4,1])
         with col2:
-            # Visibility: Public or Private
             visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
             is_public = (visibility == "Public")
         if st.form_submit_button("🚀 Post"):
@@ -957,7 +944,7 @@ def render_feed():
             if post['content']:
                 st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
-            # Display media
+            # Display media (images and videos)
             media_urls = post.get("media_urls", [])
             if media_urls:
                 for media in media_urls:
@@ -1123,7 +1110,6 @@ def main_app():
         """, unsafe_allow_html=True)
         st.divider()
 
-        # Live controls
         if st.session_state.profile and st.session_state.profile.get("is_live"):
             st.markdown("🔴 **You are live!**")
             if st.button("End Live Session"):
