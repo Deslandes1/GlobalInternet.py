@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 53.0.0 (Full features + Haitian flag restored)
+Version: 54.0.0 (Full features + fixed favicon)
 """
 import streamlit as st
 import smtplib
@@ -24,6 +24,20 @@ import os
 import random
 import string
 import traceback
+import base64
+
+# ====== FAVICON (Haitian Flag) ======
+flag_svg = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 3">
+  <rect width="5" height="1.5" fill="#00209F"/>
+  <rect y="1.5" width="5" height="1.5" fill="#D21034"/>
+</svg>
+"""
+flag_base64 = base64.b64encode(flag_svg.encode()).decode()
+favicon_link = f'<link rel="icon" href="data:image/svg+xml;base64,{flag_base64}" type="image/svg+xml">'
+st.components.v1.html(favicon_link, height=0)
+
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
 # --- Supabase client ---
 @st.cache_resource
