@@ -241,7 +241,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- ENHANCED RESPONSIVE UI STYLING ---
+# --- ENHANCED RESPONSIVE UI STYLING (FIXED VIDEO SIZING) ---
 st.markdown("""
     <style>
     /* Base responsive settings */
@@ -434,12 +434,28 @@ st.markdown("""
         margin: 10px 0;
         border-radius: 5px;
     }
-    /* Ensure images/videos are responsive */
+    /* --- FIXED VIDEO & IMAGE SIZING --- */
     img, video {
         max-width: 100%;
         height: auto;
+        max-height: 70vh; /* Prevent videos from taking over the whole screen */
+        object-fit: contain;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
     }
-    /* Streamlit default columns fix on mobile */
+    /* On mobile, reduce max height further */
+    @media (max-width: 600px) {
+        img, video {
+            max-height: 50vh;
+        }
+    }
+    /* Ensure images/videos inside post cards don't overflow */
+    .post-card img, .post-card video {
+        max-width: 100%;
+        border-radius: 12px;
+    }
+    /* Ensure columns don't break on mobile */
     .stColumn {
         width: 100% !important;
         flex: 1 1 100% !important;
@@ -459,14 +475,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Helper functions (unchanged from previous version) ---
-# [All your existing helper functions remain exactly the same - get_or_create_profile, 
-#  update_profile, upload_avatar, upload_post_media, delete_post, load_posts, 
-#  create_post, toggle_reaction, share_post, add_comment, load_comments, 
-#  delete_comment, like_comment, create_live_session, etc.]
-
-# ... (keep all your existing helper functions unchanged) ...
-
+# --- Helper functions (unchanged) ---
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
         return None
