@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 59.0.0 (Final – all features + keep‑alive)
+Version: 61.0.0 (Final – fixed keep‑alive order)
 """
 import streamlit as st
 import smtplib
@@ -25,15 +25,20 @@ import random
 import string
 import traceback
 
-# ====== KEEP‑ALIVE PING HANDLER ======
-# If the URL contains ?ping=1, return a minimal response to wake the app.
-query_params = st.query_params
-if "ping" in query_params and query_params["ping"] == "1":
-    st.markdown("OK")
-    st.stop()
-
-# ====== PAGE CONFIG ======
+# ====== PAGE CONFIG (must be first) ======
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
+
+# ====== ROBUST KEEP‑ALIVE PING HANDLER ======
+# If the URL contains ?ping=1, return a minimal response and stop.
+# This prevents the app from loading the full UI when just pinging.
+try:
+    query_params = st.query_params
+    if "ping" in query_params and query_params["ping"] == "1":
+        st.markdown("OK")
+        st.stop()
+except AttributeError:
+    # Older Streamlit version or temporary glitch – ignore
+    pass
 
 # --- Supabase client ---
 @st.cache_resource
