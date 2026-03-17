@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 49.0.0 (OwnerSpace Moderation Tab + Full Features)
+Version: 50.0.0 (Caption under media + full features)
 """
 import streamlit as st
 
@@ -1164,9 +1164,9 @@ def render_feed():
                 st.markdown("👤", unsafe_allow_html=True)
         with col_input:
             content = st.text_area(
-                "What's on your mind?",
-                height=100,
-                placeholder="Share your thoughts, ideas, or media...",
+                "Caption / What's on your mind?",
+                height=150,  # increased height for longer captions
+                placeholder="Write a caption for your post...",
                 label_visibility="collapsed"
             )
         media_files = st.file_uploader(
@@ -1257,11 +1257,7 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # Post content
-                if post['content']:
-                    st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
-
-                # Media
+                # --- Media first ---
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
@@ -1269,6 +1265,10 @@ def render_feed():
                             st.image(media["url"], use_column_width=True)
                         elif media["type"] == "video":
                             st.video(media["url"])
+
+                # --- Caption under media ---
+                if post['content']:
+                    st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
                 # Reactions row
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
@@ -1563,7 +1563,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== UPDATED OWNER SPACE (with Moderation Tab) ==========
+# ========== OWNER SPACE (with Moderation Tab) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
