@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 48.0.0 (Real‑Money Owner Space + Full Features)
+Version: 49.0.0 (OwnerSpace Moderation Tab + Full Features)
 """
 import streamlit as st
 
@@ -1563,7 +1563,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== UPDATED OWNER SPACE (Real Money) ==========
+# ========== UPDATED OWNER SPACE (with Moderation Tab) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -1579,100 +1579,176 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # --- Real balance from backend ---
-    st.subheader("🔐 Owner's Dashboard")
+    # --- Tabs for different sections ---
+    tab1, tab2, tab3 = st.tabs(["💰 Dashboard", "🛡️ User Post Moderation", "📥 Client Payments"])
 
-    # Try to fetch real balance
-    real_balance = None
-    if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
-        try:
-            headers = {"X-API-Key": BACKEND_API_KEY}
-            resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                real_balance = data.get("balance", 0.0)
-            else:
-                st.warning("Could not fetch real balance from backend.")
-        except Exception as e:
-            st.warning(f"Backend unreachable: {e}")
-    else:
-        st.info("Backend not configured. Showing simulated data for now.")
+    # ========== TAB 1: DASHBOARD ==========
+    with tab1:
+        st.subheader("🔐 Owner's Dashboard")
 
-    # Display balance
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if real_balance is not None:
-            st.metric("MonCash Business Balance", f"${real_balance:,.2f}")
+        # Try to fetch real balance
+        real_balance = None
+        if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
+            try:
+                headers = {"X-API-Key": BACKEND_API_KEY}
+                resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    real_balance = data.get("balance", 0.0)
+                else:
+                    st.warning("Could not fetch real balance from backend.")
+            except Exception as e:
+                st.warning(f"Backend unreachable: {e}")
         else:
-            # Fallback to simulated compensation
-            duration = time.time() - st.session_state.connection_time
-            st.session_state.data_comp = duration * 0.035
-            st.metric("Compensation (simulated)", f"${st.session_state.data_comp:.4f}")
-    with col2:
-        st.metric("Uptime", get_uptime())
-    with col3:
-        st.metric("Network Users", np.random.randint(100, 500))
+            st.info("Backend not configured. Showing simulated data for now.")
 
-    st.divider()
-
-    # --- Withdrawal / Transfer Section ---
-    st.subheader("💰 Transfer Funds to Your Account")
-    st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
-    st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
-
-    if real_balance is not None:
-        amount = st.number_input(
-            "Amount to transfer ($)",
-            min_value=1.0,
-            max_value=float(real_balance),
-            value=min(10.0, float(real_balance)),
-            step=10.0,
-            format="%.2f"
-        )
-        if st.button("🚀 Transfer to My MonCash", use_container_width=True):
-            if amount <= 0:
-                st.error("Enter a valid amount.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if real_balance is not None:
+                st.metric("MonCash Business Balance", f"${real_balance:,.2f}")
             else:
-                with st.spinner("Processing transfer..."):
-                    try:
-                        headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
-                        payload = {
-                            "amount": amount,
-                            "recipient_phone": MONCASH_NUM  # your personal number
-                        }
-                        resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
-                        else:
-                            st.error(f"Transfer failed: {resp.text}")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-    else:
-        st.info("To enable real transfers, set up your backend and configure the secrets.")
+                duration = time.time() - st.session_state.connection_time
+                st.session_state.data_comp = duration * 0.035
+                st.metric("Compensation (simulated)", f"${st.session_state.data_comp:.4f}")
+        with col2:
+            st.metric("Uptime", get_uptime())
+        with col3:
+            st.metric("Network Users", np.random.randint(100, 500))
+
+        st.divider()
+
+        # Withdrawal / Transfer Section
+        st.subheader("💰 Transfer Funds to Your Account")
+        st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
+        st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
+
+        if real_balance is not None:
+            amount = st.number_input(
+                "Amount to transfer ($)",
+                min_value=1.0,
+                max_value=float(real_balance),
+                value=min(10.0, float(real_balance)),
+                step=10.0,
+                format="%.2f"
+            )
+            if st.button("🚀 Transfer to My MonCash", use_container_width=True):
+                if amount <= 0:
+                    st.error("Enter a valid amount.")
+                else:
+                    with st.spinner("Processing transfer..."):
+                        try:
+                            headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+                            payload = {
+                                "amount": amount,
+                                "recipient_phone": MONCASH_NUM
+                            }
+                            resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
+                            else:
+                                st.error(f"Transfer failed: {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        else:
+            st.info("To enable real transfers, set up your backend and configure the secrets.")
+
+    # ========== TAB 2: USER POST MODERATION ==========
+    with tab2:
+        st.subheader("🛡️ User Post Moderation")
+        st.markdown("Review all posts (public & private) and take action if needed.")
+
+        # --- Load all posts with user info ---
+        try:
+            # Use explicit foreign key to avoid ambiguity
+            posts = supabase.table("posts").select(
+                "*, profiles!posts_user_id_fkey(full_name, avatar_url, id)"
+            ).order("created_at", desc=True).execute()
+            all_posts = posts.data
+        except Exception as e:
+            st.error(f"Failed to load posts: {e}")
+            all_posts = []
+
+        if not all_posts:
+            st.info("No posts found.")
+        else:
+            # --- Use session state to track which post is being warned ---
+            if "warn_post_id" not in st.session_state:
+                st.session_state.warn_post_id = None
+
+            for post in all_posts:
+                with st.container():
+                    cols = st.columns([2, 4, 2, 1, 1])
+                    with cols[0]:
+                        st.markdown(f"**User:** {post['profiles']['full_name']}")
+                    with cols[1]:
+                        content = post.get('content', '')[:100] + "..." if post.get('content') and len(post['content']) > 100 else post.get('content', '')
+                        st.markdown(f"**Content:** {content}")
+                    with cols[2]:
+                        st.markdown(f"**Visibility:** {'Public' if post.get('is_public', True) else 'Private'}")
+                        st.caption(post['created_at'][:16])
+                    with cols[3]:
+                        if st.button("🗑️ Delete", key=f"del_{post['id']}"):
+                            if delete_post(post['id']):
+                                st.success("Post deleted.")
+                                st.rerun()
+                            else:
+                                st.error("Delete failed.")
+                    with cols[4]:
+                        if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
+                            st.session_state.warn_post_id = post['id']
+                            st.rerun()
+
+                    # If this post is selected for warning, show the message input
+                    if st.session_state.warn_post_id == post['id']:
+                        with st.form(key=f"warn_form_{post['id']}"):
+                            default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
+                            warn_msg = st.text_area("Warning message", value=default_msg, height=100)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("Send Warning"):
+                                    # Send private message to the post author
+                                    success = send_message(
+                                        st.session_state.user.id,  # owner's user id
+                                        post['user_id'],
+                                        f"[MODERATION] {warn_msg}"
+                                    )
+                                    if success:
+                                        st.success("Warning sent to user.")
+                                        # Optionally delete the post as well
+                                        if delete_post(post['id']):
+                                            st.info("Post also deleted.")
+                                        st.session_state.warn_post_id = None
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to send message.")
+                            with col2:
+                                if st.form_submit_button("Cancel"):
+                                    st.session_state.warn_post_id = None
+                                    st.rerun()
+                    st.divider()
+
+    # ========== TAB 3: CLIENT PAYMENT INSTRUCTIONS ==========
+    with tab3:
+        st.subheader("📥 How Clients Can Pay You")
+        st.markdown("""
+        **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
+        Clients can send money directly to your MonCash personal number:  
+        `+50947385663`  
+        *(They must use the MonCash app or a MonCash agent.)*
+
+        **Option 2 – US Bank Transfer (for any amount)**  
+        For international clients, you can receive USD via bank transfer to your UNIBANK account:  
+        `105-2016-16594727`  
+        *(Provide them with your bank name: UNIBANK, Haiti.)*
+
+        **Option 3 – Request a payment link**  
+        For larger amounts, contact the development team to generate a secure payment link.
+        """)
 
     st.divider()
 
-    # --- Client Payment Instructions ---
-    st.subheader("📥 How Clients Can Pay You")
-    st.markdown("""
-    **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
-    Clients can send money directly to your MonCash personal number:  
-    `+50947385663`  
-    *(They must use the MonCash app or a MonCash agent.)*
-
-    **Option 2 – US Bank Transfer (for any amount)**  
-    For international clients, you can receive USD via bank transfer to your UNIBANK account:  
-    `105-2016-16594727`  
-    *(Provide them with your bank name: UNIBANK, Haiti.)*
-
-    **Option 3 – Request a payment link**  
-    For larger amounts, contact the development team to generate a secure payment link.
-    """)
-
-    st.divider()
-
-    # --- Your Contact Info ---
+    # --- Your Contact Info (appears at bottom of all tabs) ---
     st.markdown("### 📬 Contact for Support / Large Payments")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
 
