@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 52.0.0 (Fixed new users with join_date)
+Version: 53.0.0 (Full features + Haitian flag restored)
 """
 import streamlit as st
 import smtplib
@@ -184,7 +184,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (unchanged) ---
+# --- UI styling (Haitian flag restored) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -1058,7 +1058,7 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
-# ========== NEW FUNCTIONS FOR OWNER NOTIFICATIONS (FIXED) ==========
+# ========== FUNCTIONS FOR OWNER NOTIFICATIONS ==========
 
 def get_last_seen_signup():
     """Retrieve the last seen signup timestamp from owner_state table."""
@@ -1085,7 +1085,6 @@ def update_last_seen_signup():
     except Exception as e:
         st.session_state.last_error = f"Error updating last seen signup: {e}"
 
-# --- FIXED: use join_date instead of created_at ---
 def get_new_users(since):
     """Fetch profiles created after `since` timestamp."""
     if supabase is None:
@@ -1639,7 +1638,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== UPDATED OWNER SPACE (with join_date fix) ==========
+# ========== OWNER SPACE (with join_date fix) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
