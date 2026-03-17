@@ -10,3 +10,12 @@ pillow==10.0.0
 protobuf==3.20.3
 supabase==1.2.0
 rich<14
+streamlit
+supabase
+pandas
+numpy
+Pillow
+requests
+googletrans==4.0.0rc1
+deep-translator
+python-dotenv
