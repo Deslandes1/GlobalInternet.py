@@ -185,6 +185,94 @@ translations = {
         "send_otp": "Envoyer OTP",
         "verify_otp": "Vérifier OTP",
         "language": "Langue",
+    },
+    "es": {
+        "feed": "Feed",
+        "friends": "Amigos",
+        "map": "Mapa satelital",
+        "profile": "Perfil",
+        "owner": "Espacio del propietario",
+        "create_post": "Crear publicación",
+        "whats_on_mind": "¿Qué estás pensando?",
+        "post": "Publicar",
+        "public": "Público",
+        "private": "Privado",
+        "live_now": "🔴 En vivo",
+        "join_live": "Unirse",
+        "comments": "Comentarios",
+        "write_comment": "Escribe un comentario...",
+        "send": "Enviar",
+        "reply": "Responder",
+        "like": "Me gusta",
+        "share": "Compartir",
+        "save": "Guardar",
+        "report": "Reportar",
+        "block": "Bloquear",
+        "follow": "Seguir",
+        "unfollow": "Dejar de seguir",
+        "friend_request": "Solicitud de amistad",
+        "accept": "Aceptar",
+        "reject": "Rechazar",
+        "message": "Mensaje",
+        "search_users": "Buscar usuarios...",
+        "notifications": "Notificaciones",
+        "no_notifications": "Sin notificaciones",
+        "logout": "Cerrar sesión",
+        "login": "Iniciar sesión",
+        "signup": "Registrarse",
+        "email": "Correo electrónico",
+        "password": "Contraseña",
+        "full_name": "Nombre completo",
+        "phone": "Teléfono",
+        "remember_me": "Recordarme",
+        "forgot_password": "Olvidé mi contraseña",
+        "send_otp": "Enviar OTP",
+        "verify_otp": "Verificar OTP",
+        "language": "Idioma",
+    },
+    "ht": {
+        "feed": "Fil",
+        "friends": "Zanmi",
+        "map": "Kat satelit",
+        "profile": "Pwofil",
+        "owner": "Espace mèt",
+        "create_post": "Kreye yon pòs",
+        "whats_on_mind": "Kisa kap pase nan tèt ou?",
+        "post": "Pibliye",
+        "public": "Piblik",
+        "private": "Prive",
+        "live_now": "🔴 An dirèk",
+        "join_live": "Rantre",
+        "comments": "Kòmantè",
+        "write_comment": "Ekri yon kòmantè...",
+        "send": "Voye",
+        "reply": "Reponn",
+        "like": "Renmen",
+        "share": "Pataje",
+        "save": "Sere",
+        "report": "Rapòte",
+        "block": "Bloke",
+        "follow": "Swiv",
+        "unfollow": "Sispann swiv",
+        "friend_request": "Demand zanmi",
+        "accept": "Aksepte",
+        "reject": "Refize",
+        "message": "Mesaj",
+        "search_users": "Chèche itilizatè...",
+        "notifications": "Notifikasyon",
+        "no_notifications": "Pa gen notifikasyon",
+        "logout": "Dekonekte",
+        "login": "Konekte",
+        "signup": "Enskri",
+        "email": "Imèl",
+        "password": "Modpas",
+        "full_name": "Non konplè",
+        "phone": "Telefòn",
+        "remember_me": "Sonje m",
+        "forgot_password": "Bliye modpas",
+        "send_otp": "Voye OTP",
+        "verify_otp": "Verifye OTP",
+        "language": "Lang",
     }
 }
 
@@ -761,7 +849,9 @@ def log_in_email(email, password, remember=False):
             st.session_state.connection_time = time.time()
             st.session_state.language = profile.get("language", "en")
             st.session_state.posts = load_posts()
-            load_friend_data(user.user.id)
+            pending, friends, _ = load_friend_data(user.user.id)
+            st.session_state.friend_requests = pending
+            st.session_state.friends = friends
             st.session_state.notifications = load_notifications(user.user.id)
             st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n["read"])
             if remember and user.session:
@@ -843,7 +933,7 @@ def render_feed():
         with st.form("new_post"):
             content = st.text_area(t("whats_on_mind"), height=100)
             media_files = st.file_uploader("Add images/videos", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
-            visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
+            visibility = st.radio("Visibility", [t("public"), t("private")], horizontal=True, index=0)
             is_public = (visibility == t("public"))
             if st.form_submit_button(t("post")):
                 if content or media_files:
@@ -941,4 +1031,338 @@ def render_feed():
             with col6:
                 if post["user_id"] != st.session_state.user.id:
                     if st.button("🚩", key=f"report_{post['id']}"):
-                        st.session
+                        st.session_state[f"report_{post['id']}"] = True
+                        st.rerun()
+
+            # Comments section
+            if st.session_state.get(f"show_comments_{post['id']}", False):
+                st.markdown("#### " + t("comments"))
+                with st.form(f"new_comment_{post['id']}", clear_on_submit=True):
+                    comment = st.text_input(t("write_comment"))
+                    if st.form_submit_button(t("send")):
+                        if comment:
+                            add_comment(post["id"], st.session_state.user.id, comment)
+                            st.rerun()
+                comments = load_comments(post["id"])
+                for c in comments:
+                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}  \n*{c['created_at'][:16]}*")
+                st.divider()
+
+    # Delete confirmation
+    if st.session_state.delete_confirm:
+        post_id, _ = st.session_state.delete_confirm
+        st.warning("Are you sure you want to delete this post?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes, delete"):
+                delete_post(post_id)
+                st.session_state.posts = load_posts()
+                st.session_state.delete_confirm = None
+                st.rerun()
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.delete_confirm = None
+                st.rerun()
+
+def render_friends_page():
+    st.header("👥 " + t("friends"))
+    
+    # Notifications
+    with st.expander(f"🔔 {t('notifications')} ({st.session_state.unread_count} unread)", expanded=True):
+        if not st.session_state.notifications:
+            st.info(t("no_notifications"))
+        else:
+            for n in st.session_state.notifications:
+                cols = st.columns([5,1])
+                with cols[0]:
+                    st.markdown(f"**{n['message']}**  \n*{n['created_at'][:16]}*")
+                with cols[1]:
+                    if not n['read']:
+                        if st.button("✓", key=f"read_{n['id']}"):
+                            mark_notification_read(n['id'])
+                            st.session_state.notifications = load_notifications(st.session_state.user.id)
+                            st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+                            st.rerun()
+                st.divider()
+
+    # Pending friend requests
+    st.subheader("📨 " + t("friend_request") + " " + t("received"))
+    if not st.session_state.friend_requests:
+        st.info("No pending requests")
+    else:
+        for req in st.session_state.friend_requests:
+            cols = st.columns([2,1,1])
+            with cols[0]:
+                st.markdown(f"**{req['sender']['full_name']}**")
+            with cols[1]:
+                if st.button(t("accept"), key=f"accept_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], True)
+                    if success:
+                        pending, friends, _ = load_friend_data(st.session_state.user.id)
+                        st.session_state.friend_requests = pending
+                        st.session_state.friends = friends
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            with cols[2]:
+                if st.button(t("reject"), key=f"reject_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], False)
+                    if success:
+                        pending, friends, _ = load_friend_data(st.session_state.user.id)
+                        st.session_state.friend_requests = pending
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            st.divider()
+
+    # Search users
+    st.subheader("🔍 " + t("search_users"))
+    query = st.text_input("")
+    if query:
+        results = search_users(query, st.session_state.user.id)
+        if results:
+            for user in results:
+                cols = st.columns([3,1,1])
+                with cols[0]:
+                    st.markdown(f"**{user['full_name']}**")
+                with cols[1]:
+                    if st.button(t("friend_request"), key=f"req_{user['id']}"):
+                        success, msg = send_friend_request(st.session_state.user.id, user['id'])
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                with cols[2]:
+                    if st.button(t("message"), key=f"msg_{user['id']}"):
+                        st.session_state.selected_chat = user['id']
+                        st.rerun()
+                st.divider()
+
+    # Friends list
+    st.subheader("👥 " + t("friends"))
+    if not st.session_state.friends:
+        st.info("You have no friends yet")
+    else:
+        for friend in st.session_state.friends:
+            cols = st.columns([1,4,1])
+            with cols[0]:
+                if friend.get('avatar_url'):
+                    st.image(friend['avatar_url'], width=30)
+                else:
+                    st.markdown("👤")
+            with cols[1]:
+                st.markdown(f"**{friend['full_name']}**")
+            with cols[2]:
+                if st.button(t("message"), key=f"msg_f_{friend['id']}"):
+                    st.session_state.selected_chat = friend['id']
+                    st.rerun()
+            st.divider()
+
+    # Messaging
+    if st.session_state.selected_chat:
+        st.subheader("💬 " + t("message"))
+        other_id = st.session_state.selected_chat
+        # Get other user's name
+        other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
+        other_name = other.data["full_name"] if other.data else "User"
+        st.write(f"Chat with **{other_name}**")
+        messages = load_messages(st.session_state.user.id, other_id)
+        for msg in messages:
+            if msg["sender_id"] == st.session_state.user.id:
+                st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+        with st.form("send_message"):
+            msg_content = st.text_input("Type a message...")
+            if st.form_submit_button(t("send")):
+                if msg_content:
+                    send_message(st.session_state.user.id, other_id, msg_content)
+                    st.rerun()
+        if st.button("Close chat"):
+            st.session_state.selected_chat = None
+            st.rerun()
+
+def render_map():
+    st.header("🛰️ " + t("map"))
+    # Sample satellite positions
+    sats = {
+        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
+        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
+        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
+        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
+    }
+    # Create map
+    m = folium.Map(location=[20, 0], zoom_start=2)
+    for name, data in sats.items():
+        folium.Marker(
+            [data["lat"], data["lon"]],
+            popup=f"{name}: {data['status']}",
+            icon=folium.Icon(color="red" if data["status"]=="Priority" else "blue")
+        ).add_to(m)
+    folium_static(m)
+
+def render_profile():
+    st.header("👤 " + t("profile"))
+    if st.session_state.profile is None:
+        return
+    profile = st.session_state.profile
+
+    col1, col2 = st.columns([1,2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=200)
+        else:
+            st.image("https://via.placeholder.com/200", width=200)
+        uploaded = st.file_uploader("📸 Change picture", type=["png","jpg","jpeg"], label_visibility="collapsed")
+        if uploaded:
+            url = upload_avatar(st.session_state.user.id, uploaded)
+            if url:
+                profile["avatar_url"] = url
+                update_profile(profile)
+                st.rerun()
+
+    with col2:
+        with st.form("edit_profile"):
+            full_name = st.text_input(t("full_name"), value=profile.get("full_name", ""))
+            bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
+            location = st.text_input("Location", value=profile.get("location", ""))
+            lang = st.selectbox(t("language"), ["en", "fr", "es", "ht"], index=["en","fr","es","ht"].index(profile.get("language","en")))
+            if st.form_submit_button("💾 Save"):
+                profile.update({"full_name": full_name, "bio": bio, "location": location, "language": lang})
+                if update_profile(profile):
+                    st.session_state.language = lang
+                    st.success("Profile updated!")
+                    st.rerun()
+
+    st.divider()
+    cola, colb, colc, cold = st.columns(4)
+    with cola:
+        st.metric("Posts", len(st.session_state.posts))
+    with colb:
+        st.metric("Friends", len(st.session_state.friends))
+    with colc:
+        st.metric("Followers", 0)  # placeholder
+    with cold:
+        st.metric("Following", 0)  # placeholder
+
+def owner_space():
+    st.header("🕊️ " + t("owner"))
+    if not st.session_state.owner_space_access:
+        with st.form("owner_login"):
+            pwd = st.text_input("Password", type="password")
+            if st.form_submit_button("Access"):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+
+    st.subheader("🔐 Owner Dashboard")
+    st.write(f"CIN: {OWNER_CIN}")
+    st.write(f"MonCash: {MONCASH_NUM}")
+    if st.button("Logout from Owner Space"):
+        st.session_state.owner_space_access = False
+        st.rerun()
+
+def main_app():
+    with st.sidebar:
+        st.markdown("<div class='haiti-symbol'>🌍</div>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name'>GlobalInternational</div>", unsafe_allow_html=True)
+        st.divider()
+
+        if st.session_state.unread_count > 0:
+            st.sidebar.markdown(f"🔔 **{t('notifications')}** <span class='notification-badge'>{st.session_state.unread_count}</span>", unsafe_allow_html=True)
+
+        # Language selector
+        lang = st.selectbox(t("language"), ["en", "fr", "es", "ht"], index=["en","fr","es","ht"].index(st.session_state.language))
+        if lang != st.session_state.language:
+            st.session_state.language = lang
+            st.rerun()
+
+        lat, sig, qual = get_network_status()
+        st.markdown("### 🛡️ System Health")
+        st.markdown(f"""
+        <div class='health-text'>
+        📡 Signal: {sig}<br>
+        ⏱️ Latency: {lat}ms<br>
+        📊 Quality: {qual}%<br>
+        ⏰ Uptime: {get_uptime()}
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+
+        if st.session_state.profile:
+            st.markdown(f"👤 **{st.session_state.profile.get('full_name', 'User')}**")
+        if st.button("🚪 " + t("logout")):
+            logout()
+        st.divider()
+
+        pages = {
+            t("feed"): render_feed,
+            t("friends"): render_friends_page,
+            t("map"): render_map,
+            t("profile"): render_profile,
+            t("owner"): owner_space
+        }
+        choice = st.selectbox(t("menu"), list(pages.keys()))
+    pages[choice]()
+
+def login_interface():
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("<h1 style='text-align:center;'>GlobalInternational</h1>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        auth_method = st.radio("Method", ["Email"], horizontal=True)
+        if auth_method == "Email":
+            tab1, tab2 = st.tabs([t("login"), t("signup")])
+            with tab1:
+                with st.form("login"):
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    remember = st.checkbox(t("remember_me"))
+                    if st.form_submit_button(t("login")):
+                        if email and password:
+                            log_in_email(email, password, remember)
+                        else:
+                            st.warning("Enter email and password")
+            with tab2:
+                with st.form("signup"):
+                    full_name = st.text_input(t("full_name"))
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    if st.form_submit_button(t("signup")):
+                        if full_name and email and password:
+                            sign_up_email(email, password, full_name)
+                        else:
+                            st.warning("Fill all fields")
+
+if __name__ == "__main__":
+    # Inject cookie reader
+    if not st.session_state.logged_in:
+        inject_cookie_reader()
+        refresh_token = get_cookie("sb_refresh_token")
+        if refresh_token and supabase:
+            try:
+                user = supabase.auth.get_user(refresh_token)
+                if user.user:
+                    st.session_state.logged_in = True
+                    st.session_state.user = user.user
+                    profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
+                    st.session_state.profile = profile
+                    st.session_state.connection_time = time.time()
+                    st.session_state.language = profile.get("language", "en")
+                    st.session_state.posts = load_posts()
+                    pending, friends, _ = load_friend_data(user.user.id)
+                    st.session_state.friend_requests = pending
+                    st.session_state.friends = friends
+                    st.session_state.notifications = load_notifications(user.user.id)
+                    st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n["read"])
+            except Exception as e:
+                st.session_state.last_error = str(e)
+
+    if not st.session_state.logged_in:
+        login_interface()
+    else:
+        main_app()
