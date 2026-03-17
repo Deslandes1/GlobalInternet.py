@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 43.0.0 (Full features + fixed relationships)
+Version: 45.0.0 (Complete with UNIBANK account display)
 """
 import streamlit as st
 
@@ -45,7 +45,13 @@ supabase = init_supabase()
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
+UNIBANK_ACCOUNT = st.secrets.get("UNIBANK_ACCOUNT", "105-2016-16594727")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
+
+# Optional backend settings
+BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
+BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
+MONCASH_MODE = st.secrets.get("MONCASH_MODE", "live")
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
@@ -171,7 +177,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (fixed login contrast) ---
+# --- UI styling (Haitian flag + fixed contrast) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -1280,7 +1286,7 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comment section
+                # --- Comment section (always visible) ---
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown("#### Comments")
 
@@ -1450,9 +1456,9 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Chat section
+    # Private Chat Section
     if st.session_state.selected_chat:
-        st.subheader("💬 Chat")
+        st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
         other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
         other_name = other.data["full_name"] if other.data else "User"
@@ -1592,6 +1598,7 @@ def owner_space():
     st.markdown("### 🔑 Your Private Credentials")
     st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
     st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
+    st.markdown(f"- **UNIBANK US Money Account:** `{UNIBANK_ACCOUNT}`")
     st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}`")
 
     if st.button("Logout from Owner Space"):
