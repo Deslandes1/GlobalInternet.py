@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 42.0.0 (Fixed ambiguous relationship)
+Version: 43.0.0 (Full features + fixed relationships)
 """
 import streamlit as st
 
@@ -171,7 +171,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (with fixed login contrast) ---
+# --- UI styling (fixed login contrast) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -467,7 +467,7 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (FIXED relationship) ---
+# --- Post functions (with explicit foreign keys to avoid ambiguity) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None):
     """Load posts (cached for 60 seconds)."""
@@ -589,7 +589,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions (FIXED relationship) ---
+# --- Comment functions (with explicit foreign keys) ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -616,7 +616,7 @@ def load_comments(post_id):
     if supabase is None:
         return []
     try:
-        # Explicitly specify foreign key for profiles via comments.user_id
+        # Explicit foreign key for comments -> profiles
         response = supabase.table("comments").select(
             "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
@@ -648,7 +648,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions ---
+# --- Live session functions (with explicit foreign keys) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -891,7 +891,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- NEW: Friend, Chat, Call functions ---
+# --- Friend, Chat, Call functions ---
 def load_notifications(user_id):
     if supabase is None:
         return []
