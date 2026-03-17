@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 58.0.0 (Final – all features + emoji flag)
+Version: 59.0.0 (Final – all features + keep‑alive)
 """
 import streamlit as st
 import smtplib
@@ -24,6 +24,13 @@ import os
 import random
 import string
 import traceback
+
+# ====== KEEP‑ALIVE PING HANDLER ======
+# If the URL contains ?ping=1, return a minimal response to wake the app.
+query_params = st.query_params
+if "ping" in query_params and query_params["ping"] == "1":
+    st.markdown("OK")
+    st.stop()
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
