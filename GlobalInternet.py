@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 40.0.0 (Complete with Chat, Calls, Friend System)
+Version: 41.0.0 (Complete with Chat, Calls, Friend System + fixed login styling)
 """
 import streamlit as st
 
@@ -171,13 +171,15 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (unchanged) ---
+# --- UI styling (with fixed login page contrast) ---
 st.markdown("""
     <style>
-    [data-testid="stAppViewContainer"] {
+    /* Ensure app container has the gradient background everywhere */
+    .stApp [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
     }
+    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: rgba(255,255,255,0.75);
         backdrop-filter: blur(10px);
@@ -340,6 +342,49 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
         color: #0a2a44;
+    }
+    /* ===== LOGIN PAGE FIXES ===== */
+    /* Input fields - light background, dark text */
+    .stTextInput > div > div > input {
+        color: #1e2a3a !important;
+        background-color: rgba(255,255,255,0.9) !important;
+        border: 1px solid rgba(0,168,255,0.3) !important;
+        border-radius: 40px !important;
+        padding: 10px 20px !important;
+    }
+    .stTextArea > div > textarea {
+        color: #1e2a3a !important;
+        background-color: rgba(255,255,255,0.9) !important;
+        border: 1px solid rgba(0,168,255,0.3) !important;
+        border-radius: 20px !important;
+    }
+    /* Radio buttons and labels */
+    .stRadio > div {
+        color: #1e2a3a !important;
+    }
+    .stRadio label {
+        color: #1e2a3a !important;
+    }
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] button {
+        color: #1e2a3a !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        color: #0080ff !important;
+        font-weight: bold;
+    }
+    /* Headers in login page */
+    h1, h2, h3 {
+        color: #0a2a44 !important;
+    }
+    /* Ensure the central column has proper contrast */
+    .stColumn {
+        color: #1e2a3a;
+    }
+    /* Phone OTP info text */
+    .stAlert {
+        background-color: rgba(255,255,255,0.7) !important;
+        color: #1e2a3a !important;
     }
     </style>
 """, unsafe_allow_html=True)
