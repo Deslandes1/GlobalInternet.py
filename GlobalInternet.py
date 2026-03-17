@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 41.0.0 (Complete with Chat, Calls, Friend System + fixed login styling)
+Version: 42.0.0 (Fixed ambiguous relationship)
 """
 import streamlit as st
 
@@ -171,15 +171,13 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (with fixed login page contrast) ---
+# --- UI styling (with fixed login contrast) ---
 st.markdown("""
     <style>
-    /* Ensure app container has the gradient background everywhere */
     .stApp [data-testid="stAppViewContainer"] {
         background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
         color: #1e2a3a;
     }
-    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: rgba(255,255,255,0.75);
         backdrop-filter: blur(10px);
@@ -343,8 +341,7 @@ st.markdown("""
         font-weight: bold;
         color: #0a2a44;
     }
-    /* ===== LOGIN PAGE FIXES ===== */
-    /* Input fields - light background, dark text */
+    /* Login page fixes */
     .stTextInput > div > div > input {
         color: #1e2a3a !important;
         background-color: rgba(255,255,255,0.9) !important;
@@ -358,14 +355,12 @@ st.markdown("""
         border: 1px solid rgba(0,168,255,0.3) !important;
         border-radius: 20px !important;
     }
-    /* Radio buttons and labels */
     .stRadio > div {
         color: #1e2a3a !important;
     }
     .stRadio label {
         color: #1e2a3a !important;
     }
-    /* Tabs */
     .stTabs [data-baseweb="tab-list"] button {
         color: #1e2a3a !important;
     }
@@ -373,15 +368,9 @@ st.markdown("""
         color: #0080ff !important;
         font-weight: bold;
     }
-    /* Headers in login page */
     h1, h2, h3 {
         color: #0a2a44 !important;
     }
-    /* Ensure the central column has proper contrast */
-    .stColumn {
-        color: #1e2a3a;
-    }
-    /* Phone OTP info text */
     .stAlert {
         background-color: rgba(255,255,255,0.7) !important;
         color: #1e2a3a !important;
@@ -389,9 +378,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ========== HELPER FUNCTIONS (ALL PREVIOUS + NEW) ==========
+# ========== HELPER FUNCTIONS ==========
 
-# --- Profile functions ---
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
         return None
@@ -479,16 +467,16 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions ---
+# --- Post functions (FIXED relationship) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None):
     """Load posts (cached for 60 seconds)."""
     if supabase is None:
         return []
     try:
-        select_cols = "*, profiles(full_name, avatar_url, is_live)"
+        # Explicitly specify the foreign key to avoid ambiguity
+        select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
         if user_id:
-            # Get public posts + user's private posts
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
@@ -601,7 +589,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions ---
+# --- Comment functions (FIXED relationship) ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -628,8 +616,9 @@ def load_comments(post_id):
     if supabase is None:
         return []
     try:
+        # Explicitly specify foreign key for profiles via comments.user_id
         response = supabase.table("comments").select(
-            "*, profiles(full_name, avatar_url)"
+            "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         return response.data
     except Exception as e:
@@ -731,7 +720,7 @@ def load_live_sessions():
         return []
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
         ).eq("is_live", True).order("started_at", desc=True).execute()
         return response.data
     except Exception as e:
@@ -743,7 +732,7 @@ def get_live_session(session_id):
         return None
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
         ).eq("id", session_id).single().execute()
         return response.data
     except Exception as e:
