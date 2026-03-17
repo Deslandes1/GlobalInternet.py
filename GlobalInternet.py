@@ -1,33 +1,32 @@
 """
-GLOBALINTERNATIONAL.PY - Complete International Social Media Platform
-Lead Developer: Gesner Deslandes
-Version: 36.0.0 (Full Facebook-like features)
+GLOBALINTERNET.PY - Satellite Communication Platform
+Lead Developer: Gesner Deslandes (Python Developer, Haiti)
+Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
+               Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
+Version: 34.0.0 (Stable release with video posts)
 """
 import streamlit as st
 
-st.set_page_config(page_title="GlobalInternational", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
 import pandas as pd
 import numpy as np
 import time
 import socket
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 from supabase import create_client, Client
 import io
 from PIL import Image
+import mimetypes
 import urllib.parse
 import json
 import os
+import tempfile
 import random
 import string
 import traceback
-from deep_translator import GoogleTranslator
-import plotly.express as px
-import folium
-from streamlit_folium import folium_static
-import geocoder
 
 # --- Supabase client ---
 @st.cache_resource
@@ -35,7 +34,10 @@ def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
     if not url or not key:
-        st.warning("⚠️ Supabase credentials not found.")
+        st.warning("⚠️ Supabase credentials not found. User registration/login disabled.")
+        return None
+    if not url.startswith(("http://", "https://")):
+        st.error("❌ SUPABASE_URL must start with http:// or https://")
         return None
     try:
         return create_client(url, key)
@@ -45,9 +47,78 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- Secrets ---
+# --- Schema detection ---
+@st.cache_resource
+def check_media_urls_column():
+    if supabase is None:
+        return False
+    try:
+        supabase.table("posts").select("media_urls").limit(0).execute()
+        return True
+    except Exception as e:
+        if "column posts.media_urls does not exist" in str(e):
+            return False
+        else:
+            st.warning(f"Unexpected schema check error: {e}")
+            return False
+
+MEDIA_URLS_EXISTS = check_media_urls_column()
+if not MEDIA_URLS_EXISTS:
+    st.warning("⚠️ The 'media_urls' column is missing from the 'posts' table. "
+               "Media uploads will be disabled. Please run the SQL setup script to enable them.")
+
+@st.cache_resource
+def check_post_media_bucket():
+    if supabase is None:
+        return False
+    try:
+        supabase.storage.from_("post_media").list()
+        return True
+    except Exception as e:
+        st.error(f"❌ 'post_media' bucket check failed: {e}")
+        return False
+
+POST_MEDIA_BUCKET_OK = check_post_media_bucket() if MEDIA_URLS_EXISTS else False
+if MEDIA_URLS_EXISTS and not POST_MEDIA_BUCKET_OK:
+    st.warning("⚠️ 'post_media' bucket is not accessible. Media uploads will fail. Please create the bucket and set it to public.")
+
+@st.cache_resource
+def check_reactions_table():
+    if supabase is None:
+        return False
+    try:
+        supabase.table("reactions").select("id").limit(0).execute()
+        return True
+    except Exception as e:
+        if "relation" in str(e) and "does not exist" in str(e):
+            return False
+        else:
+            return True
+
+REACTIONS_TABLE_EXISTS = check_reactions_table()
+if not REACTIONS_TABLE_EXISTS:
+    st.warning("⚠️ 'reactions' table is missing. Reactions will be disabled. Please run the SQL setup script.")
+
+@st.cache_resource
+def check_share_function():
+    if supabase is None:
+        return False
+    try:
+        supabase.rpc("increment_shares", {"post_id": 1}).execute()
+        return True
+    except Exception as e:
+        if "function" in str(e) and "does not exist" in str(e):
+            return False
+        else:
+            return True
+
+SHARE_FUNCTION_EXISTS = check_share_function()
+if not SHARE_FUNCTION_EXISTS:
+    st.warning("⚠️ 'increment_shares' function is missing. Sharing posts will fail. Please run the SQL setup script.")
+
+# --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
-MONCASH_NUM = st.secrets.get("MONCASH_NUM", "+50947385663")
+MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
 OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 
 # --- Session state ---
@@ -57,228 +128,251 @@ if "user" not in st.session_state:
     st.session_state.user = None
 if "profile" not in st.session_state:
     st.session_state.profile = None
+if "data_comp" not in st.session_state:
+    st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
     st.session_state.connection_time = time.time()
 if "posts" not in st.session_state:
     st.session_state.posts = []
 if "owner_space_access" not in st.session_state:
     st.session_state.owner_space_access = False
+if "phone_otp_sent" not in st.session_state:
+    st.session_state.phone_otp_sent = False
+if "temp_phone" not in st.session_state:
+    st.session_state.temp_phone = ""
 if "viewing_live" not in st.session_state:
     st.session_state.viewing_live = None
 if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = []
-if "notifications" not in st.session_state:
-    st.session_state.notifications = []
-if "unread_count" not in st.session_state:
-    st.session_state.unread_count = 0
-if "friend_requests" not in st.session_state:
-    st.session_state.friend_requests = []
-if "friends" not in st.session_state:
-    st.session_state.friends = []
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "selected_chat" not in st.session_state:
-    st.session_state.selected_chat = None
-if "groups" not in st.session_state:
-    st.session_state.groups = []
-if "current_group" not in st.session_state:
-    st.session_state.current_group = None
-if "language" not in st.session_state:
-    st.session_state.language = "en"
-if "saved_posts" not in st.session_state:
-    st.session_state.saved_posts = []
-if "trending_posts" not in st.session_state:
-    st.session_state.trending_posts = []
-if "suggested_users" not in st.session_state:
-    st.session_state.suggested_users = []
+if "reset_email_sent" not in st.session_state:
+    st.session_state.reset_email_sent = False
+if "stream_key" not in st.session_state:
+    st.session_state.stream_key = None
+if "selected_platform" not in st.session_state:
+    st.session_state.selected_platform = None
 if "delete_confirm" not in st.session_state:
     st.session_state.delete_confirm = None
 if "last_error" not in st.session_state:
     st.session_state.last_error = None
 
-# --- Language dictionary ---
-translations = {
-    "en": {
-        "feed": "Feed",
-        "friends": "Friends",
-        "map": "Satellite Map",
-        "profile": "Profile",
-        "owner": "Owner Space",
-        "create_post": "Create a post",
-        "whats_on_mind": "What's on your mind?",
-        "post": "Post",
-        "public": "Public",
-        "private": "Private",
-        "live_now": "🔴 Live Now",
-        "join_live": "Join Live",
-        "comments": "Comments",
-        "write_comment": "Write a comment...",
-        "send": "Send",
-        "reply": "Reply",
-        "like": "Like",
-        "share": "Share",
-        "save": "Save",
-        "report": "Report",
-        "block": "Block",
-        "follow": "Follow",
-        "unfollow": "Unfollow",
-        "friend_request": "Friend Request",
-        "accept": "Accept",
-        "reject": "Reject",
-        "message": "Message",
-        "search_users": "Search users...",
-        "notifications": "Notifications",
-        "no_notifications": "No notifications",
-        "logout": "Logout",
-        "login": "Login",
-        "signup": "Sign Up",
-        "email": "Email",
-        "password": "Password",
-        "full_name": "Full Name",
-        "phone": "Phone",
-        "remember_me": "Remember me",
-        "forgot_password": "Forgot Password",
-        "send_otp": "Send OTP",
-        "verify_otp": "Verify OTP",
-        "language": "Language",
-    },
-    "fr": {
-        "feed": "Fil d'actualité",
-        "friends": "Amis",
-        "map": "Carte satellite",
-        "profile": "Profil",
-        "owner": "Espace propriétaire",
-        "create_post": "Créer une publication",
-        "whats_on_mind": "Quoi de neuf ?",
-        "post": "Publier",
-        "public": "Public",
-        "private": "Privé",
-        "live_now": "🔴 En direct",
-        "join_live": "Rejoindre",
-        "comments": "Commentaires",
-        "write_comment": "Écrire un commentaire...",
-        "send": "Envoyer",
-        "reply": "Répondre",
-        "like": "J'aime",
-        "share": "Partager",
-        "save": "Enregistrer",
-        "report": "Signaler",
-        "block": "Bloquer",
-        "follow": "Suivre",
-        "unfollow": "Ne plus suivre",
-        "friend_request": "Demande d'ami",
-        "accept": "Accepter",
-        "reject": "Refuser",
-        "message": "Message",
-        "search_users": "Rechercher des utilisateurs...",
-        "notifications": "Notifications",
-        "no_notifications": "Aucune notification",
-        "logout": "Déconnexion",
-        "login": "Connexion",
-        "signup": "S'inscrire",
-        "email": "E-mail",
-        "password": "Mot de passe",
-        "full_name": "Nom complet",
-        "phone": "Téléphone",
-        "remember_me": "Se souvenir de moi",
-        "forgot_password": "Mot de passe oublié",
-        "send_otp": "Envoyer OTP",
-        "verify_otp": "Vérifier OTP",
-        "language": "Langue",
-    },
-    "es": {
-        "feed": "Feed",
-        "friends": "Amigos",
-        "map": "Mapa satelital",
-        "profile": "Perfil",
-        "owner": "Espacio del propietario",
-        "create_post": "Crear publicación",
-        "whats_on_mind": "¿Qué estás pensando?",
-        "post": "Publicar",
-        "public": "Público",
-        "private": "Privado",
-        "live_now": "🔴 En vivo",
-        "join_live": "Unirse",
-        "comments": "Comentarios",
-        "write_comment": "Escribe un comentario...",
-        "send": "Enviar",
-        "reply": "Responder",
-        "like": "Me gusta",
-        "share": "Compartir",
-        "save": "Guardar",
-        "report": "Reportar",
-        "block": "Bloquear",
-        "follow": "Seguir",
-        "unfollow": "Dejar de seguir",
-        "friend_request": "Solicitud de amistad",
-        "accept": "Aceptar",
-        "reject": "Rechazar",
-        "message": "Mensaje",
-        "search_users": "Buscar usuarios...",
-        "notifications": "Notificaciones",
-        "no_notifications": "Sin notificaciones",
-        "logout": "Cerrar sesión",
-        "login": "Iniciar sesión",
-        "signup": "Registrarse",
-        "email": "Correo electrónico",
-        "password": "Contraseña",
-        "full_name": "Nombre completo",
-        "phone": "Teléfono",
-        "remember_me": "Recordarme",
-        "forgot_password": "Olvidé mi contraseña",
-        "send_otp": "Enviar OTP",
-        "verify_otp": "Verificar OTP",
-        "language": "Idioma",
-    },
-    "ht": {
-        "feed": "Fil",
-        "friends": "Zanmi",
-        "map": "Kat satelit",
-        "profile": "Pwofil",
-        "owner": "Espace mèt",
-        "create_post": "Kreye yon pòs",
-        "whats_on_mind": "Kisa kap pase nan tèt ou?",
-        "post": "Pibliye",
-        "public": "Piblik",
-        "private": "Prive",
-        "live_now": "🔴 An dirèk",
-        "join_live": "Rantre",
-        "comments": "Kòmantè",
-        "write_comment": "Ekri yon kòmantè...",
-        "send": "Voye",
-        "reply": "Reponn",
-        "like": "Renmen",
-        "share": "Pataje",
-        "save": "Sere",
-        "report": "Rapòte",
-        "block": "Bloke",
-        "follow": "Swiv",
-        "unfollow": "Sispann swiv",
-        "friend_request": "Demand zanmi",
-        "accept": "Aksepte",
-        "reject": "Refize",
-        "message": "Mesaj",
-        "search_users": "Chèche itilizatè...",
-        "notifications": "Notifikasyon",
-        "no_notifications": "Pa gen notifikasyon",
-        "logout": "Dekonekte",
-        "login": "Konekte",
-        "signup": "Enskri",
-        "email": "Imèl",
-        "password": "Modpas",
-        "full_name": "Non konplè",
-        "phone": "Telefòn",
-        "remember_me": "Sonje m",
-        "forgot_password": "Bliye modpas",
-        "send_otp": "Voye OTP",
-        "verify_otp": "Verifye OTP",
-        "language": "Lang",
-    }
-}
+# --- Cookie helpers ---
+def set_cookie(name, value, days=30):
+    js = f"""
+    <script>
+    function setCookie(name, value, days) {{
+        var expires = "";
+        if (days) {{
+            var date = new Date();
+            date.setTime(date.getTime() + (days*24*60*60*1000));
+            expires = "; expires=" + date.toUTCString();
+        }}
+        document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+    }}
+    setCookie("{name}", "{value}", {days});
+    </script>
+    """
+    st.components.v1.html(js, height=0)
 
-def t(key):
-    """Translate a key to the current language."""
-    return translations.get(st.session_state.language, translations["en"]).get(key, key)
+def get_cookie(name):
+    cookie_val = None
+    try:
+        params = st.query_params
+        if f"cookie_{name}" in params:
+            cookie_val = params[f"cookie_{name}"][0]
+    except:
+        try:
+            params = st.experimental_get_query_params()
+            if f"cookie_{name}" in params:
+                cookie_val = params[f"cookie_{name}"][0]
+        except:
+            pass
+    return cookie_val
+
+def inject_cookie_reader():
+    js = """
+    <script>
+    function getCookie(name) {
+        var nameEQ = name + "=";
+        var ca = document.cookie.split(';');
+        for(var i=0;i < ca.length;i++) {
+            var c = ca[i];
+            while (c.charAt(0)==' ') c = c.substring(1,c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+        }
+        return null;
+    }
+    var refreshToken = getCookie("sb_refresh_token");
+    if (refreshToken) {
+        var url = new URL(window.location.href);
+        url.searchParams.set('cookie_sb_refresh_token', refreshToken);
+        window.history.replaceState({}, '', url);
+    }
+    </script>
+    """
+    st.components.v1.html(js, height=0)
+
+# --- Restore session from cookie ---
+if not st.session_state.logged_in and supabase:
+    inject_cookie_reader()
+    refresh_token = get_cookie("sb_refresh_token")
+    if refresh_token:
+        try:
+            user = supabase.auth.get_user(refresh_token)
+            if user.user:
+                st.session_state.logged_in = True
+                st.session_state.user = user.user
+                profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
+                st.session_state.profile = profile
+                st.session_state.connection_time = time.time()
+                st.session_state.posts = load_posts()
+                st.session_state.live_sessions = load_live_sessions()
+        except Exception as e:
+            st.session_state.last_error = str(e)
+
+# --- UI styling (original Haitian flag theme) ---
+st.markdown("""
+    <style>
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
+        color: #1e2a3a;
+    }
+    [data-testid="stSidebar"] {
+        background: rgba(255,255,255,0.75);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(0,168,255,0.3);
+    }
+    .haiti-symbol {
+        font-size: 4rem;
+        text-align: center;
+        background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        display: inline-block;
+        width: 100%;
+    }
+    .owner-name {
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #0a2a44;
+        margin-top: -10px;
+    }
+    .collaborators {
+        text-align: center;
+        font-size: 0.9rem;
+        color: #2c3e50;
+        background: rgba(255,255,255,0.5);
+        padding: 8px 16px;
+        border-radius: 40px;
+        margin: 10px 0;
+        border: 1px solid rgba(0,68,204,0.2);
+    }
+    .stMetric {
+        background: rgba(255,255,255,0.6);
+        backdrop-filter: blur(5px);
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(0,168,255,0.3);
+        box-shadow: 0 8px 20px rgba(0,20,50,0.1);
+    }
+    .post-card {
+        background: rgba(255,255,255,0.7);
+        backdrop-filter: blur(8px);
+        padding: 20px 25px;
+        border-radius: 20px;
+        border: 1px solid rgba(0,168,255,0.2);
+        margin: 15px 0;
+        color: #1e2a3a;
+        transition: transform 0.2s;
+    }
+    .post-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+    }
+    .health-text {
+        font-family: 'Courier New', monospace;
+        color: #0a2a44;
+        background: rgba(255,255,255,0.6);
+        backdrop-filter: blur(5px);
+        padding: 15px;
+        border-radius: 16px;
+        border-left: 4px solid #00a8ff;
+    }
+    .stButton > button {
+        background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%);
+        color: white;
+        border: none;
+        border-radius: 40px;
+        padding: 10px 28px;
+        font-weight: 600;
+        box-shadow: 0 8px 16px rgba(0,128,255,0.2);
+        transition: all 0.2s;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%);
+        box-shadow: 0 12px 24px rgba(0,128,255,0.3);
+        transform: scale(1.02);
+    }
+    .live-badge {
+        background-color: #ff4444;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 8px;
+    }
+    .green-dot {
+        height: 12px;
+        width: 12px;
+        background-color: #00ff88;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+    .private-badge {
+        background-color: #ffaa00;
+        color: #1e2a3a;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 8px;
+    }
+    .comment-indent {
+        margin-left: 2rem;
+        border-left: 2px solid #ddd;
+        padding-left: 1rem;
+    }
+    .comment-meta {
+        font-size: 0.8rem;
+        color: #666;
+    }
+    .delete-confirm {
+        background-color: #ffdddd;
+        border-left: 3px solid red;
+        padding: 10px;
+        margin: 10px 0;
+    }
+    .error-box {
+        background-color: #ffdddd;
+        border-left: 6px solid #ff4444;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-family: monospace;
+        white-space: pre-wrap;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- Helper functions ---
 def get_or_create_profile(user_id, identifier):
@@ -299,8 +393,7 @@ def get_or_create_profile(user_id, identifier):
                 "avatar_url": None,
                 "bio": "",
                 "location": "",
-                "is_live": False,
-                "language": "en"
+                "is_live": False
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -340,6 +433,12 @@ def upload_post_media(user_id, file):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
         return None
+    if not MEDIA_URLS_EXISTS:
+        st.session_state.last_error = "media_urls column missing."
+        return None
+    if not POST_MEDIA_BUCKET_OK:
+        st.session_state.last_error = "post_media bucket is not accessible."
+        return None
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
@@ -356,7 +455,9 @@ def upload_post_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        st.session_state.last_error = f"Media upload failed: {e}"
+        error_str = str(e)
+        st.session_state.last_error = f"Media upload failed: {error_str}"
+        st.error(f"❌ Media upload error: {error_str}")
         return None
 
 def delete_post(post_id):
@@ -373,39 +474,40 @@ def load_posts():
     if supabase is None:
         return []
     try:
-        # Get posts from followed users + public posts
-        user_id = st.session_state.user.id if st.session_state.user else None
-        if user_id:
-            # Get followed users
-            followed = supabase.table("follows").select("following_id").eq("follower_id", user_id).execute()
-            followed_ids = [f["following_id"] for f in followed.data] if followed.data else []
-            followed_ids.append(user_id)  # include own posts
-            
-            # Build query
-            query = supabase.table("posts").select("*, profiles(full_name, avatar_url, is_live)")
-            if followed_ids:
-                # Posts from followed users or public posts
-                query = query.or_(f"user_id.in.{','.join(followed_ids)},is_public.eq.True")
-            else:
-                query = query.eq("is_public", True)
-            posts = query.order("created_at", desc=True).execute()
+        if MEDIA_URLS_EXISTS:
+            select_cols = "*, profiles(full_name, avatar_url, is_live)"
         else:
-            posts = supabase.table("posts").select("*, profiles(full_name, avatar_url, is_live)").eq("is_public", True).order("created_at", desc=True).execute()
-        
-        # Fetch reactions and comments counts
-        for post in posts.data:
-            post["media_urls"] = post.get("media_urls", [])
+            select_cols = "id, user_id, content, is_public, likes_count, shares_count, original_post_id, created_at, profiles(full_name, avatar_url, is_live)"
+
+        if st.session_state.user:
+            public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).execute()
+            private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", st.session_state.user.id).execute()
+            posts = public_resp.data + private_resp.data
+            posts.sort(key=lambda x: x['created_at'], reverse=True)
+        else:
+            resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).execute()
+            posts = resp.data
+
+        for post in posts:
+            if "media_urls" not in post:
+                post["media_urls"] = []
             post["reactions"] = {}
-            if user_id:
-                # Check if user liked/saved
-                post["user_liked"] = False  # placeholder
-                # Check if saved
-                saved = supabase.table("saved_posts").select("post_id").eq("user_id", user_id).eq("post_id", post["id"]).execute()
-                post["saved"] = bool(saved.data)
-            # Count comments
-            comments = supabase.table("comments").select("id", count="exact").eq("post_id", post["id"]).execute()
-            post["comment_count"] = comments.count if hasattr(comments, 'count') else 0
-        return posts.data
+            post["user_reactions"] = []
+            if REACTIONS_TABLE_EXISTS:
+                try:
+                    reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
+                    counts = {}
+                    if reactions_resp.data:
+                        for r in reactions_resp.data:
+                            emoji = r["emoji"]
+                            counts[emoji] = counts.get(emoji, 0) + 1
+                    post["reactions"] = counts
+                    if st.session_state.user:
+                        user_reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).eq("user_id", st.session_state.user.id).execute()
+                        post["user_reactions"] = [r["emoji"] for r in user_reactions_resp.data] if user_reactions_resp.data else []
+                except Exception as e:
+                    pass
+        return posts
     except Exception as e:
         st.session_state.last_error = f"Error loading posts: {e}"
         return []
@@ -415,103 +517,86 @@ def create_post(user_id, content, media_files, is_public):
         st.session_state.last_error = "Supabase not configured."
         return False
     try:
-        # Extract hashtags
-        hashtags = [word for word in content.split() if word.startswith("#")]
+        profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not profile_check.data:
+            st.warning("Profile missing – attempting to recreate...")
+            identifier = None
+            if st.session_state.user and st.session_state.user.email:
+                identifier = st.session_state.user.email
+            elif st.session_state.user and st.session_state.user.phone:
+                identifier = st.session_state.user.phone
+            if identifier:
+                profile = get_or_create_profile(user_id, identifier)
+                if not profile:
+                    st.session_state.last_error = "Could not create profile."
+                    return False
+            else:
+                st.session_state.last_error = "User identifier not found."
+                return False
+
         media_urls = []
-        if media_files:
+        upload_errors = []
+        if MEDIA_URLS_EXISTS and media_files:
             for f in media_files:
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
+                else:
+                    upload_errors.append(f.name)
+
         post = {
             "user_id": user_id,
             "content": content,
             "is_public": is_public,
             "likes_count": 0,
             "shares_count": 0,
-            "hashtags": hashtags,
-            "media_urls": media_urls,
             "created_at": datetime.now().isoformat()
         }
+        if MEDIA_URLS_EXISTS:
+            post["media_urls"] = media_urls
+
         result = supabase.table("posts").insert(post).execute()
         if result.data:
             st.session_state.posts = load_posts()
-            st.success("✅ Post published!")
+            if upload_errors:
+                st.warning(f"✅ Post created, but the following files failed to upload: {', '.join(upload_errors)}. Check bucket permissions.")
+            else:
+                st.success("✅ Post published!")
+            st.session_state.last_error = None
             return True
         else:
-            st.session_state.last_error = "Post insertion failed."
+            st.session_state.last_error = "Post insertion failed – no data returned."
             return False
     except Exception as e:
-        st.session_state.last_error = f"Error creating post: {e}"
+        st.session_state.last_error = f"❌ Error creating post: {e}\n{traceback.format_exc()}"
         return False
 
 def toggle_reaction(post_id, user_id, emoji):
-    if supabase is None:
+    if supabase is None or not REACTIONS_TABLE_EXISTS:
+        st.error("Reactions are disabled.")
         return False
     try:
-        # Check if reaction exists
         check = supabase.table("reactions").select("id").eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
         if check.data:
             supabase.table("reactions").delete().eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
         else:
-            supabase.table("reactions").insert({"post_id": post_id, "user_id": user_id, "emoji": emoji}).execute()
-            # Create notification for post owner
-            post = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
-            if post.data and post.data["user_id"] != user_id:
-                sender_name = st.session_state.profile["full_name"]
-                supabase.table("notifications").insert({
-                    "user_id": post.data["user_id"],
-                    "type": "reaction",
-                    "related_id": post_id,
-                    "message": f"{sender_name} reacted with {emoji} to your post",
-                    "read": False
-                }).execute()
+            supabase.table("reactions").insert({
+                "post_id": post_id,
+                "user_id": user_id,
+                "emoji": emoji
+            }).execute()
         st.session_state.posts = load_posts()
         return True
     except Exception as e:
         st.session_state.last_error = f"Error toggling reaction: {e}"
         return False
 
-def add_comment(post_id, user_id, content, parent_id=None):
-    if supabase is None:
-        return False
-    try:
-        comment = {
-            "post_id": post_id,
-            "user_id": user_id,
-            "content": content,
-            "parent_id": parent_id,
-            "created_at": datetime.now().isoformat()
-        }
-        supabase.table("comments").insert(comment).execute()
-        # Notify post owner
-        post = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
-        if post.data and post.data["user_id"] != user_id:
-            sender_name = st.session_state.profile["full_name"]
-            supabase.table("notifications").insert({
-                "user_id": post.data["user_id"],
-                "type": "comment",
-                "related_id": post_id,
-                "message": f"{sender_name} commented on your post",
-                "read": False
-            }).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error adding comment: {e}"
-        return False
-
-def load_comments(post_id):
-    if supabase is None:
-        return []
-    try:
-        comments = supabase.table("comments").select("*, profiles(full_name, avatar_url)").eq("post_id", post_id).order("created_at").execute()
-        return comments.data
-    except Exception as e:
-        st.session_state.last_error = f"Error loading comments: {e}"
-        return []
-
 def share_post(original_post_id, user_id, is_public=True):
     if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    if not SHARE_FUNCTION_EXISTS:
+        st.error("Share function is disabled (increment_shares missing).")
         return False
     try:
         supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
@@ -524,274 +609,176 @@ def share_post(original_post_id, user_id, is_public=True):
             "shares_count": 0,
             "created_at": datetime.now().isoformat()
         }
+        if MEDIA_URLS_EXISTS:
+            post["media_urls"] = []
         supabase.table("posts").insert(post).execute()
-        # Notify original poster
-        original = supabase.table("posts").select("user_id").eq("id", original_post_id).single().execute()
-        if original.data and original.data["user_id"] != user_id:
-            sender_name = st.session_state.profile["full_name"]
-            supabase.table("notifications").insert({
-                "user_id": original.data["user_id"],
-                "type": "share",
-                "related_id": original_post_id,
-                "message": f"{sender_name} shared your post",
-                "read": False
-            }).execute()
         st.session_state.posts = load_posts()
         return True
     except Exception as e:
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-def save_post(user_id, post_id):
+# --- Enhanced comment functions ---
+def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
         return False
     try:
-        supabase.table("saved_posts").insert({"user_id": user_id, "post_id": post_id}).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error saving post: {e}"
-        return False
-
-def unsave_post(user_id, post_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("saved_posts").delete().eq("user_id", user_id).eq("post_id", post_id).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error unsaving post: {e}"
-        return False
-
-def follow_user(follower_id, following_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("follows").insert({"follower_id": follower_id, "following_id": following_id}).execute()
-        # Notify
-        follower_name = st.session_state.profile["full_name"]
-        supabase.table("notifications").insert({
-            "user_id": following_id,
-            "type": "follow",
-            "message": f"{follower_name} started following you",
-            "read": False
-        }).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error following user: {e}"
-        return False
-
-def unfollow_user(follower_id, following_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("follows").delete().eq("follower_id", follower_id).eq("following_id", following_id).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error unfollowing user: {e}"
-        return False
-
-def is_following(follower_id, following_id):
-    if supabase is None:
-        return False
-    try:
-        result = supabase.table("follows").select("follower_id").eq("follower_id", follower_id).eq("following_id", following_id).execute()
-        return bool(result.data)
-    except:
-        return False
-
-def load_notifications(user_id):
-    if supabase is None:
-        return []
-    try:
-        notif = supabase.table("notifications").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-        return notif.data
-    except Exception as e:
-        st.session_state.last_error = f"Error loading notifications: {e}"
-        return []
-
-def mark_notification_read(notif_id):
-    if supabase is None:
-        return
-    try:
-        supabase.table("notifications").update({"read": True}).eq("id", notif_id).execute()
-    except Exception as e:
-        st.session_state.last_error = f"Error marking notification read: {e}"
-
-def send_friend_request(sender_id, receiver_id):
-    if supabase is None:
-        return False, "Not logged in"
-    try:
-        # Check if already exists
-        existing = supabase.table("friend_requests").select("id").or_(
-            f"and(sender_id.eq.{sender_id},receiver_id.eq.{receiver_id})",
-            f"and(sender_id.eq.{receiver_id},receiver_id.eq.{sender_id})"
-        ).execute()
-        if existing.data:
-            return False, "Friend request already exists"
-        data = {"sender_id": sender_id, "receiver_id": receiver_id, "status": "pending"}
-        supabase.table("friend_requests").insert(data).execute()
-        # Notify
-        sender_name = st.session_state.profile["full_name"]
-        supabase.table("notifications").insert({
-            "user_id": receiver_id,
-            "type": "friend_request",
-            "message": f"{sender_name} sent you a friend request",
-            "read": False
-        }).execute()
-        return True, "Friend request sent"
-    except Exception as e:
-        return False, str(e)
-
-def respond_friend_request(request_id, accept):
-    if supabase is None:
-        return False, "Not logged in"
-    try:
-        req = supabase.table("friend_requests").select("*").eq("id", request_id).single().execute()
-        if not req.data:
-            return False, "Request not found"
-        new_status = "accepted" if accept else "rejected"
-        supabase.table("friend_requests").update({"status": new_status}).eq("id", request_id).execute()
-        if accept:
-            # Notify sender
-            receiver_name = st.session_state.profile["full_name"]
-            supabase.table("notifications").insert({
-                "user_id": req.data["sender_id"],
-                "type": "friend_accept",
-                "related_id": request_id,
-                "message": f"{receiver_name} accepted your friend request",
-                "read": False
-            }).execute()
-        return True, f"Request {new_status}"
-    except Exception as e:
-        return False, str(e)
-
-def load_friend_data(user_id):
-    if supabase is None:
-        return [], [], []
-    try:
-        # Pending requests received
-        pending = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "pending").execute()
-        # Friends
-        sent = supabase.table("friend_requests").select("*, receiver:receiver_id(full_name, avatar_url)").eq("sender_id", user_id).eq("status", "accepted").execute()
-        received = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "accepted").execute()
-        friends = []
-        for r in sent.data:
-            friends.append({"id": r["receiver"]["id"], "full_name": r["receiver"]["full_name"], "avatar_url": r["receiver"].get("avatar_url")})
-        for r in received.data:
-            friends.append({"id": r["sender"]["id"], "full_name": r["sender"]["full_name"], "avatar_url": r["sender"].get("avatar_url")})
-        return pending.data, friends, []
-    except Exception as e:
-        st.session_state.last_error = f"Error loading friend data: {e}"
-        return [], [], []
-
-def search_users(query, current_user_id):
-    if supabase is None:
-        return []
-    try:
-        result = supabase.table("profiles").select("id, full_name, avatar_url").neq("id", current_user_id).ilike("full_name", f"%{query}%").limit(20).execute()
-        return result.data
-    except Exception as e:
-        st.session_state.last_error = f"Search failed: {e}"
-        return []
-
-def send_message(sender_id, receiver_id, content):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("messages").insert({
-            "sender_id": sender_id,
-            "receiver_id": receiver_id,
-            "content": content,
-            "read": False,
-            "created_at": datetime.now().isoformat()
-        }).execute()
-        # Notify
-        sender_name = st.session_state.profile["full_name"]
-        supabase.table("notifications").insert({
-            "user_id": receiver_id,
-            "type": "message",
-            "message": f"New message from {sender_name}",
-            "read": False
-        }).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error sending message: {e}"
-        return False
-
-def load_messages(user_id, other_id):
-    if supabase is None:
-        return []
-    try:
-        msgs = supabase.table("messages").select("*").or_(
-            f"and(sender_id.eq.{user_id},receiver_id.eq.{other_id})",
-            f"and(sender_id.eq.{other_id},receiver_id.eq.{user_id})"
-        ).order("created_at").execute()
-        # Mark as read
-        supabase.table("messages").update({"read": True}).eq("sender_id", other_id).eq("receiver_id", user_id).execute()
-        return msgs.data
-    except Exception as e:
-        st.session_state.last_error = f"Error loading messages: {e}"
-        return []
-
-def create_group(name, description, created_by, is_public=True):
-    if supabase is None:
-        return None
-    try:
-        group = supabase.table("groups").insert({
-            "name": name,
-            "description": description,
-            "created_by": created_by,
-            "is_public": is_public
-        }).execute()
-        if group.data:
-            # Add creator as admin
-            supabase.table("group_members").insert({
-                "group_id": group.data[0]["id"],
-                "user_id": created_by,
-                "role": "admin"
-            }).execute()
-            return group.data[0]["id"]
-        return None
-    except Exception as e:
-        st.session_state.last_error = f"Error creating group: {e}"
-        return None
-
-def join_group(group_id, user_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("group_members").insert({
-            "group_id": group_id,
+        comment = {
+            "post_id": post_id,
             "user_id": user_id,
-            "role": "member"
-        }).execute()
+            "content": content,
+            "likes": 0,
+            "created_at": datetime.now().isoformat()
+        }
+        if parent_id is not None:
+            comment["parent_id"] = parent_id
+        supabase.table("comments").insert(comment).execute()
         return True
     except Exception as e:
-        st.session_state.last_error = f"Error joining group: {e}"
+        st.session_state.last_error = f"Error adding comment: {e}"
         return False
 
-def load_groups(user_id):
+def load_comments(post_id):
     if supabase is None:
         return []
     try:
-        # Public groups + groups user is member of
-        public = supabase.table("groups").select("*").eq("is_public", True).execute()
-        member = supabase.table("group_members").select("group_id").eq("user_id", user_id).execute()
-        member_ids = [m["group_id"] for m in member.data] if member.data else []
-        private = supabase.table("groups").select("*").in_("id", member_ids).execute() if member_ids else []
-        # Combine and deduplicate
-        groups = {g["id"]: g for g in public.data + private.data}.values()
-        return list(groups)
+        response = supabase.table("comments").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("post_id", post_id).order("created_at").execute()
+        comments = response.data
+        tree = {}
+        for c in comments:
+            pid = c.get("parent_id")
+            if pid not in tree:
+                tree[pid] = []
+            tree[pid].append(c)
+
+        def flatten(parent_id):
+            result = []
+            for c in tree.get(parent_id, []):
+                result.append(c)
+                result.extend(flatten(c["id"]))
+            return result
+
+        return flatten(None)
     except Exception as e:
-        st.session_state.last_error = f"Error loading groups: {e}"
+        st.session_state.last_error = f"Error loading comments: {e}"
         return []
 
-def translate_text(text, dest_lang):
+def delete_comment(comment_id):
+    if supabase is None:
+        return False
     try:
-        translator = GoogleTranslator(source='auto', target=dest_lang)
-        return translator.translate(text)
-    except:
-        return text
+        supabase.table("comments").delete().eq("id", comment_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error deleting comment: {e}"
+        return False
+
+def like_comment(comment_id, increment=True):
+    if supabase is None:
+        return False
+    try:
+        if increment:
+            supabase.rpc("increment_comment_likes", {"comment_id": comment_id}).execute()
+        else:
+            supabase.rpc("decrement_comment_likes", {"comment_id": comment_id}).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error toggling comment like: {e}"
+        return False
+
+# --- Live session functions ---
+def create_live_session(title, platform):
+    if supabase is None or st.session_state.user is None:
+        st.session_state.last_error = "Cannot start live session."
+        return None
+    try:
+        active = supabase.table("live_sessions").select("id").eq("user_id", st.session_state.user.id).eq("is_live", True).execute()
+        if active.data:
+            st.warning("You already have an active live session. End it first.")
+            return None
+
+        stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
+        session_data = {
+            "user_id": st.session_state.user.id,
+            "title": title,
+            "is_live": True,
+            "started_at": datetime.now().isoformat(),
+            "stream_url": None,
+            "platform": platform,
+            "stream_key": stream_key
+        }
+        result = supabase.table("live_sessions").insert(session_data).execute()
+        if result.data:
+            supabase.table("profiles").update({"is_live": True}).eq("id", st.session_state.user.id).execute()
+            st.session_state.profile["is_live"] = True
+            st.session_state.live_sessions = load_live_sessions()
+            st.session_state.stream_key = stream_key
+            st.session_state.selected_platform = platform
+            return result.data[0]["id"]
+        else:
+            st.session_state.last_error = "Failed to start live session."
+            return None
+    except Exception as e:
+        st.session_state.last_error = f"Error starting live session: {e}"
+        return None
+
+def update_live_stream_url(session_id, stream_url):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_sessions").update({
+            "stream_url": stream_url
+        }).eq("id", session_id).execute()
+        st.session_state.live_sessions = load_live_sessions()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error updating stream URL: {e}"
+        return False
+
+def end_live_session(session_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_sessions").update({
+            "is_live": False,
+            "ended_at": datetime.now().isoformat()
+        }).eq("id", session_id).execute()
+        supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
+        st.session_state.profile["is_live"] = False
+        st.session_state.live_sessions = load_live_sessions()
+        st.session_state.stream_key = None
+        st.session_state.selected_platform = None
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error ending live session: {e}"
+        return False
+
+def load_live_sessions():
+    if supabase is None:
+        return []
+    try:
+        response = supabase.table("live_sessions").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("is_live", True).order("started_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.session_state.last_error = f"Error loading live sessions: {e}"
+        return []
+
+def get_live_session(session_id):
+    if supabase is None:
+        return None
+    try:
+        response = supabase.table("live_sessions").select(
+            "*, profiles(full_name, avatar_url)"
+        ).eq("id", session_id).single().execute()
+        return response.data
+    except Exception as e:
+        st.session_state.last_error = f"Error fetching live session: {e}"
+        return None
 
 def get_network_status():
     try:
@@ -819,9 +806,9 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Authentication functions (simplified) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
+        st.session_state.last_error = "Registration unavailable."
         return False
     try:
         user = supabase.auth.sign_up({
@@ -838,381 +825,459 @@ def sign_up_email(email, password, full_name):
 
 def log_in_email(email, password, remember=False):
     if supabase is None:
+        st.session_state.last_error = "Login unavailable."
         return
     try:
-        user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        user = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
         if user.user:
             st.session_state.logged_in = True
             st.session_state.user = user.user
             profile = get_or_create_profile(user.user.id, email)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
-            st.session_state.language = profile.get("language", "en")
             st.session_state.posts = load_posts()
-            pending, friends, _ = load_friend_data(user.user.id)
-            st.session_state.friend_requests = pending
-            st.session_state.friends = friends
-            st.session_state.notifications = load_notifications(user.user.id)
-            st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n["read"])
+            st.session_state.live_sessions = load_live_sessions()
             if remember and user.session:
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
             st.rerun()
     except Exception as e:
         st.session_state.last_error = f"Login failed: {e}"
 
+def reset_password_email(email):
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    try:
+        supabase.auth.reset_password_for_email(email)
+        st.success("Password reset email sent. Please check your inbox.")
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Failed to send reset email: {e}"
+        return False
+
+def format_phone(phone: str) -> str:
+    phone = phone.strip()
+    if not phone.startswith('+'):
+        phone = '+' + phone
+    return phone
+
+def send_phone_otp(raw_phone):
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    try:
+        phone = format_phone(raw_phone)
+        if len(phone) < 8 or not phone[1:].isdigit():
+            st.error("Please enter a valid international phone number with country code, e.g., 50947385663 for Haiti or 447840379 for UK.")
+            return False
+        supabase.auth.sign_in_with_otp({"phone": phone})
+        st.success("OTP sent to your phone. Please enter the 6-digit code below.")
+        return True
+    except Exception as e:
+        error_msg = str(e)
+        if "Phone logins are disabled" in error_msg:
+            st.error("Phone authentication is disabled in Supabase. Please enable it in Authentication → Providers.")
+        else:
+            st.session_state.last_error = f"Failed to send OTP: {error_msg}"
+        return False
+
+def verify_phone_otp(raw_phone, token, remember=False):
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    try:
+        phone = format_phone(raw_phone)
+        session = supabase.auth.verify_otp({
+            "phone": phone,
+            "token": token,
+            "type": "sms"
+        })
+        if session.user:
+            st.session_state.logged_in = True
+            st.session_state.user = session.user
+            profile = get_or_create_profile(session.user.id, phone)
+            st.session_state.profile = profile
+            st.session_state.connection_time = time.time()
+            st.session_state.posts = load_posts()
+            st.session_state.live_sessions = load_live_sessions()
+            st.session_state.phone_otp_sent = False
+            st.session_state.temp_phone = ""
+            if remember and session.session:
+                set_cookie("sb_refresh_token", session.session.refresh_token, 30)
+            st.rerun()
+            return True
+        else:
+            st.session_state.last_error = "Verification failed – no user returned."
+            return False
+    except Exception as e:
+        st.session_state.last_error = f"Verification failed: {e}"
+        return False
+
 def logout():
     set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
+    st.session_state.logged_in = False
+    st.session_state.user = None
+    st.session_state.profile = None
+    st.session_state.owner_space_access = False
+    st.session_state.phone_otp_sent = False
+    st.session_state.temp_phone = ""
+    st.session_state.viewing_live = None
     st.rerun()
 
-# --- Cookie helpers (simplified) ---
-def set_cookie(name, value, days=30):
-    js = f"""
-    <script>
-    function setCookie(name, value, days) {{
-        var expires = "";
-        if (days) {{
-            var date = new Date();
-            date.setTime(date.getTime() + (days*24*60*60*1000));
-            expires = "; expires=" + date.toUTCString();
-        }}
-        document.cookie = name + "=" + (value || "")  + expires + "; path=/";
-    }}
-    setCookie("{name}", "{value}", {days});
-    </script>
-    """
-    st.components.v1.html(js, height=0)
+# --- Live page ---
+def render_live_page(session_id):
+    session = get_live_session(session_id)
+    if not session or not session.get("is_live"):
+        st.error("This live session has ended or does not exist.")
+        if st.button("Back to Feed"):
+            st.session_state.viewing_live = None
+            st.rerun()
+        return
 
-def get_cookie(name):
-    cookie_val = None
-    try:
-        params = st.query_params
-        if f"cookie_{name}" in params:
-            cookie_val = params[f"cookie_{name}"][0]
-    except:
-        pass
-    return cookie_val
+    st.header(f"🔴 LIVE: {session['title']}")
+    col1, col2 = st.columns([2, 1])
 
-def inject_cookie_reader():
-    js = """
-    <script>
-    function getCookie(name) {
-        var nameEQ = name + "=";
-        var ca = document.cookie.split(';');
-        for(var i=0;i < ca.length;i++) {
-            var c = ca[i];
-            while (c.charAt(0)==' ') c = c.substring(1,c.length);
-            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
-        }
-        return null;
-    }
-    var refreshToken = getCookie("sb_refresh_token");
-    if (refreshToken) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('cookie_sb_refresh_token', refreshToken);
-        window.history.replaceState({}, '', url);
-    }
-    </script>
-    """
-    st.components.v1.html(js, height=0)
+    with col1:
+        stream_url = session.get("stream_url")
+        platform = session.get("platform")
+        is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
 
-# --- Pages ---
+        if is_broadcaster:
+            with st.expander("📹 Set Stream URL", expanded=not stream_url):
+                with st.form("update_stream_url"):
+                    new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
+                    if st.form_submit_button("Update Stream URL"):
+                        if new_url:
+                            if update_live_stream_url(session_id, new_url):
+                                st.success("Stream URL updated! Refreshing...")
+                                st.rerun()
+                        else:
+                            st.warning("Please enter a URL")
+
+        if stream_url:
+            if "facebook.com" in stream_url:
+                embed_code = f"""
+                <div id="fb-root"></div>
+                <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
+                <div class="fb-video" data-href="{stream_url}" 
+                     data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
+                """
+                st.components.v1.html(embed_code, height=450)
+            elif "youtube.com" in stream_url or "youtu.be" in stream_url:
+                if "youtu.be" in stream_url:
+                    video_id = stream_url.split("/")[-1].split("?")[0]
+                elif "watch?v=" in stream_url:
+                    video_id = stream_url.split("v=")[-1].split("&")[0]
+                else:
+                    video_id = None
+                if video_id:
+                    embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
+                    st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                else:
+                    st.video(stream_url)
+            elif "twitch.tv" in stream_url:
+                channel = stream_url.split("/")[-1]
+                embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
+                st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
+            else:
+                st.video(stream_url)
+        else:
+            st.info("The streamer has not provided a video URL yet. Please wait.")
+            st.markdown("""
+            <div style="background: #000; border-radius: 10px; padding: 20px; text-align: center; color: white;">
+                <h3>📡 Awaiting Stream URL</h3>
+                <p>The streamer will provide a link shortly.</p>
+                <div style="font-size: 4rem; margin: 20px;">⏳</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        try:
+            base_url = st.request.url.split('?')[0]
+        except:
+            base_url = "https://globalinternetpy.streamlit.app"
+        share_url = f"{base_url}?live={session_id}"
+        st.text_input("Shareable link", value=share_url, key=f"share_{session_id}")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("📋 Copy Link", key=f"copy_{session_id}"):
+                st.info("Link copied to clipboard!")
+        with col_b:
+            subject = f"Join me live on GLOBALINTERNET.PY: {session['title']}"
+            body = f"Join the live session: {share_url}"
+            mailto = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
+            st.markdown(f'<a href="{mailto}" target="_blank"><button style="background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%); color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600;">📧 Share via Email</button></a>', unsafe_allow_html=True)
+
+    with col2:
+        st.subheader("Live Chat")
+        if st.button("🔄 Refresh Chat", key=f"refresh_{session_id}"):
+            st.rerun()
+
+        with st.form(f"new_comment_{session_id}", clear_on_submit=True):
+            msg = st.text_input("Write a comment...")
+            if st.form_submit_button("Send"):
+                if msg:
+                    if add_comment(session_id, st.session_state.user.id, msg):
+                        st.rerun()
+
+        comments = load_comments(session_id)
+        for c in comments:
+            indent = "comment-indent" if c.get("parent_id") else ""
+            st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+            cols = st.columns([4, 1, 1])
+            with cols[0]:
+                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+            with cols[1]:
+                if st.button(f"👍 {c.get('likes', 0)}", key=f"like_{c['id']}"):
+                    like_comment(c['id'], increment=True)
+                    st.rerun()
+            with cols[2]:
+                if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                    if st.button("🗑️", key=f"del_{c['id']}"):
+                        delete_comment(c['id'])
+                        st.rerun()
+            if st.button(f"💬 Reply", key=f"reply_{c['id']}"):
+                st.session_state[f"replying_to_{c['id']}"] = True
+                st.rerun()
+            if st.session_state.get(f"replying_to_{c['id']}", False):
+                with st.form(f"reply_form_{c['id']}"):
+                    reply = st.text_input("Your reply")
+                    if st.form_submit_button("Post Reply"):
+                        if reply:
+                            add_comment(session_id, st.session_state.user.id, reply, parent_id=c['id'])
+                            del st.session_state[f"replying_to_{c['id']}"]
+                            st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Feed ---
 def render_feed():
-    st.header("🌐 " + t("feed"))
+    st.header("🌐 Collaboration Feed")
+
     if st.session_state.last_error:
-        st.error(st.session_state.last_error)
+        st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
         if st.button("Clear error"):
             st.session_state.last_error = None
             st.rerun()
 
-    # Post composer
-    with st.expander(t("create_post"), expanded=True):
-        with st.form("new_post"):
-            content = st.text_area(t("whats_on_mind"), height=100)
-            media_files = st.file_uploader("Add images/videos", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
-            visibility = st.radio("Visibility", [t("public"), t("private")], horizontal=True, index=0)
-            is_public = (visibility == t("public"))
-            if st.form_submit_button(t("post")):
-                if content or media_files:
-                    create_post(st.session_state.user.id, content, media_files, is_public)
-                    st.rerun()
-                else:
-                    st.warning("Please add content or media.")
+    try:
+        params = st.query_params
+    except AttributeError:
+        params = st.experimental_get_query_params()
 
-    # Live sessions
-    if st.session_state.live_sessions:
-        st.markdown("### " + t("live_now"))
-        for live in st.session_state.live_sessions:
-            cols = st.columns([1,4,1])
-            with cols[0]:
-                if live["profiles"]["avatar_url"]:
-                    st.image(live["profiles"]["avatar_url"], width=40)
-                else:
-                    st.markdown("👤")
-            with cols[1]:
-                st.markdown(f"**{live['profiles']['full_name']}**: {live['title']}")
-            with cols[2]:
-                if st.button(t("join_live"), key=f"join_{live['id']}"):
-                    st.session_state.viewing_live = live["id"]
-                    st.rerun()
-            st.divider()
+    if "live" in params and params["live"]:
+        try:
+            live_val = params["live"][0] if isinstance(params["live"], list) else params["live"]
+            session_id = int(live_val)
+            st.session_state.viewing_live = session_id
+        except:
+            pass
 
-    # Posts
-    for post in st.session_state.posts:
-        with st.container():
-            cols = st.columns([1,5,2,1])
-            with cols[0]:
-                if post["profiles"]["avatar_url"]:
-                    st.image(post["profiles"]["avatar_url"], width=40)
-                else:
-                    st.markdown("👤")
-            with cols[1]:
-                st.markdown(f"**{post['profiles']['full_name']}**")
-                if not post["is_public"]:
-                    st.markdown(f"<span class='private-badge'>{t('private')}</span>", unsafe_allow_html=True)
-            with cols[2]:
-                st.caption(post["created_at"][:16])
-            with cols[3]:
-                if st.session_state.user and post["user_id"] == st.session_state.user.id:
-                    if st.button("🗑️", key=f"del_{post['id']}"):
-                        st.session_state.delete_confirm = (post["id"], post["content"][:30])
-                        st.rerun()
+    if st.session_state.viewing_live:
+        render_live_page(st.session_state.viewing_live)
+        return
 
-            if post["content"]:
-                # Translate if needed
-                display_content = post["content"]
-                if st.session_state.language != "en":
-                    display_content = translate_text(post["content"], st.session_state.language)
-                st.markdown(f"<div class='post-card'>{display_content}</div>", unsafe_allow_html=True)
+    # --- Post composer ---
+    st.markdown("### Create a post")
+    with st.form("new_post", clear_on_submit=True):
+        col_avatar, col_input = st.columns([1, 8])
+        with col_avatar:
+            if st.session_state.profile and st.session_state.profile.get("avatar_url"):
+                st.image(st.session_state.profile["avatar_url"], width=50)
+            else:
+                st.markdown("👤", unsafe_allow_html=True)
+        with col_input:
+            content = st.text_area(
+                "What's on your mind?",
+                height=100,
+                placeholder="Share your thoughts, ideas, or media...",
+                label_visibility="collapsed"
+            )
 
-            # Media
-            for media in post.get("media_urls", []):
-                if media["type"] == "image":
-                    st.image(media["url"], use_column_width=True)
-                elif media["type"] == "video":
-                    st.video(media["url"])
+        if MEDIA_URLS_EXISTS:
+            media_files = st.file_uploader(
+                "Add images or videos (optional)",
+                type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+                accept_multiple_files=True,
+                help="You can select multiple files. Max 200MB per file."
+            )
+        else:
+            media_files = None
+            st.info("📹 Media uploads are temporarily disabled (database setup required). You can still post text.")
 
-            # Actions
-            col1, col2, col3, col4, col5, col6 = st.columns(6)
-            with col1:
-                if st.button(f"👍 {post.get('likes_count',0)}", key=f"like_{post['id']}"):
-                    toggle_reaction(post["id"], st.session_state.user.id, "👍")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
+            is_public = (visibility == "Public")
+        with col3:
+            posted = st.form_submit_button("🚀 Post", use_container_width=True)
+
+        if posted:
+            if not content and not (MEDIA_URLS_EXISTS and media_files):
+                st.warning("Please add a caption or media.")
+            else:
+                if create_post(st.session_state.user.id, content, media_files if MEDIA_URLS_EXISTS else [], is_public):
                     st.rerun()
-            with col2:
-                if st.button(f"💬 {post.get('comment_count',0)}", key=f"comment_{post['id']}"):
-                    st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
-                    st.rerun()
-            with col3:
-                if st.button(t("share"), key=f"share_{post['id']}"):
-                    share_post(post["id"], st.session_state.user.id)
-                    st.rerun()
-            with col4:
-                if post.get("saved", False):
-                    if st.button("📌 " + t("saved"), key=f"unsave_{post['id']}"):
-                        unsave_post(st.session_state.user.id, post["id"])
-                        st.rerun()
-                else:
-                    if st.button(t("save"), key=f"save_{post['id']}"):
-                        save_post(st.session_state.user.id, post["id"])
-                        st.rerun()
-            with col5:
-                if post["user_id"] != st.session_state.user.id:
-                    if is_following(st.session_state.user.id, post["user_id"]):
-                        if st.button(t("unfollow"), key=f"unfollow_{post['user_id']}"):
-                            unfollow_user(st.session_state.user.id, post["user_id"])
-                            st.rerun()
+    st.divider()
+
+    # --- Live sessions banner ---
+    active_lives = st.session_state.live_sessions
+    if active_lives:
+        st.markdown("### 🔴 Live Now")
+        for live in active_lives:
+            with st.container():
+                col_a, col_b = st.columns([1,4])
+                with col_a:
+                    if live["profiles"]["avatar_url"]:
+                        st.image(live["profiles"]["avatar_url"], width=40)
                     else:
-                        if st.button(t("follow"), key=f"follow_{post['user_id']}"):
-                            follow_user(st.session_state.user.id, post["user_id"])
-                            st.rerun()
-            with col6:
-                if post["user_id"] != st.session_state.user.id:
-                    if st.button("🚩", key=f"report_{post['id']}"):
-                        st.session_state[f"report_{post['id']}"] = True
+                        st.markdown("👤")
+                with col_b:
+                    st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
+                    if st.button(f"Join Live", key=f"join_{live['id']}"):
+                        st.session_state.viewing_live = live["id"]
                         st.rerun()
-
-            # Comments section
-            if st.session_state.get(f"show_comments_{post['id']}", False):
-                st.markdown("#### " + t("comments"))
-                with st.form(f"new_comment_{post['id']}", clear_on_submit=True):
-                    comment = st.text_input(t("write_comment"))
-                    if st.form_submit_button(t("send")):
-                        if comment:
-                            add_comment(post["id"], st.session_state.user.id, comment)
-                            st.rerun()
-                comments = load_comments(post["id"])
-                for c in comments:
-                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}  \n*{c['created_at'][:16]}*")
                 st.divider()
 
-    # Delete confirmation
+    st.divider()
+
+    # --- Delete confirmation ---
     if st.session_state.delete_confirm:
-        post_id, _ = st.session_state.delete_confirm
-        st.warning("Are you sure you want to delete this post?")
+        post_id, post_preview = st.session_state.delete_confirm
+        st.warning(f"Are you sure you want to delete this post?")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes, delete"):
-                delete_post(post_id)
-                st.session_state.posts = load_posts()
+                if delete_post(post_id):
+                    st.success("Post deleted.")
+                    st.session_state.posts = load_posts()
                 st.session_state.delete_confirm = None
                 st.rerun()
         with col2:
             if st.button("Cancel"):
                 st.session_state.delete_confirm = None
                 st.rerun()
+        st.divider()
 
-def render_friends_page():
-    st.header("👥 " + t("friends"))
-    
-    # Notifications
-    with st.expander(f"🔔 {t('notifications')} ({st.session_state.unread_count} unread)", expanded=True):
-        if not st.session_state.notifications:
-            st.info(t("no_notifications"))
-        else:
-            for n in st.session_state.notifications:
-                cols = st.columns([5,1])
-                with cols[0]:
-                    st.markdown(f"**{n['message']}**  \n*{n['created_at'][:16]}*")
-                with cols[1]:
-                    if not n['read']:
-                        if st.button("✓", key=f"read_{n['id']}"):
-                            mark_notification_read(n['id'])
-                            st.session_state.notifications = load_notifications(st.session_state.user.id)
-                            st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+    # --- Display posts ---
+    if not st.session_state.posts:
+        st.info("No posts yet. Be the first to create one!")
+    else:
+        for post in st.session_state.posts:
+            with st.container():
+                col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
+                with col_a:
+                    avatar = post.get("profiles", {}).get("avatar_url")
+                    if avatar:
+                        st.image(avatar, width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    name = post['profiles']['full_name']
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**{name}**")
+                    if not post.get("is_public", True):
+                        st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                with col_c:
+                    st.caption(post['created_at'][:16])
+                with col_d:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("🗑️", key=f"del_post_{post['id']}"):
+                            st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
+
+                if post['content']:
+                    st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+
+                # Reactions
+                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                cols = st.columns(len(emojis) + 2)
+                for i, emoji in enumerate(emojis):
+                    with cols[i]:
+                        count = post.get("reactions", {}).get(emoji, 0)
+                        btn_label = f"{emoji} {count}" if count > 0 else emoji
+                        if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
+                            toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                            st.rerun()
+
+                with cols[len(emojis)]:
+                    if st.button(f"💬 {len(load_comments(post['id']))}", key=f"comment_btn_{post['id']}"):
+                        st.session_state[f"show_comments_{post['id']}"] = not st.session_state.get(f"show_comments_{post['id']}", False)
+                        st.rerun()
+                with cols[len(emojis)+1]:
+                    if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                        share_post(post['id'], st.session_state.user.id, is_public=True)
+                        st.rerun()
+
+                if st.session_state.get(f"show_comments_{post['id']}", False):
+                    st.markdown("#### Comments")
+                    with st.form(f"new_comment_post_{post['id']}", clear_on_submit=True):
+                        msg = st.text_input("Write a comment...")
+                        if st.form_submit_button("Post Comment"):
+                            if msg:
+                                if add_comment(post['id'], st.session_state.user.id, msg):
+                                    st.rerun()
+                    comments = load_comments(post['id'])
+                    for c in comments:
+                        indent = "comment-indent" if c.get("parent_id") else ""
+                        st.markdown(f"<div class='{indent}'>", unsafe_allow_html=True)
+                        col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                        with col1:
+                            st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                            st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with col2:
+                            if st.button(f"👍 {c.get('likes', 0)}", key=f"like_post_{c['id']}"):
+                                like_comment(c['id'], increment=True)
+                                st.rerun()
+                        with col3:
+                            if st.button(f"💬 Reply", key=f"reply_post_{c['id']}"):
+                                st.session_state[f"replying_to_post_{c['id']}"] = True
+                                st.rerun()
+                        with col4:
+                            if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_post_{c['id']}"):
+                                    delete_comment(c['id'])
+                                    st.rerun()
+                        if st.session_state.get(f"replying_to_post_{c['id']}", False):
+                            with st.form(f"reply_form_post_{c['id']}"):
+                                reply = st.text_input("Your reply")
+                                if st.form_submit_button("Post Reply"):
+                                    if reply:
+                                        add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                        del st.session_state[f"replying_to_post_{c['id']}"]
+                                        st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-    # Pending friend requests
-    st.subheader("📨 " + t("friend_request") + " " + t("received"))
-    if not st.session_state.friend_requests:
-        st.info("No pending requests")
-    else:
-        for req in st.session_state.friend_requests:
-            cols = st.columns([2,1,1])
-            with cols[0]:
-                st.markdown(f"**{req['sender']['full_name']}**")
-            with cols[1]:
-                if st.button(t("accept"), key=f"accept_{req['id']}"):
-                    success, msg = respond_friend_request(req['id'], True)
-                    if success:
-                        pending, friends, _ = load_friend_data(st.session_state.user.id)
-                        st.session_state.friend_requests = pending
-                        st.session_state.friends = friends
-                        st.rerun()
-                    else:
-                        st.error(msg)
-            with cols[2]:
-                if st.button(t("reject"), key=f"reject_{req['id']}"):
-                    success, msg = respond_friend_request(req['id'], False)
-                    if success:
-                        pending, friends, _ = load_friend_data(st.session_state.user.id)
-                        st.session_state.friend_requests = pending
-                        st.rerun()
-                    else:
-                        st.error(msg)
-            st.divider()
-
-    # Search users
-    st.subheader("🔍 " + t("search_users"))
-    query = st.text_input("")
-    if query:
-        results = search_users(query, st.session_state.user.id)
-        if results:
-            for user in results:
-                cols = st.columns([3,1,1])
-                with cols[0]:
-                    st.markdown(f"**{user['full_name']}**")
-                with cols[1]:
-                    if st.button(t("friend_request"), key=f"req_{user['id']}"):
-                        success, msg = send_friend_request(st.session_state.user.id, user['id'])
-                        if success:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
-                with cols[2]:
-                    if st.button(t("message"), key=f"msg_{user['id']}"):
-                        st.session_state.selected_chat = user['id']
-                        st.rerun()
-                st.divider()
-
-    # Friends list
-    st.subheader("👥 " + t("friends"))
-    if not st.session_state.friends:
-        st.info("You have no friends yet")
-    else:
-        for friend in st.session_state.friends:
-            cols = st.columns([1,4,1])
-            with cols[0]:
-                if friend.get('avatar_url'):
-                    st.image(friend['avatar_url'], width=30)
-                else:
-                    st.markdown("👤")
-            with cols[1]:
-                st.markdown(f"**{friend['full_name']}**")
-            with cols[2]:
-                if st.button(t("message"), key=f"msg_f_{friend['id']}"):
-                    st.session_state.selected_chat = friend['id']
-                    st.rerun()
-            st.divider()
-
-    # Messaging
-    if st.session_state.selected_chat:
-        st.subheader("💬 " + t("message"))
-        other_id = st.session_state.selected_chat
-        # Get other user's name
-        other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
-        other_name = other.data["full_name"] if other.data else "User"
-        st.write(f"Chat with **{other_name}**")
-        messages = load_messages(st.session_state.user.id, other_id)
-        for msg in messages:
-            if msg["sender_id"] == st.session_state.user.id:
-                st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
-        with st.form("send_message"):
-            msg_content = st.text_input("Type a message...")
-            if st.form_submit_button(t("send")):
-                if msg_content:
-                    send_message(st.session_state.user.id, other_id, msg_content)
-                    st.rerun()
-        if st.button("Close chat"):
-            st.session_state.selected_chat = None
-            st.rerun()
-
-def render_map():
-    st.header("🛰️ " + t("map"))
-    # Sample satellite positions
-    sats = {
-        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
-        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
-        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
-        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
-    }
-    # Create map
-    m = folium.Map(location=[20, 0], zoom_start=2)
-    for name, data in sats.items():
-        folium.Marker(
-            [data["lat"], data["lon"]],
-            popup=f"{name}: {data['status']}",
-            icon=folium.Icon(color="red" if data["status"]=="Priority" else "blue")
-        ).add_to(m)
-    folium_static(m)
-
+# --- Profile, Map, Owner Space ---
 def render_profile():
-    st.header("👤 " + t("profile"))
+    st.header("👤 My Profile")
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
 
-    col1, col2 = st.columns([1,2])
+    col1, col2 = st.columns([1, 2])
     with col1:
         if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=200)
+            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
         else:
-            st.image("https://via.placeholder.com/200", width=200)
+            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
+        st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
         uploaded = st.file_uploader("📸 Change picture", type=["png","jpg","jpeg"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
@@ -1220,18 +1285,19 @@ def render_profile():
                 profile["avatar_url"] = url
                 update_profile(profile)
                 st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         with st.form("edit_profile"):
-            full_name = st.text_input(t("full_name"), value=profile.get("full_name", ""))
+            st.markdown("#### Account Information")
+            full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
             bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
             location = st.text_input("Location", value=profile.get("location", ""))
-            lang = st.selectbox(t("language"), ["en", "fr", "es", "ht"], index=["en","fr","es","ht"].index(profile.get("language","en")))
-            if st.form_submit_button("💾 Save"):
-                profile.update({"full_name": full_name, "bio": bio, "location": location, "language": lang})
+            st.markdown("---")
+            if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                profile.update({"full_name": full_name, "bio": bio, "location": location})
                 if update_profile(profile):
-                    st.session_state.language = lang
-                    st.success("Profile updated!")
+                    st.success("Profile updated successfully!")
                     st.rerun()
 
     st.divider()
@@ -1239,17 +1305,36 @@ def render_profile():
     with cola:
         st.metric("Posts", len(st.session_state.posts))
     with colb:
-        st.metric("Friends", len(st.session_state.friends))
+        st.metric("Connections", profile.get("connections", 0))
     with colc:
-        st.metric("Followers", 0)  # placeholder
+        st.metric("Verified", "✅" if profile.get("verified", False) else "❌")
     with cold:
-        st.metric("Following", 0)  # placeholder
+        st.metric("Member since", profile.get("join_date", "2024")[:10])
+
+def render_map():
+    st.header("🛰️ Satellite Network")
+    sats = {
+        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
+        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
+        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
+        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
+    }
+    df = pd.DataFrame([
+        {"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]}
+        for name, data in sats.items()
+    ])
+    st.dataframe(df, use_container_width=True)
+    st.divider()
+    cols = st.columns(4)
+    for i, (name, data) in enumerate(sats.items()):
+        with cols[i % 4]:
+            st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
 def owner_space():
-    st.header("🕊️ " + t("owner"))
+    st.header("🕊️ Owner Space (Private)")
     if not st.session_state.owner_space_access:
-        with st.form("owner_login"):
-            pwd = st.text_input("Password", type="password")
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
             if st.form_submit_button("Access"):
                 if pwd == OWNSPACE_PASSWORD:
                     st.session_state.owner_space_access = True
@@ -1258,27 +1343,88 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    st.subheader("🔐 Owner Dashboard")
-    st.write(f"CIN: {OWNER_CIN}")
-    st.write(f"MonCash: {MONCASH_NUM}")
+    st.subheader("🔐 Owner's Dashboard")
+    duration = time.time() - st.session_state.connection_time
+    st.session_state.data_comp = duration * 0.035
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Compensation", f"${st.session_state.data_comp:.4f}")
+    with col2:
+        st.metric("Uptime", get_uptime())
+    with col3:
+        st.metric("Network Users", np.random.randint(100, 500))
+    st.divider()
+    st.subheader("💰 Withdraw Funds")
+    method = st.selectbox("Method", ["MonCash", "Bank Transfer", "Crypto"])
+    amount = st.number_input("Amount ($)", 0.0, float(st.session_state.data_comp))
+    if st.button("🚀 Transfer", use_container_width=True):
+        if amount > 0:
+            st.balloons()
+            st.success(f"Transferred ${amount:.2f} via {method}")
+            st.session_state.data_comp -= amount
+    st.divider()
+
+    st.markdown("### 🔑 Your Private Credentials")
+    st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
+    st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
+    st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}`")
+
     if st.button("Logout from Owner Space"):
         st.session_state.owner_space_access = False
         st.rerun()
 
 def main_app():
     with st.sidebar:
-        st.markdown("<div class='haiti-symbol'>🌍</div>", unsafe_allow_html=True)
-        st.markdown("<div class='owner-name'>GlobalInternational</div>", unsafe_allow_html=True)
+        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='collaborators'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes<br>
+            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
+        </div>
+        """, unsafe_allow_html=True)
         st.divider()
 
-        if st.session_state.unread_count > 0:
-            st.sidebar.markdown(f"🔔 **{t('notifications')}** <span class='notification-badge'>{st.session_state.unread_count}</span>", unsafe_allow_html=True)
+        if st.session_state.profile and st.session_state.profile.get("is_live"):
+            st.markdown("🔴 **You are live!**")
+            if st.button("End Live Session"):
+                for ls in st.session_state.live_sessions:
+                    if ls["user_id"] == st.session_state.user.id:
+                        end_live_session(ls["id"])
+                        st.rerun()
+                        break
+        else:
+            with st.expander("Go Live (Real Streaming)"):
+                st.markdown("**Choose your platform:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("📺 YouTube", key="yt"):
+                        st.session_state.selected_platform = "YouTube"
+                with col2:
+                    if st.button("📘 Facebook", key="fb"):
+                        st.session_state.selected_platform = "Facebook"
+                with col3:
+                    if st.button("🎮 Twitch", key="tw"):
+                        st.session_state.selected_platform = "Twitch"
 
-        # Language selector
-        lang = st.selectbox(t("language"), ["en", "fr", "es", "ht"], index=["en","fr","es","ht"].index(st.session_state.language))
-        if lang != st.session_state.language:
-            st.session_state.language = lang
-            st.rerun()
+                if st.session_state.selected_platform:
+                    platform = st.session_state.selected_platform
+                    st.markdown(f"**Selected: {platform}**")
+                    with st.form("go_live_form"):
+                        title = st.text_input("Live title")
+                        if st.form_submit_button("Create Live Session"):
+                            if title:
+                                session_id = create_live_session(title, platform)
+                                if session_id:
+                                    st.success("Live session created! You are now live.")
+                                    st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
+                                    st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a title")
+
+        st.divider()
 
         lat, sig, qual = get_network_status()
         st.markdown("### 🛡️ System Health")
@@ -1287,81 +1433,105 @@ def main_app():
         📡 Signal: {sig}<br>
         ⏱️ Latency: {lat}ms<br>
         📊 Quality: {qual}%<br>
-        ⏰ Uptime: {get_uptime()}
+        ⏰ Uptime: {get_uptime()}<br>
+        🔒 Status: ENCRYPTED
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-
+        st.markdown(f"💰 **Compensation:** ${st.session_state.data_comp:.4f}")
+        st.divider()
         if st.session_state.profile:
-            st.markdown(f"👤 **{st.session_state.profile.get('full_name', 'User')}**")
-        if st.button("🚪 " + t("logout")):
+            st.markdown(f"👤 **Logged in as:** {st.session_state.profile.get('full_name', 'User')}")
+        if st.button("🚪 Logout"):
             logout()
         st.divider()
 
         pages = {
-            t("feed"): render_feed,
-            t("friends"): render_friends_page,
-            t("map"): render_map,
-            t("profile"): render_profile,
-            t("owner"): owner_space
+            "📡 Feed": render_feed,
+            "🛰️ Satellite Map": render_map,
+            "👤 Profile": render_profile,
+            "🕊️ Owner Space": owner_space
         }
-        choice = st.selectbox(t("menu"), list(pages.keys()))
+        choice = st.selectbox("Menu", list(pages.keys()))
     pages[choice]()
 
 def login_interface():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.markdown("<h1 style='text-align:center;'>GlobalInternational</h1>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center;'><span class='haiti-symbol' style='font-size:6rem;'>🇭🇹</span></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #0a2a44;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name' style='font-size:1.8rem;'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='collaborators' style='font-size:1rem;'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes · Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown("---")
 
-        auth_method = st.radio("Method", ["Email"], horizontal=True)
+        auth_method = st.radio("Choose method", ["Email", "Phone (OTP)"], horizontal=True)
+
         if auth_method == "Email":
-            tab1, tab2 = st.tabs([t("login"), t("signup")])
+            tab1, tab2, tab3 = st.tabs(["🔑 Login", "📝 Sign Up", "🔐 Forgot Password"])
             with tab1:
-                with st.form("login"):
-                    email = st.text_input(t("email"))
-                    password = st.text_input(t("password"), type="password")
-                    remember = st.checkbox(t("remember_me"))
-                    if st.form_submit_button(t("login")):
+                with st.form("login_email"):
+                    email = st.text_input("Email")
+                    password = st.text_input("Password", type="password")
+                    remember = st.checkbox("Remember me (stay logged in)")
+                    if st.form_submit_button("🚀 Login", use_container_width=True):
                         if email and password:
                             log_in_email(email, password, remember)
                         else:
-                            st.warning("Enter email and password")
+                            st.warning("Please enter email and password")
             with tab2:
-                with st.form("signup"):
-                    full_name = st.text_input(t("full_name"))
-                    email = st.text_input(t("email"))
-                    password = st.text_input(t("password"), type="password")
-                    if st.form_submit_button(t("signup")):
+                with st.form("signup_email"):
+                    full_name = st.text_input("Full Name")
+                    email = st.text_input("Email")
+                    password = st.text_input("Password", type="password")
+                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
                         if full_name and email and password:
                             sign_up_email(email, password, full_name)
                         else:
-                            st.warning("Fill all fields")
+                            st.warning("Please fill all fields")
+            with tab3:
+                with st.form("reset_email"):
+                    reset_email = st.text_input("Enter your email address")
+                    if st.form_submit_button("Send Reset Link", use_container_width=True):
+                        if reset_email:
+                            reset_password_email(reset_email)
+                        else:
+                            st.warning("Please enter your email")
+        else:
+            st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
+            if not st.session_state.phone_otp_sent:
+                with st.form("phone_request"):
+                    phone = st.text_input("Phone number (digits only, e.g., 50947385663)")
+                    remember = st.checkbox("Remember me (stay logged in)")
+                    if st.form_submit_button("📲 Send OTP", use_container_width=True):
+                        if phone:
+                            if send_phone_otp(phone):
+                                st.session_state.phone_otp_sent = True
+                                st.session_state.temp_phone = phone
+                                st.session_state.phone_remember = remember
+                                st.rerun()
+                        else:
+                            st.warning("Please enter a phone number")
+            else:
+                st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
+                with st.form("phone_verify"):
+                    otp = st.text_input("Enter 6-digit OTP code")
+                    if st.form_submit_button("✅ Verify & Login", use_container_width=True):
+                        if otp:
+                            remember = st.session_state.get("phone_remember", False)
+                            verify_phone_otp(st.session_state.temp_phone, otp, remember)
+                        else:
+                            st.warning("Please enter the OTP")
+                if st.button("← Back / Resend OTP"):
+                    st.session_state.phone_otp_sent = False
+                    st.session_state.temp_phone = ""
+                    st.rerun()
 
 if __name__ == "__main__":
-    # Inject cookie reader
-    if not st.session_state.logged_in:
-        inject_cookie_reader()
-        refresh_token = get_cookie("sb_refresh_token")
-        if refresh_token and supabase:
-            try:
-                user = supabase.auth.get_user(refresh_token)
-                if user.user:
-                    st.session_state.logged_in = True
-                    st.session_state.user = user.user
-                    profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
-                    st.session_state.profile = profile
-                    st.session_state.connection_time = time.time()
-                    st.session_state.language = profile.get("language", "en")
-                    st.session_state.posts = load_posts()
-                    pending, friends, _ = load_friend_data(user.user.id)
-                    st.session_state.friend_requests = pending
-                    st.session_state.friends = friends
-                    st.session_state.notifications = load_notifications(user.user.id)
-                    st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n["read"])
-            except Exception as e:
-                st.session_state.last_error = str(e)
-
     if not st.session_state.logged_in:
         login_interface()
     else:
