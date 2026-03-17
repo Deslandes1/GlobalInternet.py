@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 46.0.0 (Robust joins with !inner)
+Version: 47.0.0 (Explicit foreign keys to resolve ambiguity)
 """
 import streamlit as st
 
@@ -473,15 +473,15 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (using !inner to avoid ambiguous relationship) ---
+# --- Post functions (using explicit foreign key) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None):
     """Load posts (cached for 60 seconds)."""
     if supabase is None:
         return []
     try:
-        # Use !inner to force join via primary key
-        select_cols = "*, profiles!inner(full_name, avatar_url, is_live)"
+        # Explicitly specify the foreign key to resolve ambiguity
+        select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
         if user_id:
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
@@ -595,7 +595,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions (with !inner) ---
+# --- Comment functions (with explicit foreign key) ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -622,9 +622,9 @@ def load_comments(post_id):
     if supabase is None:
         return []
     try:
-        # Use !inner for comments -> profiles
+        # Explicit foreign key for comments -> profiles
         response = supabase.table("comments").select(
-            "*, profiles!inner(full_name, avatar_url)"
+            "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         return response.data
     except Exception as e:
@@ -654,7 +654,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (with !inner) ---
+# --- Live session functions (with explicit foreign key) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -726,7 +726,7 @@ def load_live_sessions():
         return []
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!inner(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
         ).eq("is_live", True).order("started_at", desc=True).execute()
         return response.data
     except Exception as e:
@@ -738,7 +738,7 @@ def get_live_session(session_id):
         return None
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!inner(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
         ).eq("id", session_id).single().execute()
         return response.data
     except Exception as e:
