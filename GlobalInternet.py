@@ -3,18 +3,17 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 50.0.0 (Caption under media + full features)
+Version: 51.0.0 (OwnerSpace New User Notifications + Email)
 """
 import streamlit as st
-
-st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
-
+import smtplib
+from email.message import EmailMessage
 import pandas as pd
 import numpy as np
 import time
 import socket
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from supabase import create_client, Client
 import io
@@ -52,6 +51,14 @@ OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
 MONCASH_MODE = st.secrets.get("MONCASH_MODE", "live")
+
+# Optional email settings
+SMTP_SERVER = st.secrets.get("SMTP_SERVER")
+SMTP_PORT = st.secrets.get("SMTP_PORT")
+SMTP_USERNAME = st.secrets.get("SMTP_USERNAME")
+SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
+EMAIL_FROM = st.secrets.get("EMAIL_FROM")
+EMAIL_TO = st.secrets.get("EMAIL_TO")
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
@@ -404,7 +411,8 @@ def get_or_create_profile(user_id, identifier):
                 "avatar_url": None,
                 "bio": "",
                 "location": "",
-                "is_live": False
+                "is_live": False,
+                "created_at": datetime.now().isoformat()
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -1050,6 +1058,74 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
+# ========== NEW FUNCTIONS FOR OWNER NOTIFICATIONS ==========
+
+def get_last_seen_signup():
+    """Retrieve the last seen signup timestamp from owner_state table."""
+    if supabase is None:
+        return datetime(2020, 1, 1)
+    try:
+        resp = supabase.table("owner_state").select("last_seen_signup").eq("id", 1).execute()
+        if resp.data:
+            return datetime.fromisoformat(resp.data[0]["last_seen_signup"].replace('Z', '+00:00'))
+        else:
+            # Insert default
+            supabase.table("owner_state").insert({"id": 1, "last_seen_signup": datetime.now().isoformat()}).execute()
+            return datetime.now() - timedelta(days=365)
+    except Exception as e:
+        st.session_state.last_error = f"Error getting last seen signup: {e}"
+        return datetime(2020, 1, 1)
+
+def update_last_seen_signup():
+    """Update the last seen signup timestamp to now."""
+    if supabase is None:
+        return
+    try:
+        supabase.table("owner_state").update({"last_seen_signup": datetime.now().isoformat()}).eq("id", 1).execute()
+    except Exception as e:
+        st.session_state.last_error = f"Error updating last seen signup: {e}"
+
+def get_new_users(since):
+    """Fetch profiles created after `since` timestamp."""
+    if supabase is None:
+        return []
+    try:
+        # Need to convert since to string in ISO format
+        since_str = since.isoformat()
+        resp = supabase.table("profiles").select("id, full_name, avatar_url, created_at").gt("created_at", since_str).order("created_at").execute()
+        return resp.data
+    except Exception as e:
+        st.session_state.last_error = f"Error fetching new users: {e}"
+        return []
+
+def send_email_notification(new_users):
+    """Send an email with the list of new users."""
+    if not all([SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO]):
+        return  # email not configured
+
+    if not new_users:
+        return
+
+    subject = f"New User Signups - {len(new_users)} new user(s)"
+    body = "The following users have signed up since your last visit:\n\n"
+    for u in new_users:
+        created = u.get('created_at', '')[:16] if u.get('created_at') else ''
+        body += f"- {u['full_name']} (ID: {u['id']}) at {created}\n"
+
+    try:
+        msg = EmailMessage()
+        msg.set_content(body)
+        msg['Subject'] = subject
+        msg['From'] = EMAIL_FROM
+        msg['To'] = EMAIL_TO
+
+        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT)) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+    except Exception as e:
+        st.session_state.last_error = f"Email send failed: {e}"
+
 # ========== PAGE RENDERING FUNCTIONS ==========
 
 def render_live_page(session_id):
@@ -1165,7 +1241,7 @@ def render_feed():
         with col_input:
             content = st.text_area(
                 "Caption / What's on your mind?",
-                height=150,  # increased height for longer captions
+                height=150,
                 placeholder="Write a caption for your post...",
                 label_visibility="collapsed"
             )
@@ -1563,7 +1639,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== OWNER SPACE (with Moderation Tab) ==========
+# ========== UPDATED OWNER SPACE (with New User Notifications) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -1579,8 +1655,17 @@ def owner_space():
                     st.error("Invalid password")
         return
 
+    # Get last seen signup and fetch new users
+    last_seen = get_last_seen_signup()
+    new_users = get_new_users(last_seen)
+
+    # If there are new users, send email (if configured) and update last seen
+    if new_users:
+        send_email_notification(new_users)
+        update_last_seen_signup()
+
     # --- Tabs for different sections ---
-    tab1, tab2, tab3 = st.tabs(["💰 Dashboard", "🛡️ User Post Moderation", "📥 Client Payments"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💰 Dashboard", "📈 New Users", "🛡️ User Post Moderation", "📥 Client Payments"])
 
     # ========== TAB 1: DASHBOARD ==========
     with tab1:
@@ -1653,14 +1738,32 @@ def owner_space():
         else:
             st.info("To enable real transfers, set up your backend and configure the secrets.")
 
-    # ========== TAB 2: USER POST MODERATION ==========
+    # ========== TAB 2: NEW USERS ==========
     with tab2:
+        st.subheader("📈 New User Signups")
+        st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
+
+        if new_users:
+            # Display as a table
+            data = []
+            for u in new_users:
+                data.append({
+                    "Full Name": u.get('full_name', 'N/A'),
+                    "User ID": u['id'],
+                    "Signed Up": u.get('created_at', '')[:16] if u.get('created_at') else ''
+                })
+            df = pd.DataFrame(data)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No new users since last check.")
+
+    # ========== TAB 3: USER POST MODERATION ==========
+    with tab3:
         st.subheader("🛡️ User Post Moderation")
         st.markdown("Review all posts (public & private) and take action if needed.")
 
         # --- Load all posts with user info ---
         try:
-            # Use explicit foreign key to avoid ambiguity
             posts = supabase.table("posts").select(
                 "*, profiles!posts_user_id_fkey(full_name, avatar_url, id)"
             ).order("created_at", desc=True).execute()
@@ -1672,7 +1775,6 @@ def owner_space():
         if not all_posts:
             st.info("No posts found.")
         else:
-            # --- Use session state to track which post is being warned ---
             if "warn_post_id" not in st.session_state:
                 st.session_state.warn_post_id = None
 
@@ -1699,7 +1801,6 @@ def owner_space():
                             st.session_state.warn_post_id = post['id']
                             st.rerun()
 
-                    # If this post is selected for warning, show the message input
                     if st.session_state.warn_post_id == post['id']:
                         with st.form(key=f"warn_form_{post['id']}"):
                             default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
@@ -1707,15 +1808,13 @@ def owner_space():
                             col1, col2 = st.columns(2)
                             with col1:
                                 if st.form_submit_button("Send Warning"):
-                                    # Send private message to the post author
                                     success = send_message(
-                                        st.session_state.user.id,  # owner's user id
+                                        st.session_state.user.id,
                                         post['user_id'],
                                         f"[MODERATION] {warn_msg}"
                                     )
                                     if success:
                                         st.success("Warning sent to user.")
-                                        # Optionally delete the post as well
                                         if delete_post(post['id']):
                                             st.info("Post also deleted.")
                                         st.session_state.warn_post_id = None
@@ -1728,8 +1827,8 @@ def owner_space():
                                     st.rerun()
                     st.divider()
 
-    # ========== TAB 3: CLIENT PAYMENT INSTRUCTIONS ==========
-    with tab3:
+    # ========== TAB 4: CLIENT PAYMENT INSTRUCTIONS ==========
+    with tab4:
         st.subheader("📥 How Clients Can Pay You")
         st.markdown("""
         **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
@@ -1748,7 +1847,7 @@ def owner_space():
 
     st.divider()
 
-    # --- Your Contact Info (appears at bottom of all tabs) ---
+    # --- Your Contact Info ---
     st.markdown("### 📬 Contact for Support / Large Payments")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
 
