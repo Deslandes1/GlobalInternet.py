@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 35.0.0 (Optimised + Full Interactivity)
+Version: 36.0.0 (Optimised + Full Interactivity + Fixed Video Size)
 """
 import streamlit as st
 
@@ -82,8 +82,10 @@ if "last_error" not in st.session_state:
     st.session_state.last_error = None
 if "show_comments" not in st.session_state:
     st.session_state.show_comments = {}  # dict post_id -> bool
+if "replying_to" not in st.session_state:
+    st.session_state.replying_to = {}    # dict comment_id -> bool
 
-# --- Cookie helpers (unchanged) ---
+# --- Cookie helpers ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -152,7 +154,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (original Haitian flag theme) ---
+# --- UI styling (Haitian flag + video size fix) ---
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] {
@@ -294,6 +296,23 @@ st.markdown("""
         font-family: monospace;
         white-space: pre-wrap;
     }
+    /* Fix video size */
+    video {
+        max-width: 100%;
+        max-height: 60vh;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 12px;
+    }
+    img {
+        max-width: 100%;
+        max-height: 60vh;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 12px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -398,7 +417,7 @@ def load_posts_cached(user_id=None):
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
-            # Remove duplicates (in case a post is both public and private? shouldn't happen)
+            # Remove duplicates
             seen = set()
             unique_posts = []
             for p in posts:
@@ -414,7 +433,6 @@ def load_posts_cached(user_id=None):
         # Add reactions
         for post in posts:
             post["media_urls"] = post.get("media_urls", [])
-            # Fetch reactions for this post
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -457,7 +475,6 @@ def create_post(user_id, content, media_files, is_public):
         }
         result = supabase.table("posts").insert(post).execute()
         if result.data:
-            # Clear cache
             st.cache_data.clear()
             st.session_state.posts = load_posts()
             st.success("✅ Post published!")
@@ -482,7 +499,6 @@ def toggle_reaction(post_id, user_id, emoji):
                 "user_id": user_id,
                 "emoji": emoji
             }).execute()
-        # Clear cache and reload
         st.cache_data.clear()
         st.session_state.posts = load_posts()
         return True
@@ -495,7 +511,6 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = "Supabase not configured."
         return False
     try:
-        # Call increment_shares function
         supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
         post = {
             "user_id": user_id,
@@ -515,6 +530,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
+# --- Comment functions with full interactivity ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -530,8 +546,6 @@ def add_comment(post_id, user_id, content, parent_id=None):
         if parent_id:
             comment["parent_id"] = parent_id
         supabase.table("comments").insert(comment).execute()
-        # No need to clear all cache, but update comment count in session posts?
-        # For simplicity, we'll reload posts to update comment count
         st.cache_data.clear()
         st.session_state.posts = load_posts()
         return True
@@ -546,9 +560,7 @@ def load_comments(post_id):
         response = supabase.table("comments").select(
             "*, profiles(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
-        comments = response.data
-        # Build threaded tree (optional)
-        return comments
+        return response.data
     except Exception as e:
         st.session_state.last_error = f"Error loading comments: {e}"
         return []
@@ -889,7 +901,7 @@ def render_live_page(session_id):
         for c in comments:
             st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
 
-# --- Feed with interactive features ---
+# --- Feed with interactive comments ---
 def render_feed():
     st.header("🌐 Collaboration Feed")
 
@@ -930,7 +942,6 @@ def render_feed():
                 placeholder="Share your thoughts, ideas, or media...",
                 label_visibility="collapsed"
             )
-        # Check if media_urls column exists (simplified: assume it exists if bucket ok)
         media_files = st.file_uploader(
             "Add images or videos (optional)",
             type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
@@ -995,6 +1006,7 @@ def render_feed():
     else:
         for post in st.session_state.posts:
             with st.container():
+                # Post header
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
                 with col_a:
                     avatar = post.get("profiles", {}).get("avatar_url")
@@ -1018,6 +1030,7 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
+                # Post content
                 if post['content']:
                     st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
@@ -1039,7 +1052,6 @@ def render_feed():
                         btn_label = f"{emoji} {count}" if count > 0 else emoji
                         if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
                             toggle_reaction(post['id'], st.session_state.user.id, emoji)
-                            # Force refresh by rerunning (cache cleared in toggle)
                             st.rerun()
 
                 with cols[len(emojis)]:
@@ -1051,21 +1063,76 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comments section
+                # Comments section (fully interactive)
                 if st.session_state.show_comments.get(post['id'], False):
                     st.markdown("#### Comments")
+                    # New comment form
                     with st.form(f"new_comment_{post['id']}", clear_on_submit=True):
                         msg = st.text_input("Write a comment...")
                         if st.form_submit_button("Post Comment"):
                             if msg:
                                 add_comment(post['id'], st.session_state.user.id, msg)
                                 st.rerun()
-                    comments = load_comments(post['id'])
-                    for c in comments:
-                        st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}  \n*{c['created_at'][:16]}*")
-                st.divider()
 
-# --- Profile, Map, Owner Space (unchanged, but ensure OwnerSpace uses secrets) ---
+                    # Load and display comments
+                    comments = load_comments(post['id'])
+                    # Build comment tree (simple: all top-level, replies indented)
+                    top_level = [c for c in comments if not c.get('parent_id')]
+                    replies = {c['id']: [r for r in comments if r.get('parent_id') == c['id']] for c in comments}
+
+                    for c in top_level:
+                        # Top-level comment
+                        col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                        with col1:
+                            st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                            st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with col2:
+                            if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
+                                like_comment(c['id'], increment=True)
+                                st.rerun()
+                        with col3:
+                            if st.button("💬 Reply", key=f"reply_{c['id']}"):
+                                st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
+                                st.rerun()
+                        with col4:
+                            if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_comment_{c['id']}"):
+                                    delete_comment(c['id'])
+                                    st.rerun()
+
+                        # Reply form
+                        if st.session_state.replying_to.get(c['id'], False):
+                            with st.form(f"reply_form_{c['id']}"):
+                                reply = st.text_input("Your reply")
+                                if st.form_submit_button("Post Reply"):
+                                    if reply:
+                                        add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                        st.session_state.replying_to[c['id']] = False
+                                        st.rerun()
+
+                        # Show replies
+                        for r in replies.get(c['id'], []):
+                            st.markdown(f"<div class='comment-indent'>", unsafe_allow_html=True)
+                            colr1, colr2, colr3, colr4 = st.columns([4, 1, 1, 1])
+                            with colr1:
+                                st.markdown(f"**{r['profiles']['full_name']}**: {r['content']}")
+                                st.markdown(f"<span class='comment-meta'>{r['created_at'][:16]}</span>", unsafe_allow_html=True)
+                            with colr2:
+                                if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
+                                    like_comment(r['id'], increment=True)
+                                    st.rerun()
+                            with colr3:
+                                # Reply to reply (optional, could add deeper nesting)
+                                pass
+                            with colr4:
+                                if st.session_state.user and r['user_id'] == st.session_state.user.id:
+                                    if st.button("🗑️", key=f"del_comment_{r['id']}"):
+                                        delete_comment(r['id'])
+                                        st.rerun()
+                            st.markdown("</div>", unsafe_allow_html=True)
+                    st.divider()
+
+# --- Profile, Map, Owner Space ---
 def render_profile():
     st.header("👤 My Profile")
     if st.session_state.profile is None:
