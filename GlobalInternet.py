@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 51.0.0 (OwnerSpace New User Notifications + Email)
+Version: 52.0.0 (Fixed new users with join_date)
 """
 import streamlit as st
 import smtplib
@@ -411,8 +411,8 @@ def get_or_create_profile(user_id, identifier):
                 "avatar_url": None,
                 "bio": "",
                 "location": "",
-                "is_live": False,
-                "created_at": datetime.now().isoformat()
+                "is_live": False
+                # join_date will be set by DEFAULT NOW()
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -1058,7 +1058,7 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
-# ========== NEW FUNCTIONS FOR OWNER NOTIFICATIONS ==========
+# ========== NEW FUNCTIONS FOR OWNER NOTIFICATIONS (FIXED) ==========
 
 def get_last_seen_signup():
     """Retrieve the last seen signup timestamp from owner_state table."""
@@ -1085,14 +1085,14 @@ def update_last_seen_signup():
     except Exception as e:
         st.session_state.last_error = f"Error updating last seen signup: {e}"
 
+# --- FIXED: use join_date instead of created_at ---
 def get_new_users(since):
     """Fetch profiles created after `since` timestamp."""
     if supabase is None:
         return []
     try:
-        # Need to convert since to string in ISO format
         since_str = since.isoformat()
-        resp = supabase.table("profiles").select("id, full_name, avatar_url, created_at").gt("created_at", since_str).order("created_at").execute()
+        resp = supabase.table("profiles").select("id, full_name, avatar_url, join_date").gt("join_date", since_str).order("join_date").execute()
         return resp.data
     except Exception as e:
         st.session_state.last_error = f"Error fetching new users: {e}"
@@ -1109,8 +1109,8 @@ def send_email_notification(new_users):
     subject = f"New User Signups - {len(new_users)} new user(s)"
     body = "The following users have signed up since your last visit:\n\n"
     for u in new_users:
-        created = u.get('created_at', '')[:16] if u.get('created_at') else ''
-        body += f"- {u['full_name']} (ID: {u['id']}) at {created}\n"
+        joined = u.get('join_date', '')[:16] if u.get('join_date') else ''
+        body += f"- {u['full_name']} (ID: {u['id']}) at {joined}\n"
 
     try:
         msg = EmailMessage()
@@ -1639,7 +1639,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== UPDATED OWNER SPACE (with New User Notifications) ==========
+# ========== UPDATED OWNER SPACE (with join_date fix) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -1744,13 +1744,13 @@ def owner_space():
         st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
 
         if new_users:
-            # Display as a table
+            # Display as a table (using join_date)
             data = []
             for u in new_users:
                 data.append({
                     "Full Name": u.get('full_name', 'N/A'),
                     "User ID": u['id'],
-                    "Signed Up": u.get('created_at', '')[:16] if u.get('created_at') else ''
+                    "Signed Up": u.get('join_date', '')[:16] if u.get('join_date') else ''
                 })
             df = pd.DataFrame(data)
             st.dataframe(df, use_container_width=True)
