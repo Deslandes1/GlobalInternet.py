@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 47.0.0 (Explicit foreign keys to resolve ambiguity)
+Version: 48.0.0 (Real‑Money Owner Space + Full Features)
 """
 import streamlit as st
 
@@ -480,7 +480,6 @@ def load_posts_cached(user_id=None):
     if supabase is None:
         return []
     try:
-        # Explicitly specify the foreign key to resolve ambiguity
         select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
         if user_id:
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
@@ -622,7 +621,6 @@ def load_comments(post_id):
     if supabase is None:
         return []
     try:
-        # Explicit foreign key for comments -> profiles
         response = supabase.table("comments").select(
             "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
@@ -897,7 +895,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Friend, Chat, Call functions (unchanged) ---
+# --- Friend, Chat, Call functions ---
 def load_notifications(user_id):
     if supabase is None:
         return []
@@ -1104,6 +1102,10 @@ def render_live_page(session_id):
                     st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
                 else:
                     st.video(stream_url)
+            elif "twitch.tv" in stream_url:
+                channel = stream_url.split("/")[-1]
+                embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
+                st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
             else:
                 st.video(stream_url)
         else:
@@ -1561,8 +1563,11 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
+# ========== UPDATED OWNER SPACE (Real Money) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
+    
+    # --- Login check ---
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
@@ -1574,32 +1579,102 @@ def owner_space():
                     st.error("Invalid password")
         return
 
+    # --- Real balance from backend ---
     st.subheader("🔐 Owner's Dashboard")
-    duration = time.time() - st.session_state.connection_time
-    st.session_state.data_comp = duration * 0.035
+
+    # Try to fetch real balance
+    real_balance = None
+    if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
+        try:
+            headers = {"X-API-Key": BACKEND_API_KEY}
+            resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                real_balance = data.get("balance", 0.0)
+            else:
+                st.warning("Could not fetch real balance from backend.")
+        except Exception as e:
+            st.warning(f"Backend unreachable: {e}")
+    else:
+        st.info("Backend not configured. Showing simulated data for now.")
+
+    # Display balance
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Compensation", f"${st.session_state.data_comp:.4f}")
+        if real_balance is not None:
+            st.metric("MonCash Business Balance", f"${real_balance:,.2f}")
+        else:
+            # Fallback to simulated compensation
+            duration = time.time() - st.session_state.connection_time
+            st.session_state.data_comp = duration * 0.035
+            st.metric("Compensation (simulated)", f"${st.session_state.data_comp:.4f}")
     with col2:
         st.metric("Uptime", get_uptime())
     with col3:
         st.metric("Network Users", np.random.randint(100, 500))
-    st.divider()
-    st.subheader("💰 Withdraw Funds")
-    method = st.selectbox("Method", ["MonCash", "Bank Transfer", "Crypto"])
-    amount = st.number_input("Amount ($)", 0.0, float(st.session_state.data_comp))
-    if st.button("🚀 Transfer", use_container_width=True):
-        if amount > 0:
-            st.balloons()
-            st.success(f"Transferred ${amount:.2f} via {method}")
-            st.session_state.data_comp -= amount
+
     st.divider()
 
-    st.markdown("### 🔑 Your Private Credentials")
-    st.markdown(f"- **CIN Number:** `{OWNER_CIN}`")
-    st.markdown(f"- **MonCash Business:** `{MONCASH_NUM}`")
-    st.markdown(f"- **UNIBANK US Money Account:** `{UNIBANK_ACCOUNT}`")
-    st.markdown(f"- **OwnerSpace Password:** `{OWNSPACE_PASSWORD}`")
+    # --- Withdrawal / Transfer Section ---
+    st.subheader("💰 Transfer Funds to Your Account")
+    st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
+    st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
+
+    if real_balance is not None:
+        amount = st.number_input(
+            "Amount to transfer ($)",
+            min_value=1.0,
+            max_value=float(real_balance),
+            value=min(10.0, float(real_balance)),
+            step=10.0,
+            format="%.2f"
+        )
+        if st.button("🚀 Transfer to My MonCash", use_container_width=True):
+            if amount <= 0:
+                st.error("Enter a valid amount.")
+            else:
+                with st.spinner("Processing transfer..."):
+                    try:
+                        headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+                        payload = {
+                            "amount": amount,
+                            "recipient_phone": MONCASH_NUM  # your personal number
+                        }
+                        resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
+                        else:
+                            st.error(f"Transfer failed: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+    else:
+        st.info("To enable real transfers, set up your backend and configure the secrets.")
+
+    st.divider()
+
+    # --- Client Payment Instructions ---
+    st.subheader("📥 How Clients Can Pay You")
+    st.markdown("""
+    **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
+    Clients can send money directly to your MonCash personal number:  
+    `+50947385663`  
+    *(They must use the MonCash app or a MonCash agent.)*
+
+    **Option 2 – US Bank Transfer (for any amount)**  
+    For international clients, you can receive USD via bank transfer to your UNIBANK account:  
+    `105-2016-16594727`  
+    *(Provide them with your bank name: UNIBANK, Haiti.)*
+
+    **Option 3 – Request a payment link**  
+    For larger amounts, contact the development team to generate a secure payment link.
+    """)
+
+    st.divider()
+
+    # --- Your Contact Info ---
+    st.markdown("### 📬 Contact for Support / Large Payments")
+    st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
 
     if st.button("Logout from Owner Space"):
         st.session_state.owner_space_access = False
