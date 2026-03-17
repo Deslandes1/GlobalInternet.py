@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 45.0.0 (Complete with UNIBANK account display)
+Version: 46.0.0 (Robust joins with !inner)
 """
 import streamlit as st
 
@@ -177,7 +177,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (Haitian flag + fixed contrast) ---
+# --- UI styling (unchanged) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -473,15 +473,15 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (with explicit foreign keys to avoid ambiguity) ---
+# --- Post functions (using !inner to avoid ambiguous relationship) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None):
     """Load posts (cached for 60 seconds)."""
     if supabase is None:
         return []
     try:
-        # Explicitly specify the foreign key to avoid ambiguity
-        select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
+        # Use !inner to force join via primary key
+        select_cols = "*, profiles!inner(full_name, avatar_url, is_live)"
         if user_id:
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
@@ -595,7 +595,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions (with explicit foreign keys) ---
+# --- Comment functions (with !inner) ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -622,9 +622,9 @@ def load_comments(post_id):
     if supabase is None:
         return []
     try:
-        # Explicit foreign key for comments -> profiles
+        # Use !inner for comments -> profiles
         response = supabase.table("comments").select(
-            "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
+            "*, profiles!inner(full_name, avatar_url)"
         ).eq("post_id", post_id).order("created_at").execute()
         return response.data
     except Exception as e:
@@ -654,7 +654,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (with explicit foreign keys) ---
+# --- Live session functions (with !inner) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -726,7 +726,7 @@ def load_live_sessions():
         return []
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
+            "*, profiles!inner(full_name, avatar_url)"
         ).eq("is_live", True).order("started_at", desc=True).execute()
         return response.data
     except Exception as e:
@@ -738,7 +738,7 @@ def get_live_session(session_id):
         return None
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
+            "*, profiles!inner(full_name, avatar_url)"
         ).eq("id", session_id).single().execute()
         return response.data
     except Exception as e:
@@ -897,7 +897,7 @@ def logout():
     st.session_state.viewing_live = None
     st.rerun()
 
-# --- Friend, Chat, Call functions ---
+# --- Friend, Chat, Call functions (unchanged) ---
 def load_notifications(user_id):
     if supabase is None:
         return []
