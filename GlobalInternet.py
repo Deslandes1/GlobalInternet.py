@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 71.0.0 (Live Monetization: Gifts with MonCash/Natcash integration)
+Version: 72.0.0 (In-app Camera Live Streaming with WebRTC)
 """
 import streamlit as st
 import smtplib
@@ -583,28 +583,18 @@ def delete_post(post_id):
 
 # --- Exchange rate fetching ---
 def fetch_exchange_rate():
-    """Fetch USD to HTG exchange rate."""
     try:
         resp = requests.get(EXCHANGE_RATE_API, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            # Assuming API returns rates in data['rates']['HTG']
             if 'rates' in data and 'HTG' in data['rates']:
                 return float(data['rates']['HTG'])
-        # Fallback to hardcoded if API fails
         return 100.0
     except:
         return 100.0
 
 # --- Live gift functions ---
 def send_gift(session_id, sender_id, recipient_id, amount, currency):
-    """
-    Process a gift:
-    - Convert to HTG using current exchange rate.
-    - Insert into live_gifts table with status 'pending'.
-    - Simulate payment processing (real integration would call MonCash API).
-    - Update status to 'completed' on success.
-    """
     if supabase is None:
         return False, "Supabase not configured"
     try:
@@ -612,7 +602,7 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
         if currency == "USD":
             amount_htg = amount * rate
         else:
-            amount_htg = amount  # assume already HTG
+            amount_htg = amount
 
         gift_data = {
             "session_id": session_id,
@@ -630,14 +620,10 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
 
         gift_id = result.data[0]["id"]
 
-        # Simulate payment processing (replace with real MonCash API call)
-        # For simulation, we always succeed.
-        # In production, call MonCash API to transfer from sender to platform account,
-        # then platform later pays out to streamer.
+        # Simulate payment processing
         payment_success = True
         if payment_success:
             supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
-            # Add a notification to recipient
             sender_name = st.session_state.profile["full_name"]
             supabase.table("notifications").insert({
                 "user_id": recipient_id,
@@ -849,8 +835,8 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (updated) ---
-def create_live_session(title, platform):
+# --- Live session functions (updated for in-app camera) ---
+def create_live_session(title, platform, method='external'):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
         return None
@@ -860,15 +846,16 @@ def create_live_session(title, platform):
             st.warning("You already have an active live session. End it first.")
             return None
 
-        stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20))
+        stream_key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=20)) if method == 'external' else None
         session_data = {
             "user_id": st.session_state.user.id,
             "title": title,
             "is_live": True,
             "started_at": datetime.now().isoformat(),
             "stream_url": None,
-            "platform": platform,
-            "stream_key": stream_key
+            "platform": platform if method == 'external' else 'inapp',
+            "stream_key": stream_key,
+            "stream_method": method
         }
         result = supabase.table("live_sessions").insert(session_data).execute()
         if result.data:
@@ -876,7 +863,7 @@ def create_live_session(title, platform):
             st.session_state.profile["is_live"] = True
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.stream_key = stream_key
-            st.session_state.selected_platform = platform
+            st.session_state.selected_platform = platform if method == 'external' else 'inapp'
             return result.data[0]["id"]
         else:
             st.session_state.last_error = "Failed to start live session."
@@ -1336,54 +1323,188 @@ def render_live_page(session_id):
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
 
-    # Load gifts for this session
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        stream_url = session.get("stream_url")
-        platform = session.get("platform")
-        if is_broadcaster:
-            with st.expander("📹 Set Stream URL", expanded=not stream_url):
-                with st.form("update_stream_url"):
-                    new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
-                    if st.form_submit_button("Update Stream URL"):
-                        if new_url:
-                            if update_live_stream_url(session_id, new_url):
-                                st.success("Stream URL updated! Refreshing...")
-                                st.rerun()
-                        else:
-                            st.warning("Please enter a URL")
-        if stream_url:
-            if "facebook.com" in stream_url:
-                embed_code = f"""
-                <div id="fb-root"></div>
-                <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-                <div class="fb-video" data-href="{stream_url}" 
-                     data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
-                """
-                st.components.v1.html(embed_code, height=450)
-            elif "youtube.com" in stream_url or "youtu.be" in stream_url:
-                if "youtu.be" in stream_url:
-                    video_id = stream_url.split("/")[-1].split("?")[0]
-                elif "watch?v=" in stream_url:
-                    video_id = stream_url.split("v=")[-1].split("&")[0]
-                else:
-                    video_id = None
-                if video_id:
-                    embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                    st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+        stream_method = session.get("stream_method", "external")
+        if stream_method == "external":
+            # Existing external streaming
+            stream_url = session.get("stream_url")
+            platform = session.get("platform")
+            if is_broadcaster:
+                with st.expander("📹 Set Stream URL", expanded=not stream_url):
+                    with st.form("update_stream_url"):
+                        new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
+                        if st.form_submit_button("Update Stream URL"):
+                            if new_url:
+                                if update_live_stream_url(session_id, new_url):
+                                    st.success("Stream URL updated! Refreshing...")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a URL")
+            if stream_url:
+                if "facebook.com" in stream_url:
+                    embed_code = f"""
+                    <div id="fb-root"></div>
+                    <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
+                    <div class="fb-video" data-href="{stream_url}" 
+                         data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
+                    """
+                    st.components.v1.html(embed_code, height=450)
+                elif "youtube.com" in stream_url or "youtu.be" in stream_url:
+                    if "youtu.be" in stream_url:
+                        video_id = stream_url.split("/")[-1].split("?")[0]
+                    elif "watch?v=" in stream_url:
+                        video_id = stream_url.split("v=")[-1].split("&")[0]
+                    else:
+                        video_id = None
+                    if video_id:
+                        embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                    else:
+                        st.video(stream_url)
+                elif "twitch.tv" in stream_url:
+                    channel = stream_url.split("/")[-1]
+                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
+                    st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
                 else:
                     st.video(stream_url)
-            elif "twitch.tv" in stream_url:
-                channel = stream_url.split("/")[-1]
-                embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
-                st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
             else:
-                st.video(stream_url)
-        else:
-            st.info("The streamer has not provided a video URL yet.")
+                st.info("The streamer has not provided a video URL yet.")
+        else:  # in-app streaming
+            if is_broadcaster:
+                st.markdown("### 🎥 Start Broadcasting")
+                # Include PeerJS broadcaster HTML
+                broadcaster_html = f"""
+                <div id="video-container" style="width: 100%; max-width: 800px; margin: 0 auto;">
+                    <video id="localVideo" autoplay muted style="width: 100%; border-radius: 12px; background: #000;"></video>
+                    <div style="margin-top: 10px;">
+                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer;">Start Broadcast</button>
+                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer; display: none;">Stop Broadcast</button>
+                    </div>
+                    <p id="status"></p>
+                </div>
+                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                <script>
+                (function() {{
+                    const sessionId = {session_id};
+                    const userId = "{st.session_state.user.id}";
+                    let localStream = null;
+                    let peer = null;
+                    let call = null;
+                    const startBtn = document.getElementById('startBtn');
+                    const stopBtn = document.getElementById('stopBtn');
+                    const statusEl = document.getElementById('status');
+                    const localVideo = document.getElementById('localVideo');
+
+                    startBtn.onclick = async () => {{
+                        try {{
+                            statusEl.textContent = 'Requesting camera access...';
+                            localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
+                            localVideo.srcObject = localStream;
+                            statusEl.textContent = 'Camera access granted. Connecting to peer server...';
+
+                            peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
+                                host: '0.peerjs.com',
+                                port: 443,
+                                secure: true,
+                                config: {{
+                                    'iceServers': [
+                                        {{ urls: 'stun:stun.l.google.com:19302' }},
+                                        {{ urls: 'stun:stun1.l.google.com:19302' }}
+                                    ]
+                                }}
+                            }});
+
+                            peer.on('open', (id) => {{
+                                statusEl.textContent = `Broadcasting with ID: ${{id}}`;
+                                startBtn.style.display = 'none';
+                                stopBtn.style.display = 'inline-block';
+                            }});
+
+                            peer.on('call', (incomingCall) => {{
+                                incomingCall.answer(localStream);
+                                call = incomingCall;
+                            }});
+
+                            peer.on('error', (err) => {{
+                                statusEl.textContent = 'Peer error: ' + err;
+                            }});
+                        }} catch (err) {{
+                            statusEl.textContent = 'Error: ' + err.message;
+                        }}
+                    }};
+
+                    stopBtn.onclick = () => {{
+                        if (call) call.close();
+                        if (peer) peer.destroy();
+                        if (localStream) localStream.getTracks().forEach(track => track.stop());
+                        localVideo.srcObject = null;
+                        startBtn.style.display = 'inline-block';
+                        stopBtn.style.display = 'none';
+                        statusEl.textContent = 'Broadcast ended';
+                    }};
+                }})();
+                </script>
+                """
+                st.components.v1.html(broadcaster_html, height=550)
+            else:
+                # Viewer: show remote video
+                viewer_html = f"""
+                <div id="video-container" style="width: 100%; max-width: 800px; margin: 0 auto;">
+                    <video id="remoteVideo" autoplay style="width: 100%; border-radius: 12px; background: #000;"></video>
+                    <div style="margin-top: 10px;">
+                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer;">Watch Stream</button>
+                    </div>
+                    <p id="status"></p>
+                </div>
+                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                <script>
+                (function() {{
+                    const sessionId = {session_id};
+                    const remoteVideo = document.getElementById('remoteVideo');
+                    const watchBtn = document.getElementById('watchBtn');
+                    const statusEl = document.getElementById('status');
+                    let peer = null;
+
+                    watchBtn.onclick = () => {{
+                        statusEl.textContent = 'Connecting to broadcaster...';
+                        peer = new Peer({{ 
+                            host: '0.peerjs.com',
+                            port: 443,
+                            secure: true,
+                            config: {{
+                                'iceServers': [
+                                    {{ urls: 'stun:stun.l.google.com:19302' }},
+                                    {{ urls: 'stun:stun1.l.google.com:19302' }}
+                                ]
+                            }}
+                        }});
+
+                        peer.on('open', (id) => {{
+                            statusEl.textContent = 'Connected. Requesting stream...';
+                            const call = peer.call(`broadcaster-${{sessionId}}`, null);
+                            call.on('stream', (remoteStream) => {{
+                                remoteVideo.srcObject = remoteStream;
+                                statusEl.textContent = 'Now watching live stream';
+                                watchBtn.style.display = 'none';
+                            }});
+                            call.on('error', (err) => {{
+                                statusEl.textContent = 'Call error: ' + err;
+                            }});
+                        }});
+
+                        peer.on('error', (err) => {{
+                            statusEl.textContent = 'Peer error: ' + err;
+                        }});
+                    }};
+                }})();
+                </script>
+                """
+                st.components.v1.html(viewer_html, height=400)
+
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -1394,7 +1515,6 @@ def render_live_page(session_id):
     with col2:
         st.subheader("Live Chat & Gifts")
         if not is_broadcaster:
-            # Gift sending section
             st.markdown("### 🎁 Send a Gift")
             if not st.session_state.profile.get("moncash_phone"):
                 st.info("Add your MonCash phone number in your profile to send gifts.")
@@ -1420,13 +1540,11 @@ def render_live_page(session_id):
                             )
                             if success:
                                 st.success(msg)
-                                # Refresh gifts
                                 st.session_state.live_gifts = load_gifts_for_session(session_id)
                                 st.rerun()
                             else:
                                 st.error(msg)
 
-        # Show total gifts for broadcaster
         if is_broadcaster:
             st.metric("Total Gifts Received", f"{total_gifts_htg:.0f} HTG")
             if session["profiles"]["moncash_phone"]:
@@ -1434,7 +1552,6 @@ def render_live_page(session_id):
             else:
                 st.warning("Add your MonCash phone number in your profile to receive gifts.")
 
-        # Live chat and gift notifications
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
             msg = st.text_input("Write a comment...")
             if st.form_submit_button("Send"):
@@ -1442,7 +1559,6 @@ def render_live_page(session_id):
                     add_comment(session_id, st.session_state.user.id, msg)
                     st.rerun()
 
-        # Display comments and gifts interleaved
         comments = load_comments(session_id)
         all_events = []
         for c in comments:
@@ -2082,11 +2198,6 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-    # Show gift history (for broadcaster)
-    if profile.get("is_live"):
-        # Optionally show gifts from current session
-        pass
-
 # ========== OWNER SPACE (updated with gift management) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
@@ -2347,30 +2458,42 @@ def main_app():
                         break
         else:
             with st.expander("Go Live (Real Streaming)"):
-                st.markdown("**Choose your platform:**")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("📺 YouTube", key="yt"):
-                        st.session_state.selected_platform = "YouTube"
-                with col2:
-                    if st.button("📘 Facebook", key="fb"):
-                        st.session_state.selected_platform = "Facebook"
-                with col3:
-                    if st.button("🎮 Twitch", key="tw"):
-                        st.session_state.selected_platform = "Twitch"
+                st.markdown("**Choose your method:**")
+                method = st.radio("Streaming method", ["External platform (YouTube/Facebook/Twitch)", "In-app camera"], index=0)
+                platform = None
+                if method == "External platform (YouTube/Facebook/Twitch)":
+                    st.markdown("**Select platform:**")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("📺 YouTube", key="yt"):
+                            platform = "YouTube"
+                    with col2:
+                        if st.button("📘 Facebook", key="fb"):
+                            platform = "Facebook"
+                    with col3:
+                        if st.button("🎮 Twitch", key="tw"):
+                            platform = "Twitch"
+                else:
+                    platform = "inapp"
 
-                if st.session_state.selected_platform:
-                    platform = st.session_state.selected_platform
-                    st.markdown(f"**Selected: {platform}**")
+                if platform:
+                    st.markdown(f"**Selected: {platform if platform != 'inapp' else 'In-app Camera'}**")
                     with st.form("go_live_form"):
                         title = st.text_input("Live title")
                         if st.form_submit_button("Create Live Session"):
                             if title:
-                                session_id = create_live_session(title, platform)
+                                session_id = create_live_session(
+                                    title, 
+                                    platform, 
+                                    method='external' if platform != 'inapp' else 'inapp'
+                                )
                                 if session_id:
-                                    st.success("Live session created! You are now live.")
-                                    st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
-                                    st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
+                                    if platform == 'inapp':
+                                        st.success("Live session created! You are now live. Use the in-app controls to start broadcasting.")
+                                    else:
+                                        st.success("Live session created! You are now live.")
+                                        st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
+                                        st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
                                     st.rerun()
                             else:
                                 st.warning("Please enter a title")
