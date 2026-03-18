@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 61.0.0 (Final – fixed keep‑alive order)
+Version: 62.0.0 (User profiles + media in private chat)
 """
 import streamlit as st
 import smtplib
@@ -25,19 +25,16 @@ import random
 import string
 import traceback
 
-# ====== PAGE CONFIG (must be first) ======
+# ====== PAGE CONFIG ======
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
 
-# ====== ROBUST KEEP‑ALIVE PING HANDLER ======
-# If the URL contains ?ping=1, return a minimal response and stop.
-# This prevents the app from loading the full UI when just pinging.
+# ====== KEEP‑ALIVE PING HANDLER ======
 try:
     query_params = st.query_params
     if "ping" in query_params and query_params["ping"] == "1":
         st.markdown("OK")
         st.stop()
 except AttributeError:
-    # Older Streamlit version or temporary glitch – ignore
     pass
 
 # --- Supabase client ---
@@ -126,6 +123,9 @@ if "call_room" not in st.session_state:
     st.session_state.call_room = None
 if "in_call" not in st.session_state:
     st.session_state.in_call = False
+# --- New: viewing another user's profile ---
+if "viewing_profile" not in st.session_state:
+    st.session_state.viewing_profile = None
 
 # --- Cookie helpers ---
 def set_cookie(name, value, days=30):
@@ -199,7 +199,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (Haitian flag emoji with gradient) ---
+# --- UI styling (unchanged) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -427,7 +427,6 @@ def get_or_create_profile(user_id, identifier):
                 "bio": "",
                 "location": "",
                 "is_live": False
-                # join_date will be set by DEFAULT NOW()
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -486,6 +485,30 @@ def upload_post_media(user_id, file):
         st.session_state.last_error = f"Media upload failed: {e}"
         return None
 
+def upload_chat_media(user_id, file):
+    """Upload media for private chat messages."""
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return None
+    try:
+        content_type = file.type
+        ext = file.name.split('.')[-1]
+        timestamp = int(time.time())
+        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
+        file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
+        file_bytes = file.getvalue()
+        supabase.storage.from_("chat_media").upload(
+            file_name, 
+            file_bytes, 
+            {"content-type": content_type}
+        )
+        public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
+        media_type = "video" if content_type.startswith("video") else "image"
+        return {"url": public_url, "type": media_type}
+    except Exception as e:
+        st.session_state.last_error = f"Chat media upload failed: {e}"
+        return None
+
 def delete_post(post_id):
     if supabase is None:
         return False
@@ -496,15 +519,18 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (using explicit foreign key) ---
+# --- Post functions ---
 @st.cache_data(ttl=60, show_spinner=False)
-def load_posts_cached(user_id=None):
-    """Load posts (cached for 60 seconds)."""
+def load_posts_cached(user_id=None, author_id=None):
+    """Load posts. If author_id given, load only posts by that user."""
     if supabase is None:
         return []
     try:
         select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
-        if user_id:
+        query = supabase.table("posts").select(select_cols)
+        if author_id:
+            query = query.eq("user_id", author_id).eq("is_public", True)
+        elif user_id:
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
@@ -516,8 +542,9 @@ def load_posts_cached(user_id=None):
                     unique_posts.append(p)
             posts = unique_posts
             posts.sort(key=lambda x: x['created_at'], reverse=True)
+            return posts
         else:
-            resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
+            resp = query.eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
 
         for post in posts:
@@ -539,6 +566,10 @@ def load_posts_cached(user_id=None):
 def load_posts():
     user_id = st.session_state.user.id if st.session_state.user else None
     return load_posts_cached(user_id)
+
+def load_user_posts(user_id):
+    """Load public posts by a specific user."""
+    return load_posts_cached(author_id=user_id)
 
 def create_post(user_id, content, media_files, is_public):
     if supabase is None:
@@ -617,7 +648,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions (with explicit foreign key) ---
+# --- Comment functions ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -675,7 +706,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (with explicit foreign key) ---
+# --- Live session functions ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -916,9 +947,10 @@ def logout():
     st.session_state.phone_otp_sent = False
     st.session_state.temp_phone = ""
     st.session_state.viewing_live = None
+    st.session_state.viewing_profile = None
     st.rerun()
 
-# --- Friend, Chat, Call functions ---
+# --- Friend, Chat, Call functions (with media support) ---
 def load_notifications(user_id):
     if supabase is None:
         return []
@@ -1007,17 +1039,25 @@ def search_users(query):
         st.session_state.last_error = f"Search failed: {e}"
         return []
 
-def send_message(sender_id, receiver_id, content):
+def send_message(sender_id, receiver_id, content, media_file=None):
+    """Send a private message, optionally with media."""
     if supabase is None:
         return False
     try:
-        supabase.table("messages").insert({
+        media_info = None
+        if media_file:
+            media_info = upload_chat_media(sender_id, media_file)
+        msg_data = {
             "sender_id": sender_id,
             "receiver_id": receiver_id,
             "content": content,
             "read": False,
             "created_at": datetime.now().isoformat()
-        }).execute()
+        }
+        if media_info:
+            msg_data["media_url"] = media_info["url"]
+            msg_data["media_type"] = media_info["type"]
+        supabase.table("messages").insert(msg_data).execute()
         sender_name = st.session_state.profile["full_name"]
         supabase.table("notifications").insert({
             "user_id": receiver_id,
@@ -1076,7 +1116,6 @@ def end_call():
 # ========== FUNCTIONS FOR OWNER NOTIFICATIONS ==========
 
 def get_last_seen_signup():
-    """Retrieve the last seen signup timestamp from owner_state table."""
     if supabase is None:
         return datetime(2020, 1, 1)
     try:
@@ -1084,7 +1123,6 @@ def get_last_seen_signup():
         if resp.data:
             return datetime.fromisoformat(resp.data[0]["last_seen_signup"].replace('Z', '+00:00'))
         else:
-            # Insert default
             supabase.table("owner_state").insert({"id": 1, "last_seen_signup": datetime.now().isoformat()}).execute()
             return datetime.now() - timedelta(days=365)
     except Exception as e:
@@ -1092,7 +1130,6 @@ def get_last_seen_signup():
         return datetime(2020, 1, 1)
 
 def update_last_seen_signup():
-    """Update the last seen signup timestamp to now."""
     if supabase is None:
         return
     try:
@@ -1101,7 +1138,6 @@ def update_last_seen_signup():
         st.session_state.last_error = f"Error updating last seen signup: {e}"
 
 def get_new_users(since):
-    """Fetch profiles created after `since` timestamp (uses join_date)."""
     if supabase is None:
         return []
     try:
@@ -1113,26 +1149,21 @@ def get_new_users(since):
         return []
 
 def send_email_notification(new_users):
-    """Send an email with the list of new users."""
     if not all([SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO]):
-        return  # email not configured
-
+        return
     if not new_users:
         return
-
     subject = f"New User Signups - {len(new_users)} new user(s)"
     body = "The following users have signed up since your last visit:\n\n"
     for u in new_users:
         joined = u.get('join_date', '')[:16] if u.get('join_date') else ''
         body += f"- {u['full_name']} (ID: {u['id']}) at {joined}\n"
-
     try:
         msg = EmailMessage()
         msg.set_content(body)
         msg['Subject'] = subject
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
-
         with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT)) as server:
             server.starttls()
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
@@ -1150,15 +1181,12 @@ def render_live_page(session_id):
             st.session_state.viewing_live = None
             st.rerun()
         return
-
     st.header(f"🔴 LIVE: {session['title']}")
     col1, col2 = st.columns([2, 1])
-
     with col1:
         stream_url = session.get("stream_url")
         platform = session.get("platform")
         is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
-
         if is_broadcaster:
             with st.expander("📹 Set Stream URL", expanded=not stream_url):
                 with st.form("update_stream_url"):
@@ -1170,7 +1198,6 @@ def render_live_page(session_id):
                                 st.rerun()
                         else:
                             st.warning("Please enter a URL")
-
         if stream_url:
             if "facebook.com" in stream_url:
                 embed_code = f"""
@@ -1200,14 +1227,12 @@ def render_live_page(session_id):
                 st.video(stream_url)
         else:
             st.info("The streamer has not provided a video URL yet.")
-
         try:
             base_url = st.request.url.split('?')[0]
         except:
             base_url = "https://globalinternetpy.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
         st.text_input("Shareable link", value=share_url)
-
     with col2:
         st.subheader("Live Chat")
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
@@ -1220,7 +1245,60 @@ def render_live_page(session_id):
         for c in comments:
             st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
 
+def render_user_profile(user_id):
+    """Display another user's profile and their public posts."""
+    # Fetch user profile
+    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+    if not profile_resp.data:
+        st.error("User not found.")
+        if st.button("Back to Feed"):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
+    profile = profile_resp.data[0]
+    
+    st.header(f"👤 {profile['full_name']}'s Profile")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=150)
+        else:
+            st.markdown("👤", unsafe_allow_html=True)
+        st.markdown(f"**Bio:** {profile.get('bio', 'No bio')}")
+        st.markdown(f"**Location:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**Joined:** {profile.get('join_date', '')[:10]}")
+        if st.button("💬 Send Message"):
+            st.session_state.selected_chat = user_id
+            st.session_state.viewing_profile = None
+            st.rerun()
+        if st.button("← Back to Feed"):
+            st.session_state.viewing_profile = None
+            st.rerun()
+    with col2:
+        st.subheader("Public Posts")
+        posts = load_user_posts(user_id)
+        if not posts:
+            st.info("This user has no public posts.")
+        else:
+            for post in posts:
+                with st.container():
+                    st.markdown(f"**{post['profiles']['full_name']}**")
+                    st.caption(post['created_at'][:16])
+                    if post['content']:
+                        st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+                    for media in post.get("media_urls", []):
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+                    st.divider()
+
 def render_feed():
+    # If viewing a profile, show that
+    if st.session_state.viewing_profile:
+        render_user_profile(st.session_state.viewing_profile)
+        return
+
     st.header("🌐 Collaboration Feed")
 
     if st.session_state.last_error:
@@ -1332,11 +1410,16 @@ def render_feed():
                     else:
                         st.markdown("👤")
                 with col_b:
+                    # Click on name to view profile
                     name = post['profiles']['full_name']
-                    if post.get("profiles", {}).get("is_live"):
-                        st.markdown(f"**{name}** <span class='green-dot'></span>", unsafe_allow_html=True)
+                    if post['user_id'] != st.session_state.user.id:
+                        if st.button(name, key=f"view_profile_{post['id']}"):
+                            st.session_state.viewing_profile = post['user_id']
+                            st.rerun()
                     else:
                         st.markdown(f"**{name}**")
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
                     if not post.get("is_public", True):
                         st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
                 with col_c:
@@ -1347,7 +1430,7 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # --- Media first ---
+                # Media first
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
@@ -1356,7 +1439,7 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
-                # --- Caption under media ---
+                # Caption under media
                 if post['content']:
                     st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
 
@@ -1378,7 +1461,7 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # --- Comment section (always visible) ---
+                # Comment section (always visible)
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown("#### Comments")
 
@@ -1508,7 +1591,7 @@ def render_friends_page():
             st.info("No users found")
         else:
             for user in results:
-                cols = st.columns([3,1])
+                cols = st.columns([3,1,1])
                 with cols[0]:
                     st.markdown(f"**{user['full_name']}**")
                 with cols[1]:
@@ -1518,6 +1601,10 @@ def render_friends_page():
                             st.success(msg)
                         else:
                             st.error(msg)
+                with cols[2]:
+                    if st.button("👤 View Profile", key=f"view_{user['id']}"):
+                        st.session_state.viewing_profile = user['id']
+                        st.rerun()
                 st.divider()
 
     st.divider()
@@ -1528,7 +1615,7 @@ def render_friends_page():
         st.info("You have no friends yet")
     else:
         for friend in st.session_state.friends:
-            cols = st.columns([1,4,1,1])
+            cols = st.columns([1,4,1,1,1])
             with cols[0]:
                 if friend.get('avatar_url'):
                     st.image(friend['avatar_url'], width=30)
@@ -1546,9 +1633,13 @@ def render_friends_page():
                     send_message(st.session_state.user.id, friend['id'], f"📞 Join my call: room={room}")
                     start_call(room)
                     st.rerun()
+            with cols[4]:
+                if st.button("👤 Profile", key=f"profile_{friend['id']}"):
+                    st.session_state.viewing_profile = friend['id']
+                    st.rerun()
             st.divider()
 
-    # Private Chat Section
+    # Private Chat Section (with media)
     if st.session_state.selected_chat:
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
@@ -1559,15 +1650,33 @@ def render_friends_page():
         messages = load_messages(st.session_state.user.id, other_id)
         for msg in messages:
             if msg["sender_id"] == st.session_state.user.id:
-                st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                # Outgoing message
+                if "media_url" in msg:
+                    if msg["media_type"] == "image":
+                        st.image(msg["media_url"], width=300)
+                    elif msg["media_type"] == "video":
+                        st.video(msg["media_url"])
+                if msg["content"]:
+                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
-                st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                # Incoming message
+                if "media_url" in msg:
+                    if msg["media_type"] == "image":
+                        st.image(msg["media_url"], width=300)
+                    elif msg["media_type"] == "video":
+                        st.video(msg["media_url"])
+                if msg["content"]:
+                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input("Type a message...")
-            if st.form_submit_button("Send"):
-                if msg_content:
-                    send_message(st.session_state.user.id, other_id, msg_content)
+            uploaded_file = st.file_uploader("Attach image/video", type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            col1, col2 = st.columns([1,5])
+            with col1:
+                sent = st.form_submit_button("Send")
+            if sent:
+                if msg_content or uploaded_file:
+                    send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
                     st.rerun()
         if st.button("Close chat"):
             st.session_state.selected_chat = None
@@ -1657,7 +1766,6 @@ def render_profile():
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
-    # --- Login check ---
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
@@ -1669,23 +1777,16 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # Get last seen signup and fetch new users
     last_seen = get_last_seen_signup()
     new_users = get_new_users(last_seen)
-
-    # If there are new users, send email (if configured) and update last seen
     if new_users:
         send_email_notification(new_users)
         update_last_seen_signup()
 
-    # --- Tabs for different sections ---
     tab1, tab2, tab3, tab4 = st.tabs(["💰 Dashboard", "📈 New Users", "🛡️ User Post Moderation", "📥 Client Payments"])
 
-    # ========== TAB 1: DASHBOARD ==========
     with tab1:
         st.subheader("🔐 Owner's Dashboard")
-
-        # Try to fetch real balance
         real_balance = None
         if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
             try:
@@ -1716,7 +1817,6 @@ def owner_space():
 
         st.divider()
 
-        # Withdrawal / Transfer Section
         st.subheader("💰 Transfer Funds to Your Account")
         st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
         st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
@@ -1752,13 +1852,10 @@ def owner_space():
         else:
             st.info("To enable real transfers, set up your backend and configure the secrets.")
 
-    # ========== TAB 2: NEW USERS ==========
     with tab2:
         st.subheader("📈 New User Signups")
         st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
-
         if new_users:
-            # Display as a table (using join_date)
             data = []
             for u in new_users:
                 data.append({
@@ -1771,12 +1868,9 @@ def owner_space():
         else:
             st.info("No new users since last check.")
 
-    # ========== TAB 3: USER POST MODERATION ==========
     with tab3:
         st.subheader("🛡️ User Post Moderation")
         st.markdown("Review all posts (public & private) and take action if needed.")
-
-        # --- Load all posts with user info ---
         try:
             posts = supabase.table("posts").select(
                 "*, profiles!posts_user_id_fkey(full_name, avatar_url, id)"
@@ -1791,7 +1885,6 @@ def owner_space():
         else:
             if "warn_post_id" not in st.session_state:
                 st.session_state.warn_post_id = None
-
             for post in all_posts:
                 with st.container():
                     cols = st.columns([2, 4, 2, 1, 1])
@@ -1841,7 +1934,6 @@ def owner_space():
                                     st.rerun()
                     st.divider()
 
-    # ========== TAB 4: CLIENT PAYMENT INSTRUCTIONS ==========
     with tab4:
         st.subheader("📥 How Clients Can Pay You")
         st.markdown("""
@@ -1860,8 +1952,6 @@ def owner_space():
         """)
 
     st.divider()
-
-    # --- Your Contact Info ---
     st.markdown("### 📬 Contact for Support / Large Payments")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
 
