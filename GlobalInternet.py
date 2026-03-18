@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.3 (Improved signup error handling)
+Version: 74.0.4 (Better error messages for signup and phone OTP)
 """
 import streamlit as st
 import smtplib
@@ -1069,13 +1069,12 @@ def sign_up_email(email, password, full_name):
         if "User already registered" in error_str:
             st.error("This email is already registered. Please log in instead.")
         elif "Email rate limit exceeded" in error_str:
-            st.error("Too many sign-up attempts. Please try again later.")
+            st.error("Too many sign-up attempts from this email. Please wait a few minutes and try again, or use a different email.")
         elif "Password should be at least 6 characters" in error_str.lower():
             st.error("Password must be at least 6 characters long.")
         elif "Invalid email" in error_str.lower():
             st.error("Please enter a valid email address.")
         else:
-            # Show the actual error from Supabase for debugging
             st.error(f"Sign-up failed: {error_str}")
         return False
 
@@ -1145,7 +1144,11 @@ def send_phone_otp(raw_phone):
         st.success("OTP sent to your phone. Please enter the 6-digit code below.")
         return True
     except Exception as e:
-        st.error(f"Failed to send OTP: {e}")
+        error_str = str(e)
+        if "Unsupported phone provider" in error_str:
+            st.error("Phone authentication is not enabled in your Supabase project. Please use email sign-up instead, or contact the administrator to enable phone auth.")
+        else:
+            st.error(f"Failed to send OTP: {error_str}")
         return False
 
 def verify_phone_otp(raw_phone, token, remember=False):
