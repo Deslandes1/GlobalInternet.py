@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 63.0.0 (Clickable links + media chat)
+Version: 64.0.0 (Clickable links + media chat + all features)
 """
 import streamlit as st
 import smtplib
@@ -986,11 +986,10 @@ def send_friend_request(sender_id, receiver_id):
     if supabase is None:
         return False, "Not logged in"
     try:
-        existing = supabase.table("friend_requests").select("id").or_(
-            f"and(sender_id.eq.{sender_id},receiver_id.eq.{receiver_id})",
-            f"and(sender_id.eq.{receiver_id},receiver_id.eq.{sender_id})"
-        ).execute()
-        if existing.data:
+        # Check if request already exists in either direction (without using or_)
+        existing1 = supabase.table("friend_requests").select("id").eq("sender_id", sender_id).eq("receiver_id", receiver_id).execute()
+        existing2 = supabase.table("friend_requests").select("id").eq("sender_id", receiver_id).eq("receiver_id", sender_id).execute()
+        if existing1.data or existing2.data:
             return False, "Friend request already exists"
         data = {"sender_id": sender_id, "receiver_id": receiver_id, "status": "pending"}
         supabase.table("friend_requests").insert(data).execute()
@@ -1673,7 +1672,6 @@ def render_friends_page():
                     elif msg["media_type"] == "video":
                         st.video(msg["media_url"])
                 if msg["content"]:
-                    # Make links clickable
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
