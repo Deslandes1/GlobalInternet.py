@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 68.0.0 (Final – all Friend & Chat features restored)
+Version: 69.0.0 (Final – all features restored, indentation fixed)
 """
 import streamlit as st
 import smtplib
@@ -2150,3 +2150,14 @@ def login_interface():
                             remember = st.session_state.get("phone_remember", False)
                             verify_phone_otp(st.session_state.temp_phone, otp, remember)
                         else:
+                            st.warning("Please enter the OTP")
+                if st.button("← Back / Resend OTP"):
+                    st.session_state.phone_otp_sent = False
+                    st.session_state.temp_phone = ""
+                    st.rerun()
+
+if __name__ == "__main__":
+    if not st.session_state.logged_in:
+        login_interface()
+    else:
+        main_app()
