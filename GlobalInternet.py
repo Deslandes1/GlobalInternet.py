@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.6 (Improved video embedding for all users)
+Version: 74.0.7 (Enhanced video embedding with more platforms + visual feedback)
 """
 import streamlit as st
 import smtplib
@@ -470,7 +470,8 @@ def get_youtube_id(url):
         r'(?:youtube\.com\/watch\?v=)([\w-]+)',
         r'(?:youtu\.be\/)([\w-]+)',
         r'(?:youtube\.com\/embed\/)([\w-]+)',
-        r'(?:youtube\.com\/v\/)([\w-]+)'
+        r'(?:youtube\.com\/v\/)([\w-]+)',
+        r'(?:youtube\.com\/shorts\/)([\w-]+)'
     ]
     for pattern in patterns:
         match = re.search(pattern, url)
@@ -490,25 +491,55 @@ def get_dailymotion_id(url):
 
 def get_facebook_video_url(url):
     """Check if it's a Facebook video and return embed URL."""
-    if 'facebook.com' in url and ('/video' in url or '/watch' in url):
-        # Facebook embed works with the page URL
+    if 'facebook.com' in url and ('/video' in url or '/watch' in url or 'videos' in url):
         return url
     return None
 
+def get_tiktok_id(url):
+    """Extract TikTok video ID."""
+    match = re.search(r'(?:tiktok\.com\/@[\w.-]+\/video\/)(\d+)', url)
+    if match:
+        return match.group(1)
+    # Also match vm.tiktok.com links
+    match = re.search(r'(?:vm\.tiktok\.com\/)([\w]+)', url)
+    if match:
+        return match.group(1)
+    return None
+
+def get_twitch_url(url):
+    """Check if it's a Twitch video/clip and return embed URL."""
+    if 'twitch.tv' in url:
+        if '/videos/' in url or '/clip/' in url:
+            return url
+        # Could also be a live channel, but we don't embed live here.
+    return None
+
+def get_instagram_url(url):
+    """Check if it's an Instagram post/reel."""
+    if 'instagram.com' in url and ('/p/' in url or '/reel/' in url):
+        return url
+    return None
+
+def get_streamable_id(url):
+    """Extract Streamable video ID."""
+    match = re.search(r'(?:streamable\.com\/)([a-zA-Z0-9]+)', url)
+    return match.group(1) if match else None
+
 def is_direct_video_url(url):
     """Check if URL points to a common video file extension."""
-    video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg']
+    video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg', '.m4v']
     return any(url.lower().endswith(ext) for ext in video_extensions)
 
 def embed_video_from_url(url):
-    """Return an appropriate embed component for a video URL."""
+    """Return an appropriate embed component for a video URL. Returns True if embedded, False otherwise."""
     youtube_id = get_youtube_id(url)
     if youtube_id:
         embed_html = f"""
         <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
                 frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 YouTube video embedded</p>
         """
-        st.components.v1.html(embed_html, height=410)
+        st.components.v1.html(embed_html, height=430)
         return True
     
     vimeo_id = get_vimeo_id(url)
@@ -516,8 +547,9 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
                 frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Vimeo video embedded</p>
         """
-        st.components.v1.html(embed_html, height=410)
+        st.components.v1.html(embed_html, height=430)
         return True
     
     dailymotion_id = get_dailymotion_id(url)
@@ -526,8 +558,9 @@ def embed_video_from_url(url):
         <iframe frameborder="0" width="100%" height="400" 
                 src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
                 allowfullscreen allow="autoplay"></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Dailymotion video embedded</p>
         """
-        st.components.v1.html(embed_html, height=410)
+        st.components.v1.html(embed_html, height=430)
         return True
     
     fb_url = get_facebook_video_url(url)
@@ -536,12 +569,66 @@ def embed_video_from_url(url):
         <div id="fb-root"></div>
         <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
         <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div>
+        <p style="font-size:0.8rem; color:green;">🎥 Facebook video embedded</p>
         """
-        st.components.v1.html(embed_html, height=450)
+        st.components.v1.html(embed_html, height=470)
+        return True
+    
+    tiktok_id = get_tiktok_id(url)
+    if tiktok_id:
+        if tiktok_id.isdigit():
+            embed_html = f"""
+            <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@username/video/{tiktok_id}" data-video-id="{tiktok_id}" style="max-width: 605px;min-width: 325px;" > 
+            <section> <a target="_blank" title="TikTok" href="https://www.tiktok.com/@username/video/{tiktok_id}">View on TikTok</a> </section> </blockquote> 
+            <script async src="https://www.tiktok.com/embed.js"></script>
+            <p style="font-size:0.8rem; color:green;">🎥 TikTok video embedded</p>
+            """
+        else:
+            # For vm.tiktok.com short links, just embed the page
+            embed_html = f"""
+            <iframe width="100%" height="600" src="{url}" frameborder="0" allowfullscreen></iframe>
+            <p style="font-size:0.8rem; color:green;">🎥 TikTok video embedded</p>
+            """
+        st.components.v1.html(embed_html, height=650)
+        return True
+    
+    twitch_url = get_twitch_url(url)
+    if twitch_url:
+        # Twitch embed requires parent parameter
+        try:
+            parent = st.request.host if hasattr(st, 'request') else 'localhost'
+        except:
+            parent = 'localhost'
+        embed_html = f"""
+        <iframe src="https://player.twitch.tv/?video={twitch_url.split('/')[-1]}&parent={parent}" 
+                height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Twitch video embedded</p>
+        """
+        st.components.v1.html(embed_html, height=430)
+        return True
+    
+    insta_url = get_instagram_url(url)
+    if insta_url:
+        embed_html = f"""
+        <iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Instagram post embedded</p>
+        """
+        st.components.v1.html(embed_html, height=630)
+        return True
+    
+    streamable_id = get_streamable_id(url)
+    if streamable_id:
+        embed_html = f"""
+        <iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" 
+                frameborder="0" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Streamable video embedded</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     
     if is_direct_video_url(url):
         st.video(url)
+        st.markdown("<p style='font-size:0.8rem; color:green;'>🎥 Direct video file embedded</p>", unsafe_allow_html=True)
         return True
     
     return False
@@ -1990,7 +2077,7 @@ def render_feed():
                 st.markdown("👤", unsafe_allow_html=True)
         with col_input:
             content = st.text_area(
-                "Caption / What's on your mind? (Paste a video link to embed – YouTube, Vimeo, Dailymotion, Facebook, or direct video file)",
+                "Caption / What's on your mind? (Paste a video link to embed – YouTube, Vimeo, Dailymotion, Facebook, TikTok, Twitch, Instagram, Streamable, or direct video file)",
                 height=150,
                 placeholder="Write something... or paste a video link",
                 label_visibility="collapsed"
