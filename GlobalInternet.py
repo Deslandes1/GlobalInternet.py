@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 65.0.0 (Fixed posts loading + profiles + clickable links)
+Version: 66.0.0 (Fixed profile viewing + all features)
 """
 import streamlit as st
 import smtplib
@@ -540,12 +540,11 @@ def load_posts_cached(user_id=None, author_id=None):
         return []
     try:
         select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
-        query = supabase.table("posts").select(select_cols)
-        if author_id:
+        if author_id is not None:
             # Load public posts of a specific user
-            resp = query.eq("user_id", author_id).eq("is_public", True).order("created_at", desc=True).execute()
+            resp = supabase.table("posts").select(select_cols).eq("user_id", author_id).eq("is_public", True).order("created_at", desc=True).execute()
             posts = resp.data
-        elif user_id:
+        elif user_id is not None:
             # Load feed for logged-in user (public + own private)
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
@@ -558,10 +557,9 @@ def load_posts_cached(user_id=None, author_id=None):
                     unique_posts.append(p)
             posts = unique_posts
             posts.sort(key=lambda x: x['created_at'], reverse=True)
-            return posts  # Return early, no need to add reactions again? Actually we still need reactions.
         else:
             # Load all public posts for non-logged-in users
-            resp = query.eq("is_public", True).order("created_at", desc=True).limit(50).execute()
+            resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
 
         # Add reactions and comment counts
@@ -1264,14 +1262,27 @@ def render_live_page(session_id):
 
 def render_user_profile(user_id):
     """Display another user's profile and their public posts."""
-    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-    if not profile_resp.data:
-        st.error("User not found.")
+    if supabase is None:
+        st.error("Database not connected.")
         if st.button("Back to Feed"):
             st.session_state.viewing_profile = None
             st.rerun()
         return
-    profile = profile_resp.data[0]
+    try:
+        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not profile_resp.data:
+            st.error("User not found.")
+            if st.button("Back to Feed"):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+        profile = profile_resp.data[0]
+    except Exception as e:
+        st.error(f"Error loading profile: {e}")
+        if st.button("Back to Feed"):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
     
     st.header(f"👤 {profile['full_name']}'s Profile")
     col1, col2 = st.columns([1, 2])
@@ -1301,7 +1312,6 @@ def render_user_profile(user_id):
                     st.markdown(f"**{post['profiles']['full_name']}**")
                     st.caption(post['created_at'][:16])
                     if post['content']:
-                        # Make links clickable
                         clickable_content = make_clickable(post['content'])
                         st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     for media in post.get("media_urls", []):
