@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 69.0.0 (Final – all features restored, indentation fixed)
+Version: 70.0.0 (Added Share to Feed from private chat)
 """
 import streamlit as st
 import smtplib
@@ -108,7 +108,6 @@ if "last_error" not in st.session_state:
     st.session_state.last_error = None
 if "replying_to" not in st.session_state:
     st.session_state.replying_to = {}
-
 # --- Friend/Chat state ---
 if "notifications" not in st.session_state:
     st.session_state.notifications = []
@@ -127,7 +126,7 @@ if "in_call" not in st.session_state:
 if "viewing_profile" not in st.session_state:
     st.session_state.viewing_profile = None
 
-# --- Cookie helpers ---
+# --- Cookie helpers (unchanged) ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -532,7 +531,7 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (FIXED) ---
+# --- Post functions (modified to accept existing media URLs) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
     """Load posts. If author_id given, load only posts by that user."""
@@ -587,7 +586,12 @@ def load_user_posts(user_id):
     """Load public posts by a specific user."""
     return load_posts_cached(author_id=user_id)
 
-def create_post(user_id, content, media_files, is_public):
+def create_post(user_id, content, media_files=None, is_public=True, existing_media_urls=None):
+    """
+    Create a new post.
+    - media_files: list of uploaded file objects (will be uploaded)
+    - existing_media_urls: list of dicts with 'url' and 'type' (already uploaded)
+    """
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
         return False
@@ -598,6 +602,9 @@ def create_post(user_id, content, media_files, is_public):
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
+        if existing_media_urls:
+            media_urls.extend(existing_media_urls)
+
         post = {
             "user_id": user_id,
             "content": content,
@@ -664,7 +671,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions ---
+# --- Comment functions (unchanged) ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -722,7 +729,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions ---
+# --- Live session functions (unchanged) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -839,7 +846,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Authentication ---
+# --- Authentication (unchanged) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.session_state.last_error = "Registration unavailable."
@@ -1128,8 +1135,7 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
-# ========== FUNCTIONS FOR OWNER NOTIFICATIONS ==========
-
+# ========== FUNCTIONS FOR OWNER NOTIFICATIONS (unchanged) ==========
 def get_last_seen_signup():
     if supabase is None:
         return datetime(2020, 1, 1)
@@ -1669,7 +1675,7 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Private Chat Section (with media and clickable links)
+    # Private Chat Section (with media and share to feed)
     if st.session_state.selected_chat:
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
@@ -1685,20 +1691,63 @@ def render_friends_page():
             if msg["sender_id"] == st.session_state.user.id:
                 # Outgoing message
                 if msg.get("media_url"):
+                    # Display media
                     if msg.get("media_type") == "image":
                         st.image(msg["media_url"], width=300)
                     elif msg.get("media_type") == "video":
                         st.video(msg["media_url"])
+                    # Add Share to Feed button for own media
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_own_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button("Post to Feed"):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        # Copy link button (JavaScript)
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
                 if msg.get("content"):
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
                 # Incoming message
                 if msg.get("media_url"):
+                    # Display media
                     if msg.get("media_type") == "image":
                         st.image(msg["media_url"], width=300)
                     elif msg.get("media_type") == "video":
                         st.video(msg["media_url"])
+                    # Add Share to Feed button for incoming media
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button("Post to Feed"):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
                 if msg.get("content"):
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
@@ -1797,7 +1846,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== OWNER SPACE ==========
+# ========== OWNER SPACE (unchanged) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
