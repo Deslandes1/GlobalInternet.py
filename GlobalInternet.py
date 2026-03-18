@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 66.0.0 (Fixed profile viewing + all features)
+Version: 67.0.0 (Fixed Friends & Chat + all features)
 """
 import streamlit as st
 import smtplib
@@ -1674,29 +1674,32 @@ def render_friends_page():
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
         other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
-        other_name = other.data["full_name"] if other.data else "User"
+        if other.data:
+            other_name = other.data["full_name"]
+        else:
+            other_name = "User"
         st.write(f"Chat with **{other_name}**")
 
         messages = load_messages(st.session_state.user.id, other_id)
         for msg in messages:
             if msg["sender_id"] == st.session_state.user.id:
                 # Outgoing message
-                if "media_url" in msg:
-                    if msg["media_type"] == "image":
+                if msg.get("media_url"):
+                    if msg.get("media_type") == "image":
                         st.image(msg["media_url"], width=300)
-                    elif msg["media_type"] == "video":
+                    elif msg.get("media_type") == "video":
                         st.video(msg["media_url"])
-                if msg["content"]:
+                if msg.get("content"):
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
                 # Incoming message
-                if "media_url" in msg:
-                    if msg["media_type"] == "image":
+                if msg.get("media_url"):
+                    if msg.get("media_type") == "image":
                         st.image(msg["media_url"], width=300)
-                    elif msg["media_type"] == "video":
+                    elif msg.get("media_type") == "video":
                         st.video(msg["media_url"])
-                if msg["content"]:
+                if msg.get("content"):
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
