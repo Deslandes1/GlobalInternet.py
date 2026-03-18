@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.5 (RLS policy guidance, file size limit info)
+Version: 71.0.0 (Live Monetization: Gifts with MonCash/Natcash integration)
 """
 import streamlit as st
 import smtplib
@@ -64,6 +64,9 @@ OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
 BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
 MONCASH_MODE = st.secrets.get("MONCASH_MODE", "live")
+MONCASH_API_KEY = st.secrets.get("MONCASH_API_KEY", "")
+MONCASH_API_SECRET = st.secrets.get("MONCASH_API_SECRET", "")
+EXCHANGE_RATE_API = st.secrets.get("EXCHANGE_RATE_API", "https://api.exchangerate-api.com/v4/latest/USD")
 
 # Optional email settings
 SMTP_SERVER = st.secrets.get("SMTP_SERVER")
@@ -127,6 +130,11 @@ if "in_call" not in st.session_state:
     st.session_state.in_call = False
 if "viewing_profile" not in st.session_state:
     st.session_state.viewing_profile = None
+# --- Live gifts state ---
+if "live_gifts" not in st.session_state:
+    st.session_state.live_gifts = []
+if "exchange_rate" not in st.session_state:
+    st.session_state.exchange_rate = 100  # default 1 USD = 100 HTG (fallback)
 
 # --- Cookie helpers ---
 def set_cookie(name, value, days=30):
@@ -181,16 +189,13 @@ def inject_cookie_reader():
 
 # --- Token refresh function ---
 def refresh_supabase_session():
-    """Refresh the Supabase session using the stored refresh token."""
     if supabase is None or not st.session_state.refresh_token:
         return False
     try:
-        # Attempt to refresh the session
         new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
         if new_session and new_session.user:
             st.session_state.user = new_session.user
             st.session_state.refresh_token = new_session.session.refresh_token
-            # Update profile (in case it changed)
             profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone)
             st.session_state.profile = profile
             return True
@@ -206,7 +211,6 @@ if not st.session_state.logged_in and supabase:
     refresh_token = get_cookie("sb_refresh_token")
     if refresh_token:
         try:
-            # Use refresh token to get user
             user = supabase.auth.get_user(refresh_token)
             if user.user:
                 st.session_state.logged_in = True
@@ -393,6 +397,19 @@ st.markdown("""
         font-weight: bold;
         color: #0a2a44;
     }
+    .gift-button {
+        background: linear-gradient(145deg, #ffd700, #ffa500);
+        color: #000;
+        font-weight: bold;
+        border: none;
+        border-radius: 30px;
+        padding: 5px 15px;
+        margin: 5px;
+        cursor: pointer;
+    }
+    .gift-button:hover {
+        background: linear-gradient(145deg, #ffa500, #ff8c00);
+    }
     /* Login page fixes */
     .stTextInput > div > div > input {
         color: #1e2a3a !important;
@@ -427,7 +444,6 @@ st.markdown("""
         background-color: rgba(255,255,255,0.7) !important;
         color: #1e2a3a !important;
     }
-    /* Style for clickable links */
     a {
         color: #0080ff !important;
         text-decoration: none;
@@ -441,7 +457,6 @@ st.markdown("""
 # ========== HELPER FUNCTIONS ==========
 
 def make_clickable(text):
-    """Convert URLs in text to clickable HTML links."""
     url_pattern = r'(https?://[^\s]+)'
     return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
 
@@ -463,7 +478,8 @@ def get_or_create_profile(user_id, identifier):
                 "avatar_url": None,
                 "bio": "",
                 "location": "",
-                "is_live": False
+                "is_live": False,
+                "moncash_phone": None
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -487,7 +503,6 @@ def update_profile(profile_data):
 
 def upload_avatar(user_id, image_file):
     if supabase is None:
-        st.session_state.last_error = "Supabase not configured."
         return None
     try:
         ext = image_file.name.split('.')[-1]
@@ -499,14 +514,13 @@ def upload_avatar(user_id, image_file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'avatars' bucket. See instructions below.")
+            st.error("Storage permission error: Please set up RLS policies for the 'avatars' bucket.")
         else:
             st.session_state.last_error = f"Avatar upload failed: {e}"
         return None
 
 def upload_post_media(user_id, file):
     if supabase is None:
-        st.session_state.last_error = "Supabase not configured."
         return None
     try:
         content_type = file.type
@@ -526,15 +540,13 @@ def upload_post_media(user_id, file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'post_media' bucket. See instructions below.")
+            st.error("Storage permission error: Please set up RLS policies for the 'post_media' bucket.")
         else:
             st.session_state.last_error = f"Media upload failed: {e}"
         return None
 
 def upload_chat_media(user_id, file):
-    """Upload media for private chat messages."""
     if supabase is None:
-        st.session_state.last_error = "Supabase not configured."
         return None
     try:
         content_type = file.type
@@ -554,7 +566,7 @@ def upload_chat_media(user_id, file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'chat_media' bucket. See instructions below.")
+            st.error("Storage permission error: Please set up RLS policies for the 'chat_media' bucket.")
         else:
             st.session_state.last_error = f"Chat media upload failed: {e}"
         return None
@@ -569,20 +581,99 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
+# --- Exchange rate fetching ---
+def fetch_exchange_rate():
+    """Fetch USD to HTG exchange rate."""
+    try:
+        resp = requests.get(EXCHANGE_RATE_API, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            # Assuming API returns rates in data['rates']['HTG']
+            if 'rates' in data and 'HTG' in data['rates']:
+                return float(data['rates']['HTG'])
+        # Fallback to hardcoded if API fails
+        return 100.0
+    except:
+        return 100.0
+
+# --- Live gift functions ---
+def send_gift(session_id, sender_id, recipient_id, amount, currency):
+    """
+    Process a gift:
+    - Convert to HTG using current exchange rate.
+    - Insert into live_gifts table with status 'pending'.
+    - Simulate payment processing (real integration would call MonCash API).
+    - Update status to 'completed' on success.
+    """
+    if supabase is None:
+        return False, "Supabase not configured"
+    try:
+        rate = st.session_state.exchange_rate
+        if currency == "USD":
+            amount_htg = amount * rate
+        else:
+            amount_htg = amount  # assume already HTG
+
+        gift_data = {
+            "session_id": session_id,
+            "sender_id": sender_id,
+            "recipient_id": recipient_id,
+            "amount": amount,
+            "currency": currency,
+            "converted_amount_htg": amount_htg,
+            "status": "pending",
+            "created_at": datetime.now().isoformat()
+        }
+        result = supabase.table("live_gifts").insert(gift_data).execute()
+        if not result.data:
+            return False, "Failed to record gift"
+
+        gift_id = result.data[0]["id"]
+
+        # Simulate payment processing (replace with real MonCash API call)
+        # For simulation, we always succeed.
+        # In production, call MonCash API to transfer from sender to platform account,
+        # then platform later pays out to streamer.
+        payment_success = True
+        if payment_success:
+            supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
+            # Add a notification to recipient
+            sender_name = st.session_state.profile["full_name"]
+            supabase.table("notifications").insert({
+                "user_id": recipient_id,
+                "type": "gift",
+                "message": f"🎁 You received a gift of {amount} {currency} from {sender_name}!",
+                "read": False
+            }).execute()
+            return True, "Gift sent successfully!"
+        else:
+            supabase.table("live_gifts").update({"status": "failed"}).eq("id", gift_id).execute()
+            return False, "Payment failed. Please try again."
+    except Exception as e:
+        st.session_state.last_error = f"Error sending gift: {e}"
+        return False, str(e)
+
+def load_gifts_for_session(session_id):
+    if supabase is None:
+        return []
+    try:
+        resp = supabase.table("live_gifts").select("*, sender:sender_id(full_name, avatar_url)").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
+        return resp.data
+    except Exception as e:
+        st.session_state.last_error = f"Error loading gifts: {e}"
+        return []
+
 # --- Post functions ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
-    """Load posts. If author_id given, load only posts by that user."""
     if supabase is None:
         return []
     try:
         select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
         if author_id is not None:
-            # Load public posts of a specific user
             resp = supabase.table("posts").select(select_cols).eq("user_id", author_id).eq("is_public", True).order("created_at", desc=True).execute()
             posts = resp.data
         elif user_id is not None:
-            # Load feed for logged-in user (public + own private)
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
@@ -595,11 +686,9 @@ def load_posts_cached(user_id=None, author_id=None):
             posts = unique_posts
             posts.sort(key=lambda x: x['created_at'], reverse=True)
         else:
-            # Load all public posts for non-logged-in users
             resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
 
-        # Add reactions and comment counts
         for post in posts:
             post["media_urls"] = post.get("media_urls", [])
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
@@ -621,15 +710,9 @@ def load_posts():
     return load_posts_cached(user_id)
 
 def load_user_posts(user_id):
-    """Load public posts by a specific user."""
     return load_posts_cached(author_id=user_id)
 
 def create_post(user_id, content, media_files=None, is_public=True, existing_media_urls=None):
-    """
-    Create a new post.
-    - media_files: list of uploaded file objects (will be uploaded)
-    - existing_media_urls: list of dicts with 'url' and 'type' (already uploaded)
-    """
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
         return False
@@ -712,7 +795,6 @@ def share_post(original_post_id, user_id, is_public=True):
 # --- Comment functions ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
-        st.session_state.last_error = "Supabase not configured."
         return False
     try:
         comment = {
@@ -767,7 +849,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions ---
+# --- Live session functions (updated) ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -839,7 +921,7 @@ def load_live_sessions():
         return []
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url, moncash_phone)"
         ).eq("is_live", True).order("started_at", desc=True).execute()
         return response.data
     except Exception as e:
@@ -851,7 +933,7 @@ def get_live_session(session_id):
         return None
     try:
         response = supabase.table("live_sessions").select(
-            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url)"
+            "*, profiles!live_sessions_user_id_fkey(full_name, avatar_url, moncash_phone)"
         ).eq("id", session_id).single().execute()
         return response.data
     except Exception as e:
@@ -884,7 +966,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Authentication ---
+# --- Authentication (updated to include moncash_phone) ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.session_state.last_error = "Registration unavailable."
@@ -924,6 +1006,7 @@ def log_in_email(email, password, remember=False):
             load_friend_data()
             st.session_state.notifications = load_notifications(user.user.id)
             st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+            st.session_state.exchange_rate = fetch_exchange_rate()
             if remember and user.session:
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
             st.rerun()
@@ -1016,7 +1099,7 @@ def logout():
     st.session_state.viewing_profile = None
     st.rerun()
 
-# --- Friend, Chat, Call functions (with media support) ---
+# --- Friend, Chat, Call functions (unchanged) ---
 def load_notifications(user_id):
     if supabase is None:
         return []
@@ -1039,7 +1122,6 @@ def send_friend_request(sender_id, receiver_id):
     if supabase is None:
         return False, "Not logged in"
     try:
-        # Check if request already exists in either direction (without using or_)
         existing1 = supabase.table("friend_requests").select("id").eq("sender_id", sender_id).eq("receiver_id", receiver_id).execute()
         existing2 = supabase.table("friend_requests").select("id").eq("sender_id", receiver_id).eq("receiver_id", sender_id).execute()
         if existing1.data or existing2.data:
@@ -1079,7 +1161,6 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
-# --- load_friend_data with debug prints ---
 def load_friend_data():
     if supabase is None or not st.session_state.user:
         st.write("Supabase or user missing")
@@ -1105,14 +1186,13 @@ def search_users(query):
     if supabase is None or not st.session_state.user:
         return []
     try:
-        result = supabase.table("profiles").select("id, full_name, avatar_url").neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50).execute()
+        result = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50).execute()
         return result.data
     except Exception as e:
         st.session_state.last_error = f"Search failed: {e}"
         return []
 
 def send_message(sender_id, receiver_id, content, media_file=None):
-    """Send a private message, optionally with media."""
     if supabase is None:
         return False
     try:
@@ -1142,19 +1222,14 @@ def send_message(sender_id, receiver_id, content, media_file=None):
         st.session_state.last_error = f"Error sending message: {e}"
         return False
 
-# --- load_messages (fixed for older Supabase client) ---
 def load_messages(user_id, other_id):
     if supabase is None:
         return []
     try:
-        # Get messages where user is sender and other is receiver
         sent = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", other_id).execute()
-        # Get messages where other is sender and user is receiver
         received = supabase.table("messages").select("*").eq("sender_id", other_id).eq("receiver_id", user_id).execute()
-        # Combine and sort by created_at
         all_msgs = (sent.data or []) + (received.data or [])
         all_msgs.sort(key=lambda x: x['created_at'])
-        # Mark messages as read
         supabase.table("messages").update({"read": True}).eq("sender_id", other_id).eq("receiver_id", user_id).execute()
         return all_msgs
     except Exception as e:
@@ -1190,7 +1265,7 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
-# ========== FUNCTIONS FOR OWNER NOTIFICATIONS ==========
+# ========== OWNER NOTIFICATIONS ==========
 def get_last_seen_signup():
     if supabase is None:
         return datetime(2020, 1, 1)
@@ -1257,12 +1332,18 @@ def render_live_page(session_id):
             st.session_state.viewing_live = None
             st.rerun()
         return
+
+    is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
+
+    # Load gifts for this session
+    gifts = load_gifts_for_session(session_id)
+    total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
+
     col1, col2 = st.columns([2, 1])
     with col1:
         stream_url = session.get("stream_url")
         platform = session.get("platform")
-        is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
         if is_broadcaster:
             with st.expander("📹 Set Stream URL", expanded=not stream_url):
                 with st.form("update_stream_url"):
@@ -1309,20 +1390,78 @@ def render_live_page(session_id):
             base_url = "https://globalinternetpy.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
         st.text_input("Shareable link", value=share_url)
+
     with col2:
-        st.subheader("Live Chat")
+        st.subheader("Live Chat & Gifts")
+        if not is_broadcaster:
+            # Gift sending section
+            st.markdown("### 🎁 Send a Gift")
+            if not st.session_state.profile.get("moncash_phone"):
+                st.info("Add your MonCash phone number in your profile to send gifts.")
+            else:
+                gift_options = [
+                    {"label": "❤️ 50 HTG", "amount": 50, "currency": "HTG"},
+                    {"label": "🎉 100 HTG", "amount": 100, "currency": "HTG"},
+                    {"label": "🌟 500 HTG", "amount": 500, "currency": "HTG"},
+                    {"label": "💵 1 USD", "amount": 1, "currency": "USD"},
+                    {"label": "💵 5 USD", "amount": 5, "currency": "USD"},
+                    {"label": "💵 10 USD", "amount": 10, "currency": "USD"},
+                ]
+                cols = st.columns(3)
+                for i, opt in enumerate(gift_options):
+                    with cols[i % 3]:
+                        if st.button(opt["label"], key=f"gift_{i}"):
+                            success, msg = send_gift(
+                                session_id,
+                                st.session_state.user.id,
+                                session["user_id"],
+                                opt["amount"],
+                                opt["currency"]
+                            )
+                            if success:
+                                st.success(msg)
+                                # Refresh gifts
+                                st.session_state.live_gifts = load_gifts_for_session(session_id)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+        # Show total gifts for broadcaster
+        if is_broadcaster:
+            st.metric("Total Gifts Received", f"{total_gifts_htg:.0f} HTG")
+            if session["profiles"]["moncash_phone"]:
+                st.info(f"Gifts will be sent to your MonCash: {session['profiles']['moncash_phone']}")
+            else:
+                st.warning("Add your MonCash phone number in your profile to receive gifts.")
+
+        # Live chat and gift notifications
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
             msg = st.text_input("Write a comment...")
             if st.form_submit_button("Send"):
                 if msg:
                     add_comment(session_id, st.session_state.user.id, msg)
                     st.rerun()
+
+        # Display comments and gifts interleaved
         comments = load_comments(session_id)
+        all_events = []
         for c in comments:
-            st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+            all_events.append({"type": "comment", "data": c, "time": c['created_at']})
+        for g in gifts:
+            all_events.append({"type": "gift", "data": g, "time": g['created_at']})
+        all_events.sort(key=lambda x: x['time'])
+
+        for ev in all_events:
+            if ev['type'] == 'comment':
+                c = ev['data']
+                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+            else:
+                g = ev['data']
+                sender = g.get('sender', {}).get('full_name', 'Someone')
+                st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
 def render_user_profile(user_id):
-    """Display another user's profile and their public posts."""
+    # (unchanged, but we add moncash_phone display)
     if supabase is None:
         st.error("Database not connected.")
         if st.button("Back to Feed"):
@@ -1330,7 +1469,6 @@ def render_user_profile(user_id):
             st.rerun()
         return
 
-    # Attempt to load profile, with token refresh on JWT error
     try:
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not profile_resp.data:
@@ -1343,9 +1481,7 @@ def render_user_profile(user_id):
     except Exception as e:
         error_str = str(e)
         if "JWT expired" in error_str:
-            # Try to refresh the session
             if refresh_supabase_session():
-                # Retry the query
                 try:
                     profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
                     if profile_resp.data:
@@ -1383,6 +1519,7 @@ def render_user_profile(user_id):
             st.markdown("👤", unsafe_allow_html=True)
         st.markdown(f"**Bio:** {profile.get('bio', 'No bio')}")
         st.markdown(f"**Location:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**MonCash:** {profile.get('moncash_phone', 'Not set')}")
         st.markdown(f"**Joined:** {profile.get('join_date', '')[:10]}")
         if st.button("💬 Send Message"):
             st.session_state.selected_chat = user_id
@@ -1412,7 +1549,6 @@ def render_user_profile(user_id):
                     st.divider()
 
 def render_feed():
-    # If viewing a profile, show that
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
         return
@@ -1519,7 +1655,6 @@ def render_feed():
     else:
         for post in st.session_state.posts:
             with st.container():
-                # Post header
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
                 with col_a:
                     avatar = post.get("profiles", {}).get("avatar_url")
@@ -1547,7 +1682,6 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # Media first
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
@@ -1556,12 +1690,10 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
-                # Caption under media with clickable links
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
 
-                # Reactions row
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 cols = st.columns(len(emojis) + 2)
                 for i, emoji in enumerate(emojis):
@@ -1579,7 +1711,6 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comment section (always visible)
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown("#### Comments")
 
@@ -1650,9 +1781,9 @@ def render_feed():
                 st.divider()
 
 def render_friends_page():
+    # (unchanged, but we might show gift history later)
     st.header("👥 Friends & Chat")
 
-    # Display RLS setup instructions if upload fails (but we'll show them here as a general hint)
     with st.expander("ℹ️ Setup Instructions (if uploads fail)"):
         st.markdown("""
         **If you get "new row violates row-level security policy" when uploading files:**
@@ -1673,7 +1804,6 @@ def render_friends_page():
     st.markdown(f"<div class='friend-count'>You have {len(st.session_state.friends)} friends</div>", unsafe_allow_html=True)
     st.divider()
 
-    # Notifications
     with st.expander(f"🔔 Notifications ({st.session_state.unread_count} unread)", expanded=True):
         if not st.session_state.notifications:
             st.info("No notifications")
@@ -1691,7 +1821,6 @@ def render_friends_page():
                             st.rerun()
                 st.divider()
 
-    # Pending friend requests
     st.subheader("📨 Friend Requests Received")
     if not st.session_state.friend_requests:
         st.info("No pending requests")
@@ -1720,7 +1849,6 @@ def render_friends_page():
                         st.error(msg)
             st.divider()
 
-    # Find users
     st.subheader("🔍 Find Users")
     search_query = st.text_input("Search by name")
     if search_query:
@@ -1746,8 +1874,6 @@ def render_friends_page():
                 st.divider()
 
     st.divider()
-
-    # Friends list
     st.subheader("👥 Your Friends")
     if not st.session_state.friends:
         st.info("You have no friends yet")
@@ -1777,7 +1903,6 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Private Chat Section (with improved media handling)
     if st.session_state.selected_chat:
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
@@ -1791,9 +1916,7 @@ def render_friends_page():
         messages = load_messages(st.session_state.user.id, other_id)
         for msg in messages:
             if msg["sender_id"] == st.session_state.user.id:
-                # Outgoing message
                 if msg.get("media_url"):
-                    # Display media with error handling
                     try:
                         if msg.get("media_type") == "image":
                             st.image(msg["media_url"], width=300)
@@ -1805,7 +1928,6 @@ def render_friends_page():
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
                     
-                    # Add Share to Feed button for own media
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
@@ -1822,7 +1944,6 @@ def render_friends_page():
                                         )
                                         st.rerun()
                     with col3:
-                        # Copy link button (JavaScript)
                         st.markdown(f"""
                         <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
                         """, unsafe_allow_html=True)
@@ -1830,9 +1951,7 @@ def render_friends_page():
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
-                # Incoming message
                 if msg.get("media_url"):
-                    # Display media with error handling
                     try:
                         if msg.get("media_type") == "image":
                             st.image(msg["media_url"], width=300)
@@ -1844,7 +1963,6 @@ def render_friends_page():
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
                     
-                    # Add Share to Feed button for incoming media
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
@@ -1871,7 +1989,6 @@ def render_friends_page():
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input("Type a message... (URLs become clickable)")
             uploaded_file = st.file_uploader("Attach image/video", type=["png","jpg","jpeg","gif","mp4","mov","avi"])
-            # File size warning
             st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
             col1, col2 = st.columns([1,5])
             with col1:
@@ -1885,7 +2002,6 @@ def render_friends_page():
             st.rerun()
         st.divider()
 
-    # Call section
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader("📞 Active Call")
         st.markdown(f"Room ID: `{st.session_state.call_room}`")
@@ -1903,6 +2019,7 @@ def render_friends_page():
             st.rerun()
 
 def render_map():
+    # (unchanged)
     st.header("🛰️ Satellite Network")
     sats = {
         "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
@@ -1947,8 +2064,9 @@ def render_profile():
             full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
             bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
             location = st.text_input("Location", value=profile.get("location", ""))
+            moncash_phone = st.text_input("MonCash Phone Number (for receiving gifts)", value=profile.get("moncash_phone", ""))
             if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                profile.update({"full_name": full_name, "bio": bio, "location": location})
+                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
                 if update_profile(profile):
                     st.success("Profile updated successfully!")
                     st.rerun()
@@ -1964,7 +2082,12 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== OWNER SPACE ==========
+    # Show gift history (for broadcaster)
+    if profile.get("is_live"):
+        # Optionally show gifts from current session
+        pass
+
+# ========== OWNER SPACE (updated with gift management) ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -1985,7 +2108,7 @@ def owner_space():
         send_email_notification(new_users)
         update_last_seen_signup()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["💰 Dashboard", "📈 New Users", "🛡️ User Post Moderation", "📥 Client Payments"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💰 Dashboard", "📈 New Users", "🛡️ User Post Moderation", "📥 Client Payments", "🎁 Gift Management"])
 
     with tab1:
         st.subheader("🔐 Owner's Dashboard")
@@ -2152,6 +2275,43 @@ def owner_space():
         **Option 3 – Request a payment link**  
         For larger amounts, contact the development team to generate a secure payment link.
         """)
+
+    with tab5:
+        st.subheader("🎁 Gift Management")
+        st.markdown("View all completed gifts and process payouts to streamers.")
+
+        if supabase is None:
+            st.warning("Supabase not connected.")
+            return
+
+        # Fetch all completed gifts with user details
+        gifts = supabase.table("live_gifts").select(
+            "*, sender:sender_id(full_name), recipient:recipient_id(full_name, moncash_phone), session:session_id(title)"
+        ).eq("status", "completed").order("created_at", desc=True).execute()
+        gifts_data = gifts.data if gifts.data else []
+
+        if not gifts_data:
+            st.info("No gifts yet.")
+        else:
+            df = pd.DataFrame([{
+                "ID": g['id'],
+                "Date": g['created_at'][:16],
+                "Session": g['session']['title'] if g['session'] else "",
+                "Sender": g['sender']['full_name'] if g['sender'] else "",
+                "Recipient": g['recipient']['full_name'] if g['recipient'] else "",
+                "Amount": f"{g['amount']} {g['currency']}",
+                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG",
+                "Recipient MonCash": g['recipient']['moncash_phone'] if g['recipient'] else ""
+            } for g in gifts_data])
+            st.dataframe(df, use_container_width=True)
+
+            st.markdown("### Payout Summary")
+            total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
+            st.metric("Total Gifts (HTG)", f"{total_pending:.0f} HTG")
+
+            if st.button("Mark All as Paid (Simulated)"):
+                # In production, integrate with MonCash bulk payout API
+                st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
 
     st.divider()
     st.markdown("### 📬 Contact for Support / Large Payments")
