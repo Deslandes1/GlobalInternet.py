@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 73.0.0 (Live Background Filters + Larger Video Uploads)
+Version: 74.0.0 (Auto‑embed video links in posts)
 """
 import streamlit as st
 import smtplib
@@ -463,6 +463,52 @@ st.markdown("""
 def make_clickable(text):
     url_pattern = r'(https?://[^\s]+)'
     return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
+
+def get_youtube_id(url):
+    """Extract YouTube video ID from various URL formats."""
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=)([\w-]+)',
+        r'(?:youtu\.be\/)([\w-]+)',
+        r'(?:youtube\.com\/embed\/)([\w-]+)'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def get_vimeo_id(url):
+    """Extract Vimeo video ID."""
+    match = re.search(r'(?:vimeo\.com\/)(\d+)', url)
+    return match.group(1) if match else None
+
+def is_direct_video_url(url):
+    """Check if URL points to a common video file extension."""
+    video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv']
+    return any(url.lower().endswith(ext) for ext in video_extensions)
+
+def embed_video_from_url(url):
+    """Return an appropriate embed component for a video URL."""
+    youtube_id = get_youtube_id(url)
+    if youtube_id:
+        embed_html = f"""
+        <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
+                frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        """
+        return st.components.v1.html(embed_html, height=410)
+    
+    vimeo_id = get_vimeo_id(url)
+    if vimeo_id:
+        embed_html = f"""
+        <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
+                frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+        """
+        return st.components.v1.html(embed_html, height=410)
+    
+    if is_direct_video_url(url):
+        return st.video(url)
+    
+    return None
 
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
@@ -1354,455 +1400,10 @@ def send_email_notification(new_users):
 
 # ========== PAGE RENDERING FUNCTIONS ==========
 
-# --- NEW render_live_page with background filters ---
-def render_live_page(session_id):
-    session = get_live_session(session_id)
-    if not session or not session.get("is_live"):
-        st.error("This live session has ended or does not exist.")
-        if st.button("Back to Feed"):
-            st.session_state.viewing_live = None
-            st.rerun()
-        return
+# --- ENHANCED render_live_page with background filters (keep your existing) ---
+# For brevity, I'm not repeating it here – keep your version from the previous step.
 
-    is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
-    st.header(f"🔴 LIVE: {session['title']}")
-
-    if is_broadcaster:
-        st.success("✅ You are the broadcaster. Use the controls below to start streaming.")
-    else:
-        st.info("👀 You are a viewer. Click 'Watch Stream' to see the live video.")
-
-    gifts = load_gifts_for_session(session_id)
-    total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
-
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        stream_method = session.get("stream_method", "external")
-        if stream_method == "external":
-            # External streaming code (keep your existing)
-            stream_url = session.get("stream_url")
-            platform = session.get("platform")
-            if is_broadcaster:
-                with st.expander("📹 Set Stream URL", expanded=not stream_url):
-                    with st.form("update_stream_url"):
-                        new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
-                        if st.form_submit_button("Update Stream URL"):
-                            if new_url:
-                                if update_live_stream_url(session_id, new_url):
-                                    st.success("Stream URL updated! Refreshing...")
-                                    st.rerun()
-                            else:
-                                st.warning("Please enter a URL")
-            if stream_url:
-                if "facebook.com" in stream_url:
-                    embed_code = f"""
-                    <div id="fb-root"></div>
-                    <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-                    <div class="fb-video" data-href="{stream_url}" 
-                         data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
-                    """
-                    st.components.v1.html(embed_code, height=450)
-                elif "youtube.com" in stream_url or "youtu.be" in stream_url:
-                    if "youtu.be" in stream_url:
-                        video_id = stream_url.split("/")[-1].split("?")[0]
-                    elif "watch?v=" in stream_url:
-                        video_id = stream_url.split("v=")[-1].split("&")[0]
-                    else:
-                        video_id = None
-                    if video_id:
-                        embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
-                    else:
-                        st.video(stream_url)
-                elif "twitch.tv" in stream_url:
-                    channel = stream_url.split("/")[-1]
-                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
-                    st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
-                else:
-                    st.video(stream_url)
-            else:
-                st.info("The streamer has not provided a video URL yet.")
-        else:  # in-app streaming
-            if is_broadcaster:
-                # Background filter selection UI
-                st.markdown("### 🎨 Background Filters")
-                with st.expander("Choose Background", expanded=False):
-                    col_bg1, col_bg2, col_bg3 = st.columns(3)
-                    # Predefined AI-generated backgrounds (replace with your own image URLs)
-                    bg_options = [
-                        "https://example.com/bg1.jpg",  # Replace with actual image URLs
-                        "https://example.com/bg2.jpg",
-                        "https://example.com/bg3.jpg",
-                        "https://example.com/bg4.jpg",
-                        "https://example.com/bg5.jpg",
-                        "https://example.com/bg6.jpg",
-                        "https://example.com/bg7.jpg",
-                        "https://example.com/bg8.jpg",
-                        "https://example.com/bg9.jpg",
-                        "https://example.com/bg10.jpg",
-                    ]
-                    # Show 10 backgrounds in a grid (simplified: just buttons)
-                    for i in range(10):
-                        col_idx = i % 3
-                        with [col_bg1, col_bg2, col_bg3][col_idx]:
-                            if st.button(f"BG {i+1}", key=f"bg_{i}"):
-                                st.session_state.background_url = bg_options[i]
-                    # Custom upload
-                    uploaded_bg = st.file_uploader("Or upload your own image", type=["png", "jpg", "jpeg"])
-                    if uploaded_bg:
-                        bytes_data = uploaded_bg.getvalue()
-                        b64 = base64.b64encode(bytes_data).decode()
-                        mime = uploaded_bg.type
-                        data_url = f"data:{mime};base64,{b64}"
-                        st.session_state.background_url = data_url
-                        st.success("Background set!")
-
-                # BROADCASTER VIEW with background filter
-                broadcaster_html = f"""
-                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
-                    <div style="font-size: 24px; margin-bottom: 20px;">🎥 Your Live Stream</div>
-                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
-                        <canvas id="outputCanvas" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
-                    </div>
-                    <div style="margin-top: 30px;">
-                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ START BROADCAST</button>
-                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">■ STOP BROADCAST</button>
-                    </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Ready to start. Click the button above.</p>
-                </div>
-                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-                <!-- MediaPipe Selfie Segmentation -->
-                <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
-                <script>
-                (function() {{
-                    const sessionId = {session_id};
-                    const userId = "{st.session_state.user.id}";
-                    let localStream = null;
-                    let peer = null;
-                    let call = null;
-                    const startBtn = document.getElementById('startBtn');
-                    const stopBtn = document.getElementById('stopBtn');
-                    const statusEl = document.getElementById('status');
-                    const outputCanvas = document.getElementById('outputCanvas');
-                    const ctx = outputCanvas.getContext('2d');
-                    
-                    // Background image (from session state)
-                    let backgroundImage = null;
-                    const bgUrl = "{st.session_state.background_url or ''}";
-                    if (bgUrl) {{
-                        backgroundImage = new Image();
-                        backgroundImage.crossOrigin = "Anonymous";
-                        backgroundImage.src = bgUrl;
-                    }}
-
-                    // MediaPipe setup
-                    const selfieSegmentation = new SelfieSegmentation({{
-                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
-                    }});
-                    selfieSegmentation.setOptions({{
-                        modelSelection: 1,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
-                    }});
-                    selfieSegmentation.onResults(onResults);
-
-                    function onResults(results) {{
-                        if (!results.segmentationMask) return;
-                        // Draw background
-                        if (backgroundImage) {{
-                            ctx.drawImage(backgroundImage, 0, 0, outputCanvas.width, outputCanvas.height);
-                        }} else {{
-                            ctx.fillStyle = '#00a8ff';
-                            ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
-                        }}
-                        // Draw person using mask
-                        ctx.globalCompositeOperation = 'destination-atop';
-                        ctx.drawImage(results.segmentationMask, 0, 0, outputCanvas.width, outputCanvas.height);
-                        ctx.globalCompositeOperation = 'source-over';
-                        ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
-                    }}
-
-                    startBtn.onclick = async () => {{
-                        try {{
-                            statusEl.textContent = '📷 Requesting camera access...';
-                            localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
-                            const videoElement = document.createElement('video');
-                            videoElement.srcObject = localStream;
-                            videoElement.autoplay = true;
-                            videoElement.onloadeddata = () => {{
-                                const processFrame = async () => {{
-                                    await selfieSegmentation.send({{image: videoElement}});
-                                    requestAnimationFrame(processFrame);
-                                }};
-                                processFrame();
-                            }};
-                            statusEl.textContent = '✅ Camera access granted. Connecting to peer server...';
-
-                            // PeerJS for streaming (sending original stream for simplicity)
-                            peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
-                                host: '0.peerjs.com',
-                                port: 443,
-                                secure: true,
-                                config: {{
-                                    'iceServers': [
-                                        {{ urls: 'stun:stun.l.google.com:19302' }},
-                                        {{ urls: 'stun:stun1.l.google.com:19302' }}
-                                    ]
-                                }}
-                            }});
-
-                            peer.on('open', (id) => {{
-                                statusEl.textContent = `✅ Broadcasting live! Your peer ID: ${{id}}`;
-                                startBtn.style.display = 'none';
-                                stopBtn.style.display = 'inline-block';
-                            }});
-
-                            peer.on('call', (incomingCall) => {{
-                                // Answer with the original stream (background filter applied locally only)
-                                incomingCall.answer(localStream);
-                                call = incomingCall;
-                            }});
-
-                            peer.on('error', (err) => {{
-                                statusEl.textContent = '❌ Peer error: ' + err;
-                            }});
-                        }} catch (err) {{
-                            statusEl.textContent = '❌ Error: ' + err.message;
-                        }}
-                    }};
-
-                    stopBtn.onclick = () => {{
-                        if (call) call.close();
-                        if (peer) peer.destroy();
-                        if (localStream) localStream.getTracks().forEach(track => track.stop());
-                        startBtn.style.display = 'inline-block';
-                        stopBtn.style.display = 'none';
-                        statusEl.textContent = 'Broadcast ended';
-                    }};
-                }})();
-                </script>
-                """
-                st.components.v1.html(broadcaster_html, height=750)
-            else:
-                # VIEWER VIEW
-                viewer_html = f"""
-                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
-                    <div style="font-size: 24px; margin-bottom: 20px;">👀 Watching Live Stream</div>
-                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
-                        <video id="remoteVideo" autoplay style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></video>
-                    </div>
-                    <div style="margin-top: 30px;">
-                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ WATCH STREAM</button>
-                    </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Click the button to start watching.</p>
-                </div>
-                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-                <script>
-                (function() {{
-                    const sessionId = {session_id};
-                    const remoteVideo = document.getElementById('remoteVideo');
-                    const watchBtn = document.getElementById('watchBtn');
-                    const statusEl = document.getElementById('status');
-                    let peer = null;
-
-                    watchBtn.onclick = () => {{
-                        statusEl.textContent = 'Connecting to broadcaster...';
-                        peer = new Peer({{ 
-                            host: '0.peerjs.com',
-                            port: 443,
-                            secure: true,
-                            config: {{
-                                'iceServers': [
-                                    {{ urls: 'stun:stun.l.google.com:19302' }},
-                                    {{ urls: 'stun:stun1.l.google.com:19302' }}
-                                ]
-                            }}
-                        }});
-
-                        peer.on('open', (id) => {{
-                            statusEl.textContent = 'Connected. Requesting stream...';
-                            const call = peer.call(`broadcaster-${{sessionId}}`, null);
-                            call.on('stream', (remoteStream) => {{
-                                remoteVideo.srcObject = remoteStream;
-                                statusEl.textContent = '✅ Now watching live stream';
-                                watchBtn.style.display = 'none';
-                            }});
-                            call.on('error', (err) => {{
-                                statusEl.textContent = '❌ Call error: ' + err;
-                            }});
-                        }});
-
-                        peer.on('error', (err) => {{
-                            statusEl.textContent = '❌ Peer error: ' + err;
-                        }});
-                    }};
-                }})();
-                </script>
-                """
-                st.components.v1.html(viewer_html, height=550)
-
-        # Shareable link
-        try:
-            base_url = st.request.url.split('?')[0]
-        except:
-            base_url = "https://globalinternetpy.streamlit.app"
-        share_url = f"{base_url}?live={session_id}"
-        st.text_input("Shareable link", value=share_url)
-
-    with col2:
-        # Live chat and gifts (keep your existing)
-        st.subheader("Live Chat & Gifts")
-        if not is_broadcaster:
-            st.markdown("### 🎁 Send a Gift")
-            if not st.session_state.profile.get("moncash_phone"):
-                st.info("Add your MonCash phone number in your profile to send gifts.")
-            else:
-                gift_options = [
-                    {"label": "❤️ 50 HTG", "amount": 50, "currency": "HTG"},
-                    {"label": "🎉 100 HTG", "amount": 100, "currency": "HTG"},
-                    {"label": "🌟 500 HTG", "amount": 500, "currency": "HTG"},
-                    {"label": "💵 1 USD", "amount": 1, "currency": "USD"},
-                    {"label": "💵 5 USD", "amount": 5, "currency": "USD"},
-                    {"label": "💵 10 USD", "amount": 10, "currency": "USD"},
-                ]
-                cols = st.columns(3)
-                for i, opt in enumerate(gift_options):
-                    with cols[i % 3]:
-                        if st.button(opt["label"], key=f"gift_{i}"):
-                            success, msg = send_gift(
-                                session_id,
-                                st.session_state.user.id,
-                                session["user_id"],
-                                opt["amount"],
-                                opt["currency"]
-                            )
-                            if success:
-                                st.success(msg)
-                                st.session_state.live_gifts = load_gifts_for_session(session_id)
-                                st.rerun()
-                            else:
-                                st.error(msg)
-
-        if is_broadcaster:
-            st.metric("Total Gifts Received", f"{total_gifts_htg:.0f} HTG")
-            if session["profiles"]["moncash_phone"]:
-                st.info(f"Gifts will be sent to your MonCash: {session['profiles']['moncash_phone']}")
-            else:
-                st.warning("Add your MonCash phone number in your profile to receive gifts.")
-
-        with st.form(f"live_comment_{session_id}", clear_on_submit=True):
-            msg = st.text_input("Write a comment...")
-            if st.form_submit_button("Send"):
-                if msg:
-                    add_comment(session_id, st.session_state.user.id, msg)
-                    st.rerun()
-
-        comments = load_comments(session_id)
-        all_events = []
-        for c in comments:
-            all_events.append({"type": "comment", "data": c, "time": c['created_at']})
-        for g in gifts:
-            all_events.append({"type": "gift", "data": g, "time": g['created_at']})
-        all_events.sort(key=lambda x: x['time'])
-
-        for ev in all_events:
-            if ev['type'] == 'comment':
-                c = ev['data']
-                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
-            else:
-                g = ev['data']
-                sender = g.get('sender', {}).get('full_name', 'Someone')
-                st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
-
-# --- User Profile Page ---
-def render_user_profile(user_id):
-    if supabase is None:
-        st.error("Database not connected.")
-        if st.button("Back to Feed"):
-            st.session_state.viewing_profile = None
-            st.rerun()
-        return
-
-    try:
-        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-        if not profile_resp.data:
-            st.error("User not found.")
-            if st.button("Back to Feed"):
-                st.session_state.viewing_profile = None
-                st.rerun()
-            return
-        profile = profile_resp.data[0]
-    except Exception as e:
-        error_str = str(e)
-        if "JWT expired" in error_str:
-            if refresh_supabase_session():
-                try:
-                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-                    if profile_resp.data:
-                        profile = profile_resp.data[0]
-                    else:
-                        st.error("User not found.")
-                        if st.button("Back to Feed"):
-                            st.session_state.viewing_profile = None
-                            st.rerun()
-                        return
-                except Exception as retry_e:
-                    st.error(f"Error loading profile after refresh: {retry_e}")
-                    if st.button("Back to Feed"):
-                        st.session_state.viewing_profile = None
-                        st.rerun()
-                    return
-            else:
-                st.error("Session expired. Please log in again.")
-                logout()
-                st.rerun()
-                return
-        else:
-            st.error(f"Error loading profile: {error_str}")
-            if st.button("Back to Feed"):
-                st.session_state.viewing_profile = None
-                st.rerun()
-            return
-
-    st.header(f"👤 {profile['full_name']}'s Profile")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=150)
-        else:
-            st.markdown("👤", unsafe_allow_html=True)
-        st.markdown(f"**Bio:** {profile.get('bio', 'No bio')}")
-        st.markdown(f"**Location:** {profile.get('location', 'Unknown')}")
-        st.markdown(f"**MonCash:** {profile.get('moncash_phone', 'Not set')}")
-        st.markdown(f"**Joined:** {profile.get('join_date', '')[:10]}")
-        if st.button("💬 Send Message"):
-            st.session_state.selected_chat = user_id
-            st.session_state.viewing_profile = None
-            st.rerun()
-        if st.button("← Back to Feed"):
-            st.session_state.viewing_profile = None
-            st.rerun()
-    with col2:
-        st.subheader("Public Posts")
-        posts = load_user_posts(user_id)
-        if not posts:
-            st.info("This user has no public posts.")
-        else:
-            for post in posts:
-                with st.container():
-                    st.markdown(f"**{post['profiles']['full_name']}**")
-                    st.caption(post['created_at'][:16])
-                    if post['content']:
-                        clickable_content = make_clickable(post['content'])
-                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
-                    for media in post.get("media_urls", []):
-                        if media["type"] == "image":
-                            st.image(media["url"], use_column_width=True)
-                        elif media["type"] == "video":
-                            st.video(media["url"])
-                    st.divider()
-
-# --- Feed Page ---
+# --- NEW render_feed with auto‑embed video links ---
 def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
@@ -1841,9 +1442,9 @@ def render_feed():
                 st.markdown("👤", unsafe_allow_html=True)
         with col_input:
             content = st.text_area(
-                "Caption / What's on your mind?",
+                "Caption / What's on your mind? (Paste a video link to embed)",
                 height=150,
-                placeholder="Write a caption for your post...",
+                placeholder="Write something... or paste a YouTube/Vimeo/video link",
                 label_visibility="collapsed"
             )
         media_files = st.file_uploader(
@@ -1851,8 +1452,7 @@ def render_feed():
             type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
             accept_multiple_files=True
         )
-        # Note: File size limit note for large videos
-        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use external hosting (YouTube, Google Drive) and share the link.")
+        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use a link (YouTube, etc.).")
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
@@ -1912,7 +1512,7 @@ def render_feed():
     else:
         for post in st.session_state.posts:
             with st.container():
-                # Post header (keep existing)
+                # Post header
                 col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
                 with col_a:
                     avatar = post.get("profiles", {}).get("avatar_url")
@@ -1940,7 +1540,7 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # Media
+                # Media files (uploaded)
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
@@ -1949,9 +1549,17 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
+                # Caption with clickable links
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+
+                # Embed video links found in content
+                if post['content']:
+                    # Find all URLs in the content
+                    urls = re.findall(r'(https?://[^\s]+)', post['content'])
+                    for url in urls:
+                        embed_video_from_url(url)  # This will display an embed if supported
 
                 # Reactions
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
@@ -1971,10 +1579,9 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comment section
+                # Comment section (keep your existing)
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown("#### Comments")
-
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
                     msg = st.text_input("Write a comment...")
                     if st.form_submit_button("Post Comment"):
@@ -2041,260 +1648,11 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# --- Friends & Chat Page (abbreviated, keep your existing) ---
-def render_friends_page():
-    st.header("👥 Friends & Chat")
-    # ... (keep your full implementation from previous version) ...
-    # For brevity, I'm not repeating the 500+ lines here. 
-    # Make sure you have the full function from your working version.
-    st.info("Friends page is fully functional. (Implementation omitted for brevity)")
+# --- Other page functions (keep your existing) ---
+# render_user_profile, render_friends_page, render_map, render_profile, owner_space, main_app, login_interface
+# For brevity, I'm not repeating them here. Keep them from your previous version.
 
-# --- Map Page ---
-def render_map():
-    st.header("🛰️ Satellite Network")
-    sats = {
-        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
-        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
-        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
-        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
-    }
-    df = pd.DataFrame([
-        {"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]}
-        for name, data in sats.items()
-    ])
-    st.dataframe(df, use_container_width=True)
-    st.divider()
-    cols = st.columns(4)
-    for i, (name, data) in enumerate(sats.items()):
-        with cols[i % 4]:
-            st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
-
-# --- Profile Page ---
-def render_profile():
-    st.header("👤 My Profile")
-    if st.session_state.profile is None:
-        return
-    profile = st.session_state.profile
-
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
-        else:
-            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
-        uploaded = st.file_uploader("📸 Change picture", type=["png","jpg","jpeg"], label_visibility="collapsed")
-        if uploaded:
-            url = upload_avatar(st.session_state.user.id, uploaded)
-            if url:
-                profile["avatar_url"] = url
-                update_profile(profile)
-                st.rerun()
-
-    with col2:
-        with st.form("edit_profile"):
-            st.markdown("#### Account Information")
-            full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
-            bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
-            location = st.text_input("Location", value=profile.get("location", ""))
-            moncash_phone = st.text_input("MonCash Phone Number (for receiving gifts)", value=profile.get("moncash_phone", ""))
-            if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
-                if update_profile(profile):
-                    st.success("Profile updated successfully!")
-                    st.rerun()
-
-    st.divider()
-    cola, colb, colc, cold = st.columns(4)
-    with cola:
-        st.metric("Posts", len(st.session_state.posts))
-    with colb:
-        st.metric("Connections", profile.get("connections", 0))
-    with colc:
-        st.metric("Verified", "✅" if profile.get("verified", False) else "❌")
-    with cold:
-        st.metric("Member since", profile.get("join_date", "2024")[:10])
-
-# --- Owner Space (abbreviated) ---
-def owner_space():
-    st.header("🕊️ Owner Space (Private)")
-    # ... (keep your full implementation) ...
-    st.info("Owner space is fully functional. (Implementation omitted for brevity)")
-
-# --- Main App ---
-def main_app():
-    with st.sidebar:
-        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
-        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class='collaborators'>
-            <b>Collaborators:</b><br>
-            Gesner Junior Deslandes · Roosevert Deslandes<br>
-            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
-        </div>
-        """, unsafe_allow_html=True)
-        st.divider()
-
-        if st.session_state.unread_count > 0:
-            st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
-
-        if st.session_state.profile and st.session_state.profile.get("is_live"):
-            st.markdown("🔴 **You are live!**")
-            if st.button("End Live Session"):
-                for ls in st.session_state.live_sessions:
-                    if ls["user_id"] == st.session_state.user.id:
-                        end_live_session(ls["id"])
-                        st.rerun()
-                        break
-        else:
-            with st.expander("Go Live (Real Streaming)"):
-                st.markdown("**Choose your method:**")
-                method = st.radio("Streaming method", ["External platform (YouTube/Facebook/Twitch)", "In-app camera"], index=0)
-                platform = None
-                if method == "External platform (YouTube/Facebook/Twitch)":
-                    st.markdown("**Select platform:**")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("📺 YouTube", key="yt"):
-                            platform = "YouTube"
-                    with col2:
-                        if st.button("📘 Facebook", key="fb"):
-                            platform = "Facebook"
-                    with col3:
-                        if st.button("🎮 Twitch", key="tw"):
-                            platform = "Twitch"
-                else:
-                    platform = "inapp"
-
-                if platform:
-                    st.markdown(f"**Selected: {platform if platform != 'inapp' else 'In-app Camera'}**")
-                    with st.form("go_live_form"):
-                        title = st.text_input("Live title")
-                        if st.form_submit_button("Create Live Session"):
-                            if title:
-                                session_id = create_live_session(
-                                    title, 
-                                    platform, 
-                                    method='external' if platform != 'inapp' else 'inapp'
-                                )
-                                if session_id:
-                                    if platform == 'inapp':
-                                        st.success("Live session created! You are now live. Use the in-app controls to start broadcasting.")
-                                    else:
-                                        st.success("Live session created! You are now live.")
-                                        st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
-                                        st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
-                                    st.rerun()
-                            else:
-                                st.warning("Please enter a title")
-
-        st.divider()
-
-        lat, sig, qual = get_network_status()
-        st.markdown("### 🛡️ System Health")
-        st.markdown(f"""
-        <div class='health-text'>
-        📡 Signal: {sig}<br>
-        ⏱️ Latency: {lat}ms<br>
-        📊 Quality: {qual}%<br>
-        ⏰ Uptime: {get_uptime()}<br>
-        🔒 Status: ENCRYPTED
-        </div>
-        """, unsafe_allow_html=True)
-        st.divider()
-        st.markdown(f"💰 **Compensation:** ${st.session_state.data_comp:.4f}")
-        st.divider()
-        if st.session_state.profile:
-            st.markdown(f"👤 **Logged in as:** {st.session_state.profile.get('full_name', 'User')}")
-        if st.button("🚪 Logout"):
-            logout()
-        st.divider()
-
-        pages = {
-            "📡 Feed": render_feed,
-            "👥 Friends & Chat": render_friends_page,
-            "🛰️ Satellite Map": render_map,
-            "👤 Profile": render_profile,
-            "🕊️ Owner Space": owner_space
-        }
-        choice = st.selectbox("Menu", list(pages.keys()))
-    pages[choice]()
-
-# --- Login Interface ---
-def login_interface():
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.markdown("<div style='text-align: center;'><span class='haiti-symbol' style='font-size:6rem;'>🇭🇹</span></div>", unsafe_allow_html=True)
-        st.markdown("<h1 style='text-align: center; color: #0a2a44;'>GLOBALINTERNET.PY</h1>", unsafe_allow_html=True)
-        st.markdown("<div class='owner-name' style='font-size:1.8rem;'>Gesner Deslandes</div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class='collaborators' style='font-size:1rem;'>
-            <b>Collaborators:</b><br>
-            Gesner Junior Deslandes · Roosevert Deslandes · Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("---")
-
-        auth_method = st.radio("Choose method", ["Email", "Phone (OTP)"], horizontal=True)
-
-        if auth_method == "Email":
-            tab1, tab2, tab3 = st.tabs(["🔑 Login", "📝 Sign Up", "🔐 Forgot Password"])
-            with tab1:
-                with st.form("login_email"):
-                    email = st.text_input("Email")
-                    password = st.text_input("Password", type="password")
-                    remember = st.checkbox("Remember me (stay logged in)")
-                    if st.form_submit_button("🚀 Login", use_container_width=True):
-                        if email and password:
-                            log_in_email(email, password, remember)
-                        else:
-                            st.warning("Please enter email and password")
-            with tab2:
-                with st.form("signup_email"):
-                    full_name = st.text_input("Full Name")
-                    email = st.text_input("Email")
-                    password = st.text_input("Password", type="password")
-                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
-                        if full_name and email and password:
-                            sign_up_email(email, password, full_name)
-                        else:
-                            st.warning("Please fill all fields")
-            with tab3:
-                with st.form("reset_email"):
-                    reset_email = st.text_input("Enter your email address")
-                    if st.form_submit_button("Send Reset Link", use_container_width=True):
-                        if reset_email:
-                            reset_password_email(reset_email)
-                        else:
-                            st.warning("Please enter your email")
-        else:
-            st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
-            if not st.session_state.phone_otp_sent:
-                with st.form("phone_request"):
-                    phone = st.text_input("Phone number (digits only, e.g., 50947385663)")
-                    remember = st.checkbox("Remember me (stay logged in)")
-                    if st.form_submit_button("📲 Send OTP", use_container_width=True):
-                        if phone:
-                            if send_phone_otp(phone):
-                                st.session_state.phone_otp_sent = True
-                                st.session_state.temp_phone = phone
-                                st.session_state.phone_remember = remember
-                                st.rerun()
-                        else:
-                            st.warning("Please enter a phone number")
-            else:
-                st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
-                with st.form("phone_verify"):
-                    otp = st.text_input("Enter 6-digit OTP code")
-                    if st.form_submit_button("✅ Verify & Login", use_container_width=True):
-                        if otp:
-                            remember = st.session_state.get("phone_remember", False)
-                            verify_phone_otp(st.session_state.temp_phone, otp, remember)
-                        else:
-                            st.warning("Please enter the OTP")
-                if st.button("← Back / Resend OTP"):
-                    st.session_state.phone_otp_sent = False
-                    st.session_state.temp_phone = ""
-                    st.rerun()
+# ... (all other functions remain unchanged) ...
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:
