@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.2 (Fixed load_messages for older Supabase client)
+Version: 70.0.3 (Added automatic token refresh to fix JWT expired errors)
 """
 import streamlit as st
 import smtplib
@@ -80,6 +80,8 @@ if "user" not in st.session_state:
     st.session_state.user = None
 if "profile" not in st.session_state:
     st.session_state.profile = None
+if "refresh_token" not in st.session_state:
+    st.session_state.refresh_token = None
 if "data_comp" not in st.session_state:
     st.session_state.data_comp = 0.0
 if "connection_time" not in st.session_state:
@@ -177,16 +179,39 @@ def inject_cookie_reader():
     """
     st.components.v1.html(js, height=0)
 
+# --- Token refresh function ---
+def refresh_supabase_session():
+    """Refresh the Supabase session using the stored refresh token."""
+    if supabase is None or not st.session_state.refresh_token:
+        return False
+    try:
+        # Attempt to refresh the session
+        new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
+        if new_session and new_session.user:
+            st.session_state.user = new_session.user
+            st.session_state.refresh_token = new_session.session.refresh_token
+            # Update profile (in case it changed)
+            profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone)
+            st.session_state.profile = profile
+            return True
+        else:
+            return False
+    except Exception as e:
+        st.session_state.last_error = f"Token refresh failed: {e}"
+        return False
+
 # --- Restore session from cookie ---
 if not st.session_state.logged_in and supabase:
     inject_cookie_reader()
     refresh_token = get_cookie("sb_refresh_token")
     if refresh_token:
         try:
+            # Use refresh token to get user
             user = supabase.auth.get_user(refresh_token)
             if user.user:
                 st.session_state.logged_in = True
                 st.session_state.user = user.user
+                st.session_state.refresh_token = refresh_token
                 profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
                 st.session_state.profile = profile
                 st.session_state.connection_time = time.time()
@@ -198,7 +223,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling ---
+# --- UI styling (unchanged) ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -876,6 +901,8 @@ def log_in_email(email, password, remember=False):
         if user.user:
             st.session_state.logged_in = True
             st.session_state.user = user.user
+            if user.session:
+                st.session_state.refresh_token = user.session.refresh_token
             profile = get_or_create_profile(user.user.id, email)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
@@ -938,6 +965,8 @@ def verify_phone_otp(raw_phone, token, remember=False):
         if session.user:
             st.session_state.logged_in = True
             st.session_state.user = session.user
+            if session.session:
+                st.session_state.refresh_token = session.session.refresh_token
             profile = get_or_create_profile(session.user.id, phone)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
@@ -966,6 +995,7 @@ def logout():
     st.session_state.logged_in = False
     st.session_state.user = None
     st.session_state.profile = None
+    st.session_state.refresh_token = None
     st.session_state.owner_space_access = False
     st.session_state.phone_otp_sent = False
     st.session_state.temp_phone = ""
@@ -1099,7 +1129,7 @@ def send_message(sender_id, receiver_id, content, media_file=None):
         st.session_state.last_error = f"Error sending message: {e}"
         return False
 
-# --- FIXED load_messages for older Supabase client (no or_ method) ---
+# --- load_messages (fixed for older Supabase client) ---
 def load_messages(user_id, other_id):
     if supabase is None:
         return []
@@ -1286,6 +1316,8 @@ def render_user_profile(user_id):
             st.session_state.viewing_profile = None
             st.rerun()
         return
+
+    # Attempt to load profile, with token refresh on JWT error
     try:
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not profile_resp.data:
@@ -1296,12 +1328,39 @@ def render_user_profile(user_id):
             return
         profile = profile_resp.data[0]
     except Exception as e:
-        st.error(f"Error loading profile: {e}")
-        if st.button("Back to Feed"):
-            st.session_state.viewing_profile = None
-            st.rerun()
-        return
-    
+        error_str = str(e)
+        if "JWT expired" in error_str:
+            # Try to refresh the session
+            if refresh_supabase_session():
+                # Retry the query
+                try:
+                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+                    if profile_resp.data:
+                        profile = profile_resp.data[0]
+                    else:
+                        st.error("User not found.")
+                        if st.button("Back to Feed"):
+                            st.session_state.viewing_profile = None
+                            st.rerun()
+                        return
+                except Exception as retry_e:
+                    st.error(f"Error loading profile after refresh: {retry_e}")
+                    if st.button("Back to Feed"):
+                        st.session_state.viewing_profile = None
+                        st.rerun()
+                    return
+            else:
+                st.error("Session expired. Please log in again.")
+                logout()
+                st.rerun()
+                return
+        else:
+            st.error(f"Error loading profile: {error_str}")
+            if st.button("Back to Feed"):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+
     st.header(f"👤 {profile['full_name']}'s Profile")
     col1, col2 = st.columns([1, 2])
     with col1:
