@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.3 (Added automatic token refresh to fix JWT expired errors)
+Version: 70.0.4 (Improved private video display, robust media handling)
 """
 import streamlit as st
 import smtplib
@@ -1746,7 +1746,7 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Private Chat Section (with media and share to feed)
+    # Private Chat Section (with improved media handling)
     if st.session_state.selected_chat:
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
@@ -1762,11 +1762,18 @@ def render_friends_page():
             if msg["sender_id"] == st.session_state.user.id:
                 # Outgoing message
                 if msg.get("media_url"):
-                    # Display media
-                    if msg.get("media_type") == "image":
-                        st.image(msg["media_url"], width=300)
-                    elif msg.get("media_type") == "video":
-                        st.video(msg["media_url"])
+                    # Display media with error handling
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
                     # Add Share to Feed button for own media
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
@@ -1794,11 +1801,18 @@ def render_friends_page():
             else:
                 # Incoming message
                 if msg.get("media_url"):
-                    # Display media
-                    if msg.get("media_type") == "image":
-                        st.image(msg["media_url"], width=300)
-                    elif msg.get("media_type") == "video":
-                        st.video(msg["media_url"])
+                    # Display media with error handling
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
                     # Add Share to Feed button for incoming media
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
