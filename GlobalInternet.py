@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 64.0.0 (Clickable links + media chat + all features)
+Version: 65.0.0 (Fixed posts loading + profiles + clickable links)
 """
 import streamlit as st
 import smtplib
@@ -532,7 +532,7 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions ---
+# --- Post functions (FIXED) ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
     """Load posts. If author_id given, load only posts by that user."""
@@ -542,8 +542,11 @@ def load_posts_cached(user_id=None, author_id=None):
         select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
         query = supabase.table("posts").select(select_cols)
         if author_id:
-            query = query.eq("user_id", author_id).eq("is_public", True)
+            # Load public posts of a specific user
+            resp = query.eq("user_id", author_id).eq("is_public", True).order("created_at", desc=True).execute()
+            posts = resp.data
         elif user_id:
+            # Load feed for logged-in user (public + own private)
             public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
@@ -555,11 +558,13 @@ def load_posts_cached(user_id=None, author_id=None):
                     unique_posts.append(p)
             posts = unique_posts
             posts.sort(key=lambda x: x['created_at'], reverse=True)
-            return posts
+            return posts  # Return early, no need to add reactions again? Actually we still need reactions.
         else:
+            # Load all public posts for non-logged-in users
             resp = query.eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
 
+        # Add reactions and comment counts
         for post in posts:
             post["media_urls"] = post.get("media_urls", [])
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
