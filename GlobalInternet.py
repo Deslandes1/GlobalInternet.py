@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.0 (Auto‑embed video links, background filters, gifts, friends)
+Version: 74.0.1 (Fixed logout and owner space gift query)
 """
 import streamlit as st
 import smtplib
@@ -1161,9 +1161,11 @@ def logout():
     set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
+    # Clear session state except for the keys we want to keep
+    keep_keys = ["logged_in", "user", "profile", "refresh_token", "posts", "live_sessions", "owner_space_access", "phone_otp_sent", "temp_phone", "viewing_live", "viewing_profile", "call_room", "in_call", "selected_chat", "notifications", "unread_count", "friend_requests", "friends", "replying_to", "last_error", "delete_confirm", "stream_key", "selected_platform", "live_gifts", "exchange_rate", "background_url"]
     for key in list(st.session_state.keys()):
-        if key not in ["logged_in", "user", "profile", "posts", "live_sessions", "owner_space_access"]:
-            st.session_state[key] = None
+        if key not in keep_keys:
+            del st.session_state[key]
     st.session_state.logged_in = False
     st.session_state.user = None
     st.session_state.profile = None
@@ -2397,7 +2399,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# --- Owner Space ---
+# --- Owner Space (fixed gift query) ---
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -2594,11 +2596,27 @@ def owner_space():
             st.warning("Supabase not connected.")
             return
 
-        # Fetch all completed gifts with user details
-        gifts = supabase.table("live_gifts").select(
-            "*, sender:sender_id(full_name), recipient:recipient_id(full_name, moncash_phone), session:session_id(title)"
-        ).eq("status", "completed").order("created_at", desc=True).execute()
-        gifts_data = gifts.data if gifts.data else []
+        # Fetch all completed gifts – with fallback if foreign key joins fail
+        try:
+            # Try to fetch with joins
+            gifts = supabase.table("live_gifts").select(
+                "*, sender:sender_id(full_name), recipient:recipient_id(full_name, moncash_phone), session:session_id(title)"
+            ).eq("status", "completed").order("created_at", desc=True).execute()
+            gifts_data = gifts.data if gifts.data else []
+        except Exception as e:
+            # If joins fail, fallback to simple query without joins
+            st.warning("Could not load sender/recipient names (foreign keys missing). Showing basic gift data.")
+            try:
+                gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
+                gifts_data = gifts.data if gifts.data else []
+                # Add placeholder names
+                for g in gifts_data:
+                    g['sender'] = {'full_name': 'Unknown'}
+                    g['recipient'] = {'full_name': 'Unknown', 'moncash_phone': None}
+                    g['session'] = {'title': 'Unknown'}
+            except Exception as e2:
+                st.error(f"Failed to load gifts: {e2}")
+                gifts_data = []
 
         if not gifts_data:
             st.info("No gifts yet.")
@@ -2606,12 +2624,12 @@ def owner_space():
             df = pd.DataFrame([{
                 "ID": g['id'],
                 "Date": g['created_at'][:16],
-                "Session": g['session']['title'] if g['session'] else "",
-                "Sender": g['sender']['full_name'] if g['sender'] else "",
-                "Recipient": g['recipient']['full_name'] if g['recipient'] else "",
+                "Session": g.get('session', {}).get('title', 'Unknown'),
+                "Sender": g.get('sender', {}).get('full_name', 'Unknown'),
+                "Recipient": g.get('recipient', {}).get('full_name', 'Unknown'),
                 "Amount": f"{g['amount']} {g['currency']}",
                 "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG",
-                "Recipient MonCash": g['recipient']['moncash_phone'] if g['recipient'] else ""
+                "Recipient MonCash": g.get('recipient', {}).get('moncash_phone', 'Not set')
             } for g in gifts_data])
             st.dataframe(df, use_container_width=True)
 
@@ -2620,7 +2638,6 @@ def owner_space():
             st.metric("Total Gifts (HTG)", f"{total_pending:.0f} HTG")
 
             if st.button("Mark All as Paid (Simulated)"):
-                # In production, integrate with MonCash bulk payout API
                 st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
 
     st.divider()
