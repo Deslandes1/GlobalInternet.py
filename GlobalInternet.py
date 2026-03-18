@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.1 (Added debug prints to load_friend_data)
+Version: 70.0.1 (Full Friends & Chat features with media sharing, calls, debug prints)
 """
 import streamlit as st
 import smtplib
@@ -126,7 +126,7 @@ if "in_call" not in st.session_state:
 if "viewing_profile" not in st.session_state:
     st.session_state.viewing_profile = None
 
-# --- Cookie helpers (unchanged) ---
+# --- Cookie helpers ---
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -198,7 +198,7 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
-# --- UI styling (unchanged) ---
+# --- UI styling ---
 st.markdown("""
     <style>
     .stApp [data-testid="stAppViewContainer"] {
@@ -671,7 +671,7 @@ def share_post(original_post_id, user_id, is_public=True):
         st.session_state.last_error = f"Error sharing post: {e}"
         return False
 
-# --- Comment functions (unchanged) ---
+# --- Comment functions ---
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
@@ -729,7 +729,7 @@ def like_comment(comment_id, increment=True):
         st.session_state.last_error = f"Error toggling comment like: {e}"
         return False
 
-# --- Live session functions (unchanged) ---
+# --- Live session functions ---
 def create_live_session(title, platform):
     if supabase is None or st.session_state.user is None:
         st.session_state.last_error = "Cannot start live session."
@@ -846,7 +846,7 @@ def get_uptime():
     minutes = int((seconds % 3600) // 60)
     return f"{hours:02d}:{minutes:02d}"
 
-# --- Authentication (unchanged) ---
+# --- Authentication ---
 def sign_up_email(email, password, full_name):
     if supabase is None:
         st.session_state.last_error = "Registration unavailable."
@@ -1142,7 +1142,7 @@ def end_call():
     st.session_state.in_call = False
     st.session_state.call_room = None
 
-# ========== FUNCTIONS FOR OWNER NOTIFICATIONS (unchanged) ==========
+# ========== FUNCTIONS FOR OWNER NOTIFICATIONS ==========
 def get_last_seen_signup():
     if supabase is None:
         return datetime(2020, 1, 1)
@@ -1853,7 +1853,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# ========== OWNER SPACE (unchanged) ==========
+# ========== OWNER SPACE ==========
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
