@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 62.0.0 (User profiles + media in private chat)
+Version: 63.0.0 (Clickable links + media chat)
 """
 import streamlit as st
 import smtplib
@@ -24,6 +24,7 @@ import os
 import random
 import string
 import traceback
+import re
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="GLOBALINTERNET.PY", page_icon="🇭🇹", layout="wide")
@@ -123,7 +124,6 @@ if "call_room" not in st.session_state:
     st.session_state.call_room = None
 if "in_call" not in st.session_state:
     st.session_state.in_call = False
-# --- New: viewing another user's profile ---
 if "viewing_profile" not in st.session_state:
     st.session_state.viewing_profile = None
 
@@ -403,10 +403,23 @@ st.markdown("""
         background-color: rgba(255,255,255,0.7) !important;
         color: #1e2a3a !important;
     }
+    /* Style for clickable links */
+    a {
+        color: #0080ff !important;
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ========== HELPER FUNCTIONS ==========
+
+def make_clickable(text):
+    """Convert URLs in text to clickable HTML links."""
+    url_pattern = r'(https?://[^\s]+)'
+    return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
 
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
@@ -1247,7 +1260,6 @@ def render_live_page(session_id):
 
 def render_user_profile(user_id):
     """Display another user's profile and their public posts."""
-    # Fetch user profile
     profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
     if not profile_resp.data:
         st.error("User not found.")
@@ -1285,7 +1297,9 @@ def render_user_profile(user_id):
                     st.markdown(f"**{post['profiles']['full_name']}**")
                     st.caption(post['created_at'][:16])
                     if post['content']:
-                        st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+                        # Make links clickable
+                        clickable_content = make_clickable(post['content'])
+                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     for media in post.get("media_urls", []):
                         if media["type"] == "image":
                             st.image(media["url"], use_column_width=True)
@@ -1410,7 +1424,6 @@ def render_feed():
                     else:
                         st.markdown("👤")
                 with col_b:
-                    # Click on name to view profile
                     name = post['profiles']['full_name']
                     if post['user_id'] != st.session_state.user.id:
                         if st.button(name, key=f"view_profile_{post['id']}"):
@@ -1439,9 +1452,10 @@ def render_feed():
                         elif media["type"] == "video":
                             st.video(media["url"])
 
-                # Caption under media
+                # Caption under media with clickable links
                 if post['content']:
-                    st.markdown(f"<div class='post-card'>{post['content']}</div>", unsafe_allow_html=True)
+                    clickable_content = make_clickable(post['content'])
+                    st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
 
                 # Reactions row
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
@@ -1482,7 +1496,8 @@ def render_feed():
                 for c in top_level:
                     col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
                     with col1:
-                        st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                        clickable_comment = make_clickable(c['content'])
+                        st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
                         st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
                     with col2:
                         if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
@@ -1511,7 +1526,8 @@ def render_feed():
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
                         colr1, colr2, colr3, colr4 = st.columns([4, 1, 1, 1])
                         with colr1:
-                            st.markdown(f"**{r['profiles']['full_name']}**: {r['content']}")
+                            clickable_reply = make_clickable(r['content'])
+                            st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
                             st.markdown(f"<span class='comment-meta'>{r['created_at'][:16]}</span>", unsafe_allow_html=True)
                         with colr2:
                             if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
@@ -1639,7 +1655,7 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Private Chat Section (with media)
+    # Private Chat Section (with media and clickable links)
     if st.session_state.selected_chat:
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
@@ -1657,7 +1673,9 @@ def render_friends_page():
                     elif msg["media_type"] == "video":
                         st.video(msg["media_url"])
                 if msg["content"]:
-                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                    # Make links clickable
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
                 # Incoming message
                 if "media_url" in msg:
@@ -1666,10 +1684,11 @@ def render_friends_page():
                     elif msg["media_type"] == "video":
                         st.video(msg["media_url"])
                 if msg["content"]:
-                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {msg['content']}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
         with st.form("send_message", clear_on_submit=True):
-            msg_content = st.text_input("Type a message...")
+            msg_content = st.text_input("Type a message... (URLs become clickable)")
             uploaded_file = st.file_uploader("Attach image/video", type=["png","jpg","jpeg","gif","mp4","mov","avi"])
             col1, col2 = st.columns([1,5])
             with col1:
