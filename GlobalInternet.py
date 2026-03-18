@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 72.0.0 (In-app Camera Live Streaming with WebRTC)
+Version: 72.0.1 (Enhanced live broadcast button visibility)
 """
 import streamlit as st
 import smtplib
@@ -1311,6 +1311,7 @@ def send_email_notification(new_users):
 
 # ========== PAGE RENDERING FUNCTIONS ==========
 
+# --- ENHANCED render_live_page with visible broadcast button ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -1323,6 +1324,12 @@ def render_live_page(session_id):
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
 
+    # Debug: show who you are
+    if is_broadcaster:
+        st.success("✅ You are the broadcaster. Use the controls below to start streaming.")
+    else:
+        st.info("👀 You are a viewer. Click 'Watch Stream' to see the live video.")
+
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
 
@@ -1330,7 +1337,7 @@ def render_live_page(session_id):
     with col1:
         stream_method = session.get("stream_method", "external")
         if stream_method == "external":
-            # Existing external streaming
+            # --- Keep your existing external streaming code here ---
             stream_url = session.get("stream_url")
             platform = session.get("platform")
             if is_broadcaster:
@@ -1375,16 +1382,18 @@ def render_live_page(session_id):
                 st.info("The streamer has not provided a video URL yet.")
         else:  # in-app streaming
             if is_broadcaster:
-                st.markdown("### 🎥 Start Broadcasting")
-                # Include PeerJS broadcaster HTML
+                # BROADCASTER VIEW – with prominent button
                 broadcaster_html = f"""
-                <div id="video-container" style="width: 100%; max-width: 800px; margin: 0 auto;">
-                    <video id="localVideo" autoplay muted style="width: 100%; border-radius: 12px; background: #000;"></video>
-                    <div style="margin-top: 10px;">
-                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer;">Start Broadcast</button>
-                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer; display: none;">Stop Broadcast</button>
+                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                    <div style="font-size: 24px; margin-bottom: 20px;">🎥 Your Live Stream</div>
+                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
+                        <video id="localVideo" autoplay muted style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></video>
                     </div>
-                    <p id="status"></p>
+                    <div style="margin-top: 30px;">
+                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ START BROADCAST</button>
+                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">■ STOP BROADCAST</button>
+                    </div>
+                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Ready to start. Click the button above.</p>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <script>
@@ -1401,10 +1410,10 @@ def render_live_page(session_id):
 
                     startBtn.onclick = async () => {{
                         try {{
-                            statusEl.textContent = 'Requesting camera access...';
+                            statusEl.textContent = '📷 Requesting camera access...';
                             localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
                             localVideo.srcObject = localStream;
-                            statusEl.textContent = 'Camera access granted. Connecting to peer server...';
+                            statusEl.textContent = '✅ Camera access granted. Connecting to peer server...';
 
                             peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
                                 host: '0.peerjs.com',
@@ -1419,7 +1428,7 @@ def render_live_page(session_id):
                             }});
 
                             peer.on('open', (id) => {{
-                                statusEl.textContent = `Broadcasting with ID: ${{id}}`;
+                                statusEl.textContent = `✅ Broadcasting live! Your peer ID: ${{id}}`;
                                 startBtn.style.display = 'none';
                                 stopBtn.style.display = 'inline-block';
                             }});
@@ -1430,10 +1439,10 @@ def render_live_page(session_id):
                             }});
 
                             peer.on('error', (err) => {{
-                                statusEl.textContent = 'Peer error: ' + err;
+                                statusEl.textContent = '❌ Peer error: ' + err;
                             }});
                         }} catch (err) {{
-                            statusEl.textContent = 'Error: ' + err.message;
+                            statusEl.textContent = '❌ Error: ' + err.message;
                         }}
                     }};
 
@@ -1449,16 +1458,19 @@ def render_live_page(session_id):
                 }})();
                 </script>
                 """
-                st.components.v1.html(broadcaster_html, height=550)
+                st.components.v1.html(broadcaster_html, height=650)
             else:
-                # Viewer: show remote video
+                # VIEWER VIEW – with watch button
                 viewer_html = f"""
-                <div id="video-container" style="width: 100%; max-width: 800px; margin: 0 auto;">
-                    <video id="remoteVideo" autoplay style="width: 100%; border-radius: 12px; background: #000;"></video>
-                    <div style="margin-top: 10px;">
-                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 40px; padding: 10px 28px; font-weight: 600; cursor: pointer;">Watch Stream</button>
+                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                    <div style="font-size: 24px; margin-bottom: 20px;">👀 Watching Live Stream</div>
+                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
+                        <video id="remoteVideo" autoplay style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></video>
                     </div>
-                    <p id="status"></p>
+                    <div style="margin-top: 30px;">
+                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ WATCH STREAM</button>
+                    </div>
+                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Click the button to start watching.</p>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <script>
@@ -1488,23 +1500,24 @@ def render_live_page(session_id):
                             const call = peer.call(`broadcaster-${{sessionId}}`, null);
                             call.on('stream', (remoteStream) => {{
                                 remoteVideo.srcObject = remoteStream;
-                                statusEl.textContent = 'Now watching live stream';
+                                statusEl.textContent = '✅ Now watching live stream';
                                 watchBtn.style.display = 'none';
                             }});
                             call.on('error', (err) => {{
-                                statusEl.textContent = 'Call error: ' + err;
+                                statusEl.textContent = '❌ Call error: ' + err;
                             }});
                         }});
 
                         peer.on('error', (err) => {{
-                            statusEl.textContent = 'Peer error: ' + err;
+                            statusEl.textContent = '❌ Peer error: ' + err;
                         }});
                     }};
                 }})();
                 </script>
                 """
-                st.components.v1.html(viewer_html, height=400)
+                st.components.v1.html(viewer_html, height=550)
 
+        # Shareable link (works for both methods)
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -1513,6 +1526,7 @@ def render_live_page(session_id):
         st.text_input("Shareable link", value=share_url)
 
     with col2:
+        # --- Keep your existing live chat and gifts code here ---
         st.subheader("Live Chat & Gifts")
         if not is_broadcaster:
             st.markdown("### 🎁 Send a Gift")
@@ -1577,7 +1591,7 @@ def render_live_page(session_id):
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
 def render_user_profile(user_id):
-    # (unchanged, but we add moncash_phone display)
+    # (unchanged – keep your existing code)
     if supabase is None:
         st.error("Database not connected.")
         if st.button("Back to Feed"):
@@ -1897,7 +1911,6 @@ def render_feed():
                 st.divider()
 
 def render_friends_page():
-    # (unchanged, but we might show gift history later)
     st.header("👥 Friends & Chat")
 
     with st.expander("ℹ️ Setup Instructions (if uploads fail)"):
@@ -2135,7 +2148,6 @@ def render_friends_page():
             st.rerun()
 
 def render_map():
-    # (unchanged)
     st.header("🛰️ Satellite Network")
     sats = {
         "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
