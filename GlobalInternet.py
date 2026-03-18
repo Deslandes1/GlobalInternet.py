@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.5 (Full working version with all functions)
+Version: 74.0.6 (Improved video embedding for all users)
 """
 import streamlit as st
 import smtplib
@@ -469,7 +469,8 @@ def get_youtube_id(url):
     patterns = [
         r'(?:youtube\.com\/watch\?v=)([\w-]+)',
         r'(?:youtu\.be\/)([\w-]+)',
-        r'(?:youtube\.com\/embed\/)([\w-]+)'
+        r'(?:youtube\.com\/embed\/)([\w-]+)',
+        r'(?:youtube\.com\/v\/)([\w-]+)'
     ]
     for pattern in patterns:
         match = re.search(pattern, url)
@@ -482,9 +483,21 @@ def get_vimeo_id(url):
     match = re.search(r'(?:vimeo\.com\/)(\d+)', url)
     return match.group(1) if match else None
 
+def get_dailymotion_id(url):
+    """Extract Dailymotion video ID."""
+    match = re.search(r'(?:dailymotion\.com\/video\/)([a-zA-Z0-9]+)', url)
+    return match.group(1) if match else None
+
+def get_facebook_video_url(url):
+    """Check if it's a Facebook video and return embed URL."""
+    if 'facebook.com' in url and ('/video' in url or '/watch' in url):
+        # Facebook embed works with the page URL
+        return url
+    return None
+
 def is_direct_video_url(url):
     """Check if URL points to a common video file extension."""
-    video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv']
+    video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg']
     return any(url.lower().endswith(ext) for ext in video_extensions)
 
 def embed_video_from_url(url):
@@ -495,7 +508,8 @@ def embed_video_from_url(url):
         <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
                 frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
         """
-        return st.components.v1.html(embed_html, height=410)
+        st.components.v1.html(embed_html, height=410)
+        return True
     
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
@@ -503,12 +517,34 @@ def embed_video_from_url(url):
         <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
                 frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
         """
-        return st.components.v1.html(embed_html, height=410)
+        st.components.v1.html(embed_html, height=410)
+        return True
+    
+    dailymotion_id = get_dailymotion_id(url)
+    if dailymotion_id:
+        embed_html = f"""
+        <iframe frameborder="0" width="100%" height="400" 
+                src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
+                allowfullscreen allow="autoplay"></iframe>
+        """
+        st.components.v1.html(embed_html, height=410)
+        return True
+    
+    fb_url = get_facebook_video_url(url)
+    if fb_url:
+        embed_html = f"""
+        <div id="fb-root"></div>
+        <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
+        <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div>
+        """
+        st.components.v1.html(embed_html, height=450)
+        return True
     
     if is_direct_video_url(url):
-        return st.video(url)
+        st.video(url)
+        return True
     
-    return None
+    return False
 
 def get_or_create_profile(user_id, identifier):
     if supabase is None:
@@ -1954,9 +1990,9 @@ def render_feed():
                 st.markdown("👤", unsafe_allow_html=True)
         with col_input:
             content = st.text_area(
-                "Caption / What's on your mind? (Paste a video link to embed)",
+                "Caption / What's on your mind? (Paste a video link to embed – YouTube, Vimeo, Dailymotion, Facebook, or direct video file)",
                 height=150,
-                placeholder="Write something... or paste a YouTube/Vimeo/video link",
+                placeholder="Write something... or paste a video link",
                 label_visibility="collapsed"
             )
         media_files = st.file_uploader(
