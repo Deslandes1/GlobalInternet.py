@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.0 (Added Share to Feed from private chat)
+Version: 70.0.1 (Added debug prints to load_friend_data)
 """
 import streamlit as st
 import smtplib
@@ -1036,20 +1036,27 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
+# --- UPDATED load_friend_data with debug prints ---
 def load_friend_data():
     if supabase is None or not st.session_state.user:
+        st.write("Supabase or user missing")
         return
     user_id = st.session_state.user.id
+    st.write(f"Loading friends for user {user_id}")
     pending = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "pending").execute()
+    st.write("Pending requests:", pending.data)
     st.session_state.friend_requests = pending.data if pending.data else []
     sent = supabase.table("friend_requests").select("*, receiver:receiver_id(full_name, avatar_url)").eq("sender_id", user_id).eq("status", "accepted").execute()
+    st.write("Accepted sent requests:", sent.data)
     received = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "accepted").execute()
+    st.write("Accepted received requests:", received.data)
     friends = []
     for r in sent.data:
         friends.append({"id": r["receiver"]["id"], "full_name": r["receiver"]["full_name"], "avatar_url": r["receiver"].get("avatar_url")})
     for r in received.data:
         friends.append({"id": r["sender"]["id"], "full_name": r["sender"]["full_name"], "avatar_url": r["sender"].get("avatar_url")})
     st.session_state.friends = friends
+    st.write("Final friends list:", friends)
 
 def search_users(query):
     if supabase is None or not st.session_state.user:
