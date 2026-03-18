@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.1 (Full Friends & Chat features with media sharing, calls, debug prints)
+Version: 70.0.2 (Fixed load_messages for older Supabase client)
 """
 import streamlit as st
 import smtplib
@@ -1036,7 +1036,7 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
-# --- UPDATED load_friend_data with debug prints ---
+# --- load_friend_data with debug prints ---
 def load_friend_data():
     if supabase is None or not st.session_state.user:
         st.write("Supabase or user missing")
@@ -1099,16 +1099,21 @@ def send_message(sender_id, receiver_id, content, media_file=None):
         st.session_state.last_error = f"Error sending message: {e}"
         return False
 
+# --- FIXED load_messages for older Supabase client (no or_ method) ---
 def load_messages(user_id, other_id):
     if supabase is None:
         return []
     try:
-        msgs = supabase.table("messages").select("*").or_(
-            f"and(sender_id.eq.{user_id},receiver_id.eq.{other_id})",
-            f"and(sender_id.eq.{other_id},receiver_id.eq.{user_id})"
-        ).order("created_at").execute()
+        # Get messages where user is sender and other is receiver
+        sent = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", other_id).execute()
+        # Get messages where other is sender and user is receiver
+        received = supabase.table("messages").select("*").eq("sender_id", other_id).eq("receiver_id", user_id).execute()
+        # Combine and sort by created_at
+        all_msgs = (sent.data or []) + (received.data or [])
+        all_msgs.sort(key=lambda x: x['created_at'])
+        # Mark messages as read
         supabase.table("messages").update({"read": True}).eq("sender_id", other_id).eq("receiver_id", user_id).execute()
-        return msgs.data
+        return all_msgs
     except Exception as e:
         st.session_state.last_error = f"Error loading messages: {e}"
         return []
