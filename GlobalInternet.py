@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 70.0.4 (Improved private video display, robust media handling)
+Version: 70.0.5 (RLS policy guidance, file size limit info)
 """
 import streamlit as st
 import smtplib
@@ -487,6 +487,7 @@ def update_profile(profile_data):
 
 def upload_avatar(user_id, image_file):
     if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
         return None
     try:
         ext = image_file.name.split('.')[-1]
@@ -496,7 +497,11 @@ def upload_avatar(user_id, image_file):
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
     except Exception as e:
-        st.session_state.last_error = f"Avatar upload failed: {e}"
+        error_message = str(e)
+        if "new row violates row-level security policy" in error_message:
+            st.error("Storage permission error: Please set up RLS policies for the 'avatars' bucket. See instructions below.")
+        else:
+            st.session_state.last_error = f"Avatar upload failed: {e}"
         return None
 
 def upload_post_media(user_id, file):
@@ -519,7 +524,11 @@ def upload_post_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        st.session_state.last_error = f"Media upload failed: {e}"
+        error_message = str(e)
+        if "new row violates row-level security policy" in error_message:
+            st.error("Storage permission error: Please set up RLS policies for the 'post_media' bucket. See instructions below.")
+        else:
+            st.session_state.last_error = f"Media upload failed: {e}"
         return None
 
 def upload_chat_media(user_id, file):
@@ -543,7 +552,11 @@ def upload_chat_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        st.session_state.last_error = f"Chat media upload failed: {e}"
+        error_message = str(e)
+        if "new row violates row-level security policy" in error_message:
+            st.error("Storage permission error: Please set up RLS policies for the 'chat_media' bucket. See instructions below.")
+        else:
+            st.session_state.last_error = f"Chat media upload failed: {e}"
         return None
 
 def delete_post(post_id):
@@ -556,7 +569,7 @@ def delete_post(post_id):
         st.session_state.last_error = f"Error deleting post: {e}"
         return False
 
-# --- Post functions (modified to accept existing media URLs) ---
+# --- Post functions ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
     """Load posts. If author_id given, load only posts by that user."""
@@ -1639,6 +1652,24 @@ def render_feed():
 def render_friends_page():
     st.header("👥 Friends & Chat")
 
+    # Display RLS setup instructions if upload fails (but we'll show them here as a general hint)
+    with st.expander("ℹ️ Setup Instructions (if uploads fail)"):
+        st.markdown("""
+        **If you get "new row violates row-level security policy" when uploading files:**
+
+        1. Go to your Supabase Dashboard → Storage.
+        2. For each bucket (`avatars`, `post_media`, `chat_media`), click on the bucket → "Policies".
+        3. Add a new policy:
+           - Policy name: `Allow authenticated uploads`
+           - Allowed operations: `INSERT`
+           - Target roles: `authenticated`
+           - USING expression: `(auth.role() = 'authenticated')`
+        4. Also add a policy for SELECT (reading) if needed:
+           - Policy name: `Allow public read`
+           - Allowed operations: `SELECT`
+           - USING expression: `true`
+        """)
+
     st.markdown(f"<div class='friend-count'>You have {len(st.session_state.friends)} friends</div>", unsafe_allow_html=True)
     st.divider()
 
@@ -1840,6 +1871,8 @@ def render_friends_page():
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input("Type a message... (URLs become clickable)")
             uploaded_file = st.file_uploader("Attach image/video", type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            # File size warning
+            st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
             col1, col2 = st.columns([1,5])
             with col1:
                 sent = st.form_submit_button("Send")
