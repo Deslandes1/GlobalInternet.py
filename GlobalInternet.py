@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.8 (Fixed background filter preview & gift permissions)
+Version: 74.0.9 (Final – all errors fixed, gift query fallback, safe logout)
 """
 import streamlit as st
 import smtplib
@@ -77,7 +77,7 @@ SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
 EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
-# --- Session state ---
+# --- Session state (all keys properly initialized) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
@@ -113,7 +113,7 @@ if "delete_confirm" not in st.session_state:
 if "last_error" not in st.session_state:
     st.session_state.last_error = None
 if "replying_to" not in st.session_state:
-    st.session_state.replying_to = {}
+    st.session_state.replying_to = {}          # must be a dict
 # --- Friend/Chat state ---
 if "notifications" not in st.session_state:
     st.session_state.notifications = []
@@ -1308,11 +1308,7 @@ def logout():
     set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
-    # Clear session state except for the keys we want to keep
-    keep_keys = ["logged_in", "user", "profile", "refresh_token", "posts", "live_sessions", "owner_space_access", "phone_otp_sent", "temp_phone", "viewing_live", "viewing_profile", "call_room", "in_call", "selected_chat", "notifications", "unread_count", "friend_requests", "friends", "replying_to", "last_error", "delete_confirm", "stream_key", "selected_platform", "live_gifts", "exchange_rate", "background_url"]
-    for key in list(st.session_state.keys()):
-        if key not in keep_keys:
-            del st.session_state[key]
+    # Reset only the session state variables we manage, not widget keys
     st.session_state.logged_in = False
     st.session_state.user = None
     st.session_state.profile = None
@@ -1322,6 +1318,19 @@ def logout():
     st.session_state.temp_phone = ""
     st.session_state.viewing_live = None
     st.session_state.viewing_profile = None
+    st.session_state.selected_chat = None
+    st.session_state.call_room = None
+    st.session_state.in_call = False
+    st.session_state.delete_confirm = None
+    st.session_state.last_error = None
+    st.session_state.replying_to = {}
+    st.session_state.notifications = []
+    st.session_state.unread_count = 0
+    st.session_state.friend_requests = []
+    st.session_state.friends = []
+    st.session_state.live_gifts = []
+    st.session_state.background_url = None
+    # Do NOT touch st.session_state keys that might be widget keys (like 'yt', 'fb', etc.)
     st.rerun()
 
 # --- Friend, Chat, Call functions ---
@@ -1586,7 +1595,7 @@ def send_email_notification(new_users):
 
 # ========== PAGE RENDERING FUNCTIONS ==========
 
-# --- ENHANCED render_live_page with background filters (fixed preview) ---
+# --- ENHANCED render_live_page with background filters and improved viewer ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -1689,7 +1698,7 @@ def render_live_page(session_id):
                         st.session_state.background_url = data_url
                         st.success("Background set!")
 
-                # BROADCASTER VIEW with background filter (fixed preview)
+                # BROADCASTER VIEW with background filter
                 broadcaster_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">🎥 Your Live Stream</div>
@@ -1823,7 +1832,7 @@ def render_live_page(session_id):
                 """
                 st.components.v1.html(broadcaster_html, height=750)
             else:
-                # VIEWER VIEW
+                # VIEWER VIEW – improved with detailed status messages and error handling
                 viewer_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">👀 Watching Live Stream</div>
@@ -1834,6 +1843,7 @@ def render_live_page(session_id):
                         <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ WATCH STREAM</button>
                     </div>
                     <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Click the button to start watching.</p>
+                    <div id="debug" style="margin-top: 10px; font-size: 14px; color: #aaa; text-align: left; background: #222; padding: 10px; border-radius: 8px; display: none;"></div>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <script>
@@ -1842,11 +1852,21 @@ def render_live_page(session_id):
                     const remoteVideo = document.getElementById('remoteVideo');
                     const watchBtn = document.getElementById('watchBtn');
                     const statusEl = document.getElementById('status');
-                    let peer = null;
+                    const debugEl = document.getElementById('debug');
+                    
+                    function log(message) {{
+                        console.log(message);
+                        if (debugEl) {{
+                            debugEl.style.display = 'block';
+                            debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+                        }}
+                    }}
 
                     watchBtn.onclick = () => {{
-                        statusEl.textContent = 'Connecting to broadcaster...';
-                        peer = new Peer({{ 
+                        log('Watch button clicked. Initializing peer...');
+                        statusEl.textContent = 'Initializing...';
+                        
+                        const peer = new Peer({{ 
                             host: '0.peerjs.com',
                             port: 443,
                             secure: true,
@@ -1859,26 +1879,45 @@ def render_live_page(session_id):
                         }});
 
                         peer.on('open', (id) => {{
-                            statusEl.textContent = 'Connected. Requesting stream...';
-                            const call = peer.call(`broadcaster-${{sessionId}}`, null);
+                            log(`Peer open with ID: ${{id}}`);
+                            statusEl.textContent = `Connected. Requesting stream from broadcaster...`;
+                            
+                            const targetId = `broadcaster-${{sessionId}}`;
+                            log(`Calling ${{targetId}}...`);
+                            const call = peer.call(targetId, null);
+                            
                             call.on('stream', (remoteStream) => {{
+                                log('Received remote stream');
                                 remoteVideo.srcObject = remoteStream;
                                 statusEl.textContent = '✅ Now watching live stream';
                                 watchBtn.style.display = 'none';
                             }});
+                            
                             call.on('error', (err) => {{
+                                log('Call error: ' + err);
                                 statusEl.textContent = '❌ Call error: ' + err;
+                            }});
+                            
+                            call.on('close', () => {{
+                                log('Call closed');
+                                statusEl.textContent = 'Call ended';
                             }});
                         }});
 
                         peer.on('error', (err) => {{
+                            log('Peer error: ' + err);
                             statusEl.textContent = '❌ Peer error: ' + err;
+                        }});
+                        
+                        peer.on('disconnected', () => {{
+                            log('Peer disconnected');
+                            statusEl.textContent = 'Disconnected. Please refresh.';
                         }});
                     }};
                 }})();
                 </script>
                 """
-                st.components.v1.html(viewer_html, height=550)
+                st.components.v1.html(viewer_html, height=650)
 
         # Shareable link
         try:
@@ -2590,7 +2629,7 @@ def render_profile():
     with cold:
         st.metric("Member since", profile.get("join_date", "2024")[:10])
 
-# --- Owner Space (fixed gift query) ---
+# --- Owner Space (fixed gift query, no joins) ---
 def owner_space():
     st.header("🕊️ Owner Space (Private)")
     
@@ -2787,7 +2826,7 @@ def owner_space():
             st.warning("Supabase not connected.")
             return
 
-        # Fetch all completed gifts – now using sender_name from the table
+        # Fetch all completed gifts – using stored sender_name (no joins)
         try:
             gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
             gifts_data = gifts.data if gifts.data else []
@@ -2798,8 +2837,7 @@ def owner_space():
         if not gifts_data:
             st.info("No gifts yet.")
         else:
-            # For display, we need sender_name and recipient info (but recipient name would require join – for now, show IDs)
-            # We'll just show the basic data with sender_name.
+            # Simple display with stored sender_name and recipient_id
             df = pd.DataFrame([{
                 "ID": g['id'],
                 "Date": g['created_at'][:16],
