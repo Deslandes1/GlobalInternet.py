@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.12 (Final – no joins to auth.users, all features intact)
+Version: 75.0.0 (Multi‑language support + session persistence)
 """
 import streamlit as st
 import smtplib
@@ -139,6 +139,1121 @@ if "exchange_rate" not in st.session_state:
 # --- Background state ---
 if "background_url" not in st.session_state:
     st.session_state.background_url = None
+# --- Language state ---
+if "language" not in st.session_state:
+    st.session_state.language = "en"
+
+# --- Language dictionary ---
+LANG = {
+    "en": {
+        "login_title": "Login",
+        "signup_title": "Sign Up",
+        "forgot_password": "Forgot Password",
+        "email": "Email",
+        "password": "Password",
+        "full_name": "Full Name",
+        "remember_me": "Remember me",
+        "login_button": "🚀 Login",
+        "signup_button": "📝 Sign Up",
+        "send_reset_link": "Send Reset Link",
+        "phone_method": "Phone (OTP)",
+        "email_method": "Email",
+        "phone_number": "Phone number (digits only, e.g., 50947385663)",
+        "send_otp": "📲 Send OTP",
+        "enter_otp": "Enter 6-digit OTP code",
+        "verify_login": "✅ Verify & Login",
+        "back_resend": "← Back / Resend OTP",
+        "feed": "📡 Feed",
+        "friends_chat": "👥 Friends & Chat",
+        "satellite_map": "🛰️ Satellite Map",
+        "profile": "👤 Profile",
+        "owner_space": "🕊️ Owner Space",
+        "logout": "🚪 Logout",
+        "system_health": "🛡️ System Health",
+        "signal": "📡 Signal",
+        "latency": "⏱️ Latency",
+        "quality": "📊 Quality",
+        "uptime": "⏰ Uptime",
+        "encrypted": "🔒 Status: ENCRYPTED",
+        "compensation": "💰 Compensation",
+        "logged_in_as": "👤 Logged in as",
+        "go_live": "Go Live (Real Streaming)",
+        "external_platform": "External platform (YouTube/Facebook/Twitch)",
+        "in_app_camera": "In-app camera",
+        "select_platform": "Select platform",
+        "live_title": "Live title",
+        "create_live_session": "Create Live Session",
+        "you_are_live": "🔴 You are live!",
+        "end_live_session": "End Live Session",
+        "set_stream_url": "📹 Set Stream URL",
+        "paste_url": "Paste your live stream URL",
+        "update_url": "Update Stream URL",
+        "shareable_link": "Shareable link",
+        "live_chat_gifts": "Live Chat & Gifts",
+        "send_gift": "🎁 Send a Gift",
+        "add_moncash": "Add your MonCash phone number in your profile to send gifts.",
+        "total_gifts": "Total Gifts Received",
+        "gifts_sent_to": "Gifts will be sent to your MonCash",
+        "write_comment": "Write a comment...",
+        "send": "Send",
+        "back_to_feed": "Back to Feed",
+        "create_post": "Create a post",
+        "caption_placeholder": "Write something... or paste a video link",
+        "add_media": "Add images or videos (optional)",
+        "visibility": "Visibility",
+        "public": "Public",
+        "private": "Private",
+        "post": "🚀 Post",
+        "delete_post": "🗑️ Delete",
+        "comments": "Comments",
+        "reply": "💬 Reply",
+        "post_reply": "Post Reply",
+        "your_reply": "Your reply",
+        "clear_error": "Clear error",
+        "join_live": "Join Live",
+        "watch_stream": "▶ WATCH STREAM",
+        "start_broadcast": "▶ START BROADCAST",
+        "stop_broadcast": "■ STOP BROADCAST",
+        "you_are_broadcaster": "✅ You are the broadcaster. Use the controls below to start streaming.",
+        "you_are_viewer": "👀 You are a viewer. Click 'Watch Stream' to see the live video.",
+        "choose_background": "🎨 Background Filters",
+        "bg_option": "BG",
+        "upload_background": "Or upload your own image",
+        "background_set": "Background set!",
+        "ready_to_start": "Ready to start. Click the button above.",
+        "camera_access": "📷 Requesting camera access...",
+        "camera_granted": "✅ Camera access granted. Connecting to peer server...",
+        "broadcasting": "✅ Broadcasting live! Your peer ID",
+        "peer_error": "❌ Peer error",
+        "error": "❌ Error",
+        "broadcast_ended": "Broadcast ended",
+        "initializing": "Initializing...",
+        "connected_requesting": "Connected. Requesting stream from broadcaster...",
+        "calling": "Calling",
+        "received_stream": "Received remote stream",
+        "now_watching": "✅ Now watching live stream",
+        "call_error": "❌ Call error",
+        "call_ended": "Call ended",
+        "disconnected": "Disconnected. Please refresh.",
+        "send_message": "Send",
+        "close_chat": "Close chat",
+        "active_call": "📞 Active Call",
+        "room_id": "Room ID",
+        "share_room": "Share this room ID with the person you want to call.",
+        "start_call": "Start a new call",
+        "end_call": "End Call",
+        "find_users": "🔍 Find Users",
+        "search_by_name": "Search by name",
+        "add_friend": "➕ Add Friend",
+        "view_profile": "👤 View Profile",
+        "friend_requests": "📨 Friend Requests Received",
+        "accept": "✅ Accept",
+        "reject": "❌ Reject",
+        "your_friends": "👥 Your Friends",
+        "no_friends": "You have no friends yet",
+        "chat": "💬 Chat",
+        "call": "📞 Call",
+        "profile_btn": "👤 Profile",
+        "edit_profile": "Edit Profile",
+        "save_changes": "💾 Save Changes",
+        "change_picture": "📸 Change picture",
+        "bio": "Bio",
+        "location": "Location",
+        "moncash_phone": "MonCash Phone Number (for receiving gifts)",
+        "posts_count": "Posts",
+        "connections": "Connections",
+        "verified": "Verified",
+        "member_since": "Member since",
+        "dashboard": "💰 Dashboard",
+        "new_users": "📈 New Users",
+        "post_moderation": "🛡️ User Post Moderation",
+        "client_payments": "📥 Client Payments",
+        "gift_management": "🎁 Gift Management",
+        "owner_dashboard": "🔐 Owner's Dashboard",
+        "balance": "MonCash Business Balance",
+        "transfer_funds": "💰 Transfer Funds to Your Account",
+        "amount_transfer": "Amount to transfer ($)",
+        "transfer": "🚀 Transfer to My MonCash",
+        "no_gifts": "No gifts yet.",
+        "payout_summary": "Payout Summary",
+        "total_gifts_htg": "Total Gifts (HTG)",
+        "mark_paid": "Mark All as Paid (Simulated)",
+        "contact_support": "📬 Contact for Support / Large Payments",
+        "logout_owner": "Logout from Owner Space",
+        "setup_instructions": "ℹ️ Setup Instructions (if uploads fail)",
+        "storage_error": "Storage permission error: Please set up RLS policies for the 'avatars' bucket.",
+    },
+    "fr": {
+        "login_title": "Connexion",
+        "signup_title": "S'inscrire",
+        "forgot_password": "Mot de passe oublié",
+        "email": "Email",
+        "password": "Mot de passe",
+        "full_name": "Nom complet",
+        "remember_me": "Se souvenir de moi",
+        "login_button": "🚀 Connexion",
+        "signup_button": "📝 Inscription",
+        "send_reset_link": "Envoyer le lien de réinitialisation",
+        "phone_method": "Téléphone (OTP)",
+        "email_method": "Email",
+        "phone_number": "Numéro de téléphone (chiffres uniquement, ex: 50947385663)",
+        "send_otp": "📲 Envoyer OTP",
+        "enter_otp": "Entrez le code OTP à 6 chiffres",
+        "verify_login": "✅ Vérifier et se connecter",
+        "back_resend": "← Retour / Renvoyer OTP",
+        "feed": "📡 Fil d'actualité",
+        "friends_chat": "👥 Amis et Chat",
+        "satellite_map": "🛰️ Carte satellite",
+        "profile": "👤 Profil",
+        "owner_space": "🕊️ Espace propriétaire",
+        "logout": "🚪 Déconnexion",
+        "system_health": "🛡️ État du système",
+        "signal": "📡 Signal",
+        "latency": "⏱️ Latence",
+        "quality": "📊 Qualité",
+        "uptime": "⏰ Temps de fonctionnement",
+        "encrypted": "🔒 Statut : CHIFFRÉ",
+        "compensation": "💰 Compensation",
+        "logged_in_as": "👤 Connecté en tant que",
+        "go_live": "Passer en direct",
+        "external_platform": "Plateforme externe (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Caméra intégrée",
+        "select_platform": "Choisir la plateforme",
+        "live_title": "Titre du direct",
+        "create_live_session": "Créer une session en direct",
+        "you_are_live": "🔴 Vous êtes en direct !",
+        "end_live_session": "Terminer le direct",
+        "set_stream_url": "📹 Définir l'URL du flux",
+        "paste_url": "Collez l'URL de votre flux en direct",
+        "update_url": "Mettre à jour l'URL",
+        "shareable_link": "Lien partageable",
+        "live_chat_gifts": "Chat en direct et cadeaux",
+        "send_gift": "🎁 Envoyer un cadeau",
+        "add_moncash": "Ajoutez votre numéro MonCash dans votre profil pour envoyer des cadeaux.",
+        "total_gifts": "Total des cadeaux reçus",
+        "gifts_sent_to": "Les cadeaux seront envoyés à votre MonCash",
+        "write_comment": "Écrire un commentaire...",
+        "send": "Envoyer",
+        "back_to_feed": "Retour au fil",
+        "create_post": "Créer une publication",
+        "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo",
+        "add_media": "Ajouter des images ou vidéos (optionnel)",
+        "visibility": "Visibilité",
+        "public": "Public",
+        "private": "Privé",
+        "post": "🚀 Publier",
+        "delete_post": "🗑️ Supprimer",
+        "comments": "Commentaires",
+        "reply": "💬 Répondre",
+        "post_reply": "Publier la réponse",
+        "your_reply": "Votre réponse",
+        "clear_error": "Effacer l'erreur",
+        "join_live": "Rejoindre le direct",
+        "watch_stream": "▶ REGARDER LE DIRECT",
+        "start_broadcast": "▶ COMMENCER LA DIFFUSION",
+        "stop_broadcast": "■ ARRÊTER LA DIFFUSION",
+        "you_are_broadcaster": "✅ Vous êtes le diffuseur. Utilisez les commandes ci‑dessous pour commencer.",
+        "you_are_viewer": "👀 Vous êtes spectateur. Cliquez sur 'Regarder le direct' pour voir la vidéo.",
+        "choose_background": "🎨 Filtres d'arrière‑plan",
+        "bg_option": "AR",
+        "upload_background": "Ou téléchargez votre propre image",
+        "background_set": "Arrière‑plan défini !",
+        "ready_to_start": "Prêt à commencer. Cliquez sur le bouton ci‑dessus.",
+        "camera_access": "📷 Demande d'accès à la caméra...",
+        "camera_granted": "✅ Accès à la caméra accordé. Connexion au serveur peer...",
+        "broadcasting": "✅ Diffusion en direct ! Votre ID peer",
+        "peer_error": "❌ Erreur peer",
+        "error": "❌ Erreur",
+        "broadcast_ended": "Diffusion terminée",
+        "initializing": "Initialisation...",
+        "connected_requesting": "Connecté. Demande du flux au diffuseur...",
+        "calling": "Appel en cours",
+        "received_stream": "Flux reçu",
+        "now_watching": "✅ Vous regardez maintenant le direct",
+        "call_error": "❌ Erreur d'appel",
+        "call_ended": "Appel terminé",
+        "disconnected": "Déconnecté. Veuillez rafraîchir.",
+        "send_message": "Envoyer",
+        "close_chat": "Fermer le chat",
+        "active_call": "📞 Appel en cours",
+        "room_id": "ID de la salle",
+        "share_room": "Partagez cet ID avec la personne que vous voulez appeler.",
+        "start_call": "Commencer un nouvel appel",
+        "end_call": "Terminer l'appel",
+        "find_users": "🔍 Trouver des utilisateurs",
+        "search_by_name": "Rechercher par nom",
+        "add_friend": "➕ Ajouter un ami",
+        "view_profile": "👤 Voir le profil",
+        "friend_requests": "📨 Demandes d'amis reçues",
+        "accept": "✅ Accepter",
+        "reject": "❌ Refuser",
+        "your_friends": "👥 Vos amis",
+        "no_friends": "Vous n'avez pas encore d'amis",
+        "chat": "💬 Chat",
+        "call": "📞 Appel",
+        "profile_btn": "👤 Profil",
+        "edit_profile": "Modifier le profil",
+        "save_changes": "💾 Enregistrer les modifications",
+        "change_picture": "📸 Changer la photo",
+        "bio": "Bio",
+        "location": "Localisation",
+        "moncash_phone": "Numéro MonCash (pour recevoir des cadeaux)",
+        "posts_count": "Publications",
+        "connections": "Connexions",
+        "verified": "Vérifié",
+        "member_since": "Membre depuis",
+        "dashboard": "💰 Tableau de bord",
+        "new_users": "📈 Nouveaux utilisateurs",
+        "post_moderation": "🛡️ Modération des publications",
+        "client_payments": "📥 Paiements clients",
+        "gift_management": "🎁 Gestion des cadeaux",
+        "owner_dashboard": "🔐 Tableau de bord du propriétaire",
+        "balance": "Solde MonCash Business",
+        "transfer_funds": "💰 Transférer des fonds vers votre compte",
+        "amount_transfer": "Montant à transférer ($)",
+        "transfer": "🚀 Transférer vers MonCash",
+        "no_gifts": "Pas encore de cadeaux.",
+        "payout_summary": "Récapitulatif des paiements",
+        "total_gifts_htg": "Total des cadeaux (HTG)",
+        "mark_paid": "Marquer tout comme payé (simulé)",
+        "contact_support": "📬 Contact pour assistance / paiements importants",
+        "logout_owner": "Déconnexion de l'espace propriétaire",
+        "setup_instructions": "ℹ️ Instructions de configuration (si l'upload échoue)",
+        "storage_error": "Erreur de permission de stockage : veuillez configurer les politiques RLS pour le bucket 'avatars'.",
+    },
+    "es": {
+        "login_title": "Iniciar sesión",
+        "signup_title": "Registrarse",
+        "forgot_password": "Olvidé mi contraseña",
+        "email": "Correo electrónico",
+        "password": "Contraseña",
+        "full_name": "Nombre completo",
+        "remember_me": "Recordarme",
+        "login_button": "🚀 Iniciar sesión",
+        "signup_button": "📝 Registrarse",
+        "send_reset_link": "Enviar enlace de restablecimiento",
+        "phone_method": "Teléfono (OTP)",
+        "email_method": "Correo",
+        "phone_number": "Número de teléfono (solo dígitos, ej: 50947385663)",
+        "send_otp": "📲 Enviar OTP",
+        "enter_otp": "Ingrese el código OTP de 6 dígitos",
+        "verify_login": "✅ Verificar e iniciar sesión",
+        "back_resend": "← Atrás / Reenviar OTP",
+        "feed": "📡 Feed",
+        "friends_chat": "👥 Amigos y chat",
+        "satellite_map": "🛰️ Mapa satelital",
+        "profile": "👤 Perfil",
+        "owner_space": "🕊️ Espacio del propietario",
+        "logout": "🚪 Cerrar sesión",
+        "system_health": "🛡️ Estado del sistema",
+        "signal": "📡 Señal",
+        "latency": "⏱️ Latencia",
+        "quality": "📊 Calidad",
+        "uptime": "⏰ Tiempo activo",
+        "encrypted": "🔒 Estado: ENCRIPTADO",
+        "compensation": "💰 Compensación",
+        "logged_in_as": "👤 Conectado como",
+        "go_live": "Ir en vivo",
+        "external_platform": "Plataforma externa (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Cámara integrada",
+        "select_platform": "Seleccionar plataforma",
+        "live_title": "Título del directo",
+        "create_live_session": "Crear sesión en vivo",
+        "you_are_live": "🔴 ¡Estás en vivo!",
+        "end_live_session": "Finalizar sesión en vivo",
+        "set_stream_url": "📹 Configurar URL del stream",
+        "paste_url": "Pega la URL de tu transmisión en vivo",
+        "update_url": "Actualizar URL",
+        "shareable_link": "Enlace compartible",
+        "live_chat_gifts": "Chat en vivo y regalos",
+        "send_gift": "🎁 Enviar un regalo",
+        "add_moncash": "Agrega tu número de MonCash en tu perfil para enviar regalos.",
+        "total_gifts": "Total de regalos recibidos",
+        "gifts_sent_to": "Los regalos se enviarán a tu MonCash",
+        "write_comment": "Escribe un comentario...",
+        "send": "Enviar",
+        "back_to_feed": "Volver al feed",
+        "create_post": "Crear una publicación",
+        "caption_placeholder": "Escribe algo... o pega un enlace de video",
+        "add_media": "Agregar imágenes o videos (opcional)",
+        "visibility": "Visibilidad",
+        "public": "Público",
+        "private": "Privado",
+        "post": "🚀 Publicar",
+        "delete_post": "🗑️ Eliminar",
+        "comments": "Comentarios",
+        "reply": "💬 Responder",
+        "post_reply": "Publicar respuesta",
+        "your_reply": "Tu respuesta",
+        "clear_error": "Limpiar error",
+        "join_live": "Unirse al directo",
+        "watch_stream": "▶ VER TRANSMISIÓN",
+        "start_broadcast": "▶ INICIAR TRANSMISIÓN",
+        "stop_broadcast": "■ DETENER TRANSMISIÓN",
+        "you_are_broadcaster": "✅ Eres el transmisor. Usa los controles a continuación para comenzar.",
+        "you_are_viewer": "👀 Eres espectador. Haz clic en 'Ver transmisión' para ver el video.",
+        "choose_background": "🎨 Filtros de fondo",
+        "bg_option": "FDO",
+        "upload_background": "O sube tu propia imagen",
+        "background_set": "¡Fondo establecido!",
+        "ready_to_start": "Listo para comenzar. Haz clic en el botón de arriba.",
+        "camera_access": "📷 Solicitando acceso a la cámara...",
+        "camera_granted": "✅ Acceso a la cámara concedido. Conectando al servidor peer...",
+        "broadcasting": "✅ ¡Transmitiendo en vivo! Tu ID peer",
+        "peer_error": "❌ Error peer",
+        "error": "❌ Error",
+        "broadcast_ended": "Transmisión finalizada",
+        "initializing": "Inicializando...",
+        "connected_requesting": "Conectado. Solicitando transmisión al emisor...",
+        "calling": "Llamando",
+        "received_stream": "Flujo recibido",
+        "now_watching": "✅ Ahora estás viendo la transmisión en vivo",
+        "call_error": "❌ Error de llamada",
+        "call_ended": "Llamada finalizada",
+        "disconnected": "Desconectado. Por favor refresca.",
+        "send_message": "Enviar",
+        "close_chat": "Cerrar chat",
+        "active_call": "📞 Llamada activa",
+        "room_id": "ID de sala",
+        "share_room": "Comparte este ID con la persona a la que quieres llamar.",
+        "start_call": "Iniciar nueva llamada",
+        "end_call": "Finalizar llamada",
+        "find_users": "🔍 Buscar usuarios",
+        "search_by_name": "Buscar por nombre",
+        "add_friend": "➕ Agregar amigo",
+        "view_profile": "👤 Ver perfil",
+        "friend_requests": "📨 Solicitudes de amistad recibidas",
+        "accept": "✅ Aceptar",
+        "reject": "❌ Rechazar",
+        "your_friends": "👥 Tus amigos",
+        "no_friends": "Aún no tienes amigos",
+        "chat": "💬 Chat",
+        "call": "📞 Llamada",
+        "profile_btn": "👤 Perfil",
+        "edit_profile": "Editar perfil",
+        "save_changes": "💾 Guardar cambios",
+        "change_picture": "📸 Cambiar foto",
+        "bio": "Biografía",
+        "location": "Ubicación",
+        "moncash_phone": "Número MonCash (para recibir regalos)",
+        "posts_count": "Publicaciones",
+        "connections": "Conexiones",
+        "verified": "Verificado",
+        "member_since": "Miembro desde",
+        "dashboard": "💰 Panel",
+        "new_users": "📈 Nuevos usuarios",
+        "post_moderation": "🛡️ Moderación de publicaciones",
+        "client_payments": "📥 Pagos de clientes",
+        "gift_management": "🎁 Gestión de regalos",
+        "owner_dashboard": "🔐 Panel del propietario",
+        "balance": "Saldo MonCash Business",
+        "transfer_funds": "💰 Transferir fondos a tu cuenta",
+        "amount_transfer": "Monto a transferir ($)",
+        "transfer": "🚀 Transferir a MonCash",
+        "no_gifts": "Aún no hay regalos.",
+        "payout_summary": "Resumen de pagos",
+        "total_gifts_htg": "Total de regalos (HTG)",
+        "mark_paid": "Marcar todo como pagado (simulado)",
+        "contact_support": "📬 Contacto para soporte / pagos grandes",
+        "logout_owner": "Cerrar sesión del espacio propietario",
+        "setup_instructions": "ℹ️ Instrucciones de configuración (si falla la subida)",
+        "storage_error": "Error de permiso de almacenamiento: configure políticas RLS para el bucket 'avatars'.",
+    },
+    "pt": {
+        "login_title": "Entrar",
+        "signup_title": "Cadastrar",
+        "forgot_password": "Esqueci a senha",
+        "email": "E-mail",
+        "password": "Senha",
+        "full_name": "Nome completo",
+        "remember_me": "Lembrar‑me",
+        "login_button": "🚀 Entrar",
+        "signup_button": "📝 Cadastrar",
+        "send_reset_link": "Enviar link de redefinição",
+        "phone_method": "Telefone (OTP)",
+        "email_method": "E‑mail",
+        "phone_number": "Número de telefone (apenas dígitos, ex: 50947385663)",
+        "send_otp": "📲 Enviar OTP",
+        "enter_otp": "Digite o código OTP de 6 dígitos",
+        "verify_login": "✅ Verificar e entrar",
+        "back_resend": "← Voltar / Reenviar OTP",
+        "feed": "📡 Feed",
+        "friends_chat": "👥 Amigos e chat",
+        "satellite_map": "🛰️ Mapa de satélite",
+        "profile": "👤 Perfil",
+        "owner_space": "🕊️ Espaço do proprietário",
+        "logout": "🚪 Sair",
+        "system_health": "🛡️ Saúde do sistema",
+        "signal": "📡 Sinal",
+        "latency": "⏱️ Latência",
+        "quality": "📊 Qualidade",
+        "uptime": "⏰ Tempo de atividade",
+        "encrypted": "🔒 Status: CRIPTOGRAFADO",
+        "compensation": "💰 Compensação",
+        "logged_in_as": "👤 Conectado como",
+        "go_live": "Ir ao vivo",
+        "external_platform": "Plataforma externa (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Câmera integrada",
+        "select_platform": "Selecionar plataforma",
+        "live_title": "Título do ao vivo",
+        "create_live_session": "Criar sessão ao vivo",
+        "you_are_live": "🔴 Você está ao vivo!",
+        "end_live_session": "Encerrar sessão ao vivo",
+        "set_stream_url": "📹 Definir URL do stream",
+        "paste_url": "Cole a URL da sua transmissão ao vivo",
+        "update_url": "Atualizar URL",
+        "shareable_link": "Link compartilhável",
+        "live_chat_gifts": "Chat ao vivo e presentes",
+        "send_gift": "🎁 Enviar um presente",
+        "add_moncash": "Adicione seu número MonCash no perfil para enviar presentes.",
+        "total_gifts": "Total de presentes recebidos",
+        "gifts_sent_to": "Os presentes serão enviados para seu MonCash",
+        "write_comment": "Escreva um comentário...",
+        "send": "Enviar",
+        "back_to_feed": "Voltar ao feed",
+        "create_post": "Criar uma publicação",
+        "caption_placeholder": "Escreva algo... ou cole um link de vídeo",
+        "add_media": "Adicionar imagens ou vídeos (opcional)",
+        "visibility": "Visibilidade",
+        "public": "Público",
+        "private": "Privado",
+        "post": "🚀 Publicar",
+        "delete_post": "🗑️ Excluir",
+        "comments": "Comentários",
+        "reply": "💬 Responder",
+        "post_reply": "Publicar resposta",
+        "your_reply": "Sua resposta",
+        "clear_error": "Limpar erro",
+        "join_live": "Participar ao vivo",
+        "watch_stream": "▶ ASSISTIR",
+        "start_broadcast": "▶ INICIAR TRANSMISSÃO",
+        "stop_broadcast": "■ PARAR TRANSMISSÃO",
+        "you_are_broadcaster": "✅ Você é o transmissor. Use os controles abaixo para começar.",
+        "you_are_viewer": "👀 Você é espectador. Clique em 'Assistir' para ver o vídeo.",
+        "choose_background": "🎨 Filtros de fundo",
+        "bg_option": "FND",
+        "upload_background": "Ou envie sua própria imagem",
+        "background_set": "Fundo definido!",
+        "ready_to_start": "Pronto para começar. Clique no botão acima.",
+        "camera_access": "📷 Solicitando acesso à câmera...",
+        "camera_granted": "✅ Acesso à câmera concedido. Conectando ao servidor peer...",
+        "broadcasting": "✅ Transmitindo ao vivo! Seu ID peer",
+        "peer_error": "❌ Erro peer",
+        "error": "❌ Erro",
+        "broadcast_ended": "Transmissão encerrada",
+        "initializing": "Inicializando...",
+        "connected_requesting": "Conectado. Solicitando stream do transmissor...",
+        "calling": "Chamando",
+        "received_stream": "Stream recebido",
+        "now_watching": "✅ Agora você está assistindo ao vivo",
+        "call_error": "❌ Erro na chamada",
+        "call_ended": "Chamada encerrada",
+        "disconnected": "Desconectado. Por favor, recarregue.",
+        "send_message": "Enviar",
+        "close_chat": "Fechar chat",
+        "active_call": "📞 Chamada ativa",
+        "room_id": "ID da sala",
+        "share_room": "Compartilhe este ID com a pessoa que você quer chamar.",
+        "start_call": "Iniciar nova chamada",
+        "end_call": "Encerrar chamada",
+        "find_users": "🔍 Encontrar usuários",
+        "search_by_name": "Pesquisar por nome",
+        "add_friend": "➕ Adicionar amigo",
+        "view_profile": "👤 Ver perfil",
+        "friend_requests": "📨 Solicitações de amizade recebidas",
+        "accept": "✅ Aceitar",
+        "reject": "❌ Rejeitar",
+        "your_friends": "👥 Seus amigos",
+        "no_friends": "Você ainda não tem amigos",
+        "chat": "💬 Chat",
+        "call": "📞 Chamada",
+        "profile_btn": "👤 Perfil",
+        "edit_profile": "Editar perfil",
+        "save_changes": "💾 Salvar alterações",
+        "change_picture": "📸 Trocar foto",
+        "bio": "Bio",
+        "location": "Localização",
+        "moncash_phone": "Número MonCash (para receber presentes)",
+        "posts_count": "Publicações",
+        "connections": "Conexões",
+        "verified": "Verificado",
+        "member_since": "Membro desde",
+        "dashboard": "💰 Painel",
+        "new_users": "📈 Novos usuários",
+        "post_moderation": "🛡️ Moderação de publicações",
+        "client_payments": "📥 Pagamentos de clientes",
+        "gift_management": "🎁 Gestão de presentes",
+        "owner_dashboard": "🔐 Painel do proprietário",
+        "balance": "Saldo MonCash Business",
+        "transfer_funds": "💰 Transferir fundos para sua conta",
+        "amount_transfer": "Valor a transferir ($)",
+        "transfer": "🚀 Transferir para MonCash",
+        "no_gifts": "Ainda não há presentes.",
+        "payout_summary": "Resumo de pagamentos",
+        "total_gifts_htg": "Total de presentes (HTG)",
+        "mark_paid": "Marcar tudo como pago (simulado)",
+        "contact_support": "📬 Contato para suporte / pagamentos grandes",
+        "logout_owner": "Sair do espaço do proprietário",
+        "setup_instructions": "ℹ️ Instruções de configuração (se o upload falhar)",
+        "storage_error": "Erro de permissão de armazenamento: configure políticas RLS para o bucket 'avatars'.",
+    },
+    "ru": {
+        "login_title": "Вход",
+        "signup_title": "Регистрация",
+        "forgot_password": "Забыли пароль",
+        "email": "Эл. почта",
+        "password": "Пароль",
+        "full_name": "Полное имя",
+        "remember_me": "Запомнить меня",
+        "login_button": "🚀 Войти",
+        "signup_button": "📝 Зарегистрироваться",
+        "send_reset_link": "Отправить ссылку для сброса",
+        "phone_method": "Телефон (OTP)",
+        "email_method": "Эл. почта",
+        "phone_number": "Номер телефона (только цифры, напр. 50947385663)",
+        "send_otp": "📲 Отправить OTP",
+        "enter_otp": "Введите 6‑значный код OTP",
+        "verify_login": "✅ Проверить и войти",
+        "back_resend": "← Назад / Отправить повторно",
+        "feed": "📡 Лента",
+        "friends_chat": "👥 Друзья и чат",
+        "satellite_map": "🛰️ Спутниковая карта",
+        "profile": "👤 Профиль",
+        "owner_space": "🕊️ Пространство владельца",
+        "logout": "🚪 Выйти",
+        "system_health": "🛡️ Состояние системы",
+        "signal": "📡 Сигнал",
+        "latency": "⏱️ Задержка",
+        "quality": "📊 Качество",
+        "uptime": "⏰ Время работы",
+        "encrypted": "🔒 Статус: ЗАШИФРОВАНО",
+        "compensation": "💰 Компенсация",
+        "logged_in_as": "👤 Вы вошли как",
+        "go_live": "Начать прямой эфир",
+        "external_platform": "Внешняя платформа (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Встроенная камера",
+        "select_platform": "Выбрать платформу",
+        "live_title": "Название эфира",
+        "create_live_session": "Создать сеанс прямого эфира",
+        "you_are_live": "🔴 Вы в эфире!",
+        "end_live_session": "Завершить эфир",
+        "set_stream_url": "📹 Установить URL потока",
+        "paste_url": "Вставьте URL вашей трансляции",
+        "update_url": "Обновить URL",
+        "shareable_link": "Ссылка для поделиться",
+        "live_chat_gifts": "Чат и подарки",
+        "send_gift": "🎁 Отправить подарок",
+        "add_moncash": "Добавьте номер MonCash в профиль, чтобы отправлять подарки.",
+        "total_gifts": "Всего получено подарков",
+        "gifts_sent_to": "Подарки будут отправлены на ваш MonCash",
+        "write_comment": "Напишите комментарий...",
+        "send": "Отправить",
+        "back_to_feed": "Назад к ленте",
+        "create_post": "Создать пост",
+        "caption_placeholder": "Напишите что‑нибудь... или вставьте ссылку на видео",
+        "add_media": "Добавить изображения или видео (необязательно)",
+        "visibility": "Видимость",
+        "public": "Публичный",
+        "private": "Приватный",
+        "post": "🚀 Опубликовать",
+        "delete_post": "🗑️ Удалить",
+        "comments": "Комментарии",
+        "reply": "💬 Ответить",
+        "post_reply": "Опубликовать ответ",
+        "your_reply": "Ваш ответ",
+        "clear_error": "Очистить ошибку",
+        "join_live": "Присоединиться к эфиру",
+        "watch_stream": "▶ СМОТРЕТЬ",
+        "start_broadcast": "▶ НАЧАТЬ ТРАНСЛЯЦИЮ",
+        "stop_broadcast": "■ ОСТАНОВИТЬ",
+        "you_are_broadcaster": "✅ Вы ведущий. Используйте элементы управления ниже, чтобы начать.",
+        "you_are_viewer": "👀 Вы зритель. Нажмите 'Смотреть', чтобы увидеть видео.",
+        "choose_background": "🎨 Фоновые фильтры",
+        "bg_option": "ФОН",
+        "upload_background": "Или загрузите своё изображение",
+        "background_set": "Фон установлен!",
+        "ready_to_start": "Готов к началу. Нажмите кнопку выше.",
+        "camera_access": "📷 Запрос доступа к камере...",
+        "camera_granted": "✅ Доступ к камере получен. Подключение к серверу...",
+        "broadcasting": "✅ Трансляция идёт! Ваш ID",
+        "peer_error": "❌ Ошибка пира",
+        "error": "❌ Ошибка",
+        "broadcast_ended": "Трансляция завершена",
+        "initializing": "Инициализация...",
+        "connected_requesting": "Подключено. Запрос потока от ведущего...",
+        "calling": "Вызов",
+        "received_stream": "Поток получен",
+        "now_watching": "✅ Вы смотрите прямой эфир",
+        "call_error": "❌ Ошибка вызова",
+        "call_ended": "Вызов завершён",
+        "disconnected": "Отключено. Пожалуйста, обновите страницу.",
+        "send_message": "Отправить",
+        "close_chat": "Закрыть чат",
+        "active_call": "📞 Активный вызов",
+        "room_id": "ID комнаты",
+        "share_room": "Поделитесь этим ID с человеком, которому хотите позвонить.",
+        "start_call": "Начать новый вызов",
+        "end_call": "Завершить вызов",
+        "find_users": "🔍 Поиск пользователей",
+        "search_by_name": "Поиск по имени",
+        "add_friend": "➕ Добавить в друзья",
+        "view_profile": "👤 Посмотреть профиль",
+        "friend_requests": "📨 Запросы в друзья",
+        "accept": "✅ Принять",
+        "reject": "❌ Отклонить",
+        "your_friends": "👥 Ваши друзья",
+        "no_friends": "У вас ещё нет друзей",
+        "chat": "💬 Чат",
+        "call": "📞 Звонок",
+        "profile_btn": "👤 Профиль",
+        "edit_profile": "Редактировать профиль",
+        "save_changes": "💾 Сохранить",
+        "change_picture": "📸 Сменить фото",
+        "bio": "О себе",
+        "location": "Местоположение",
+        "moncash_phone": "Номер MonCash (для получения подарков)",
+        "posts_count": "Посты",
+        "connections": "Связи",
+        "verified": "Подтверждено",
+        "member_since": "Участник с",
+        "dashboard": "💰 Панель",
+        "new_users": "📈 Новые пользователи",
+        "post_moderation": "🛡️ Модерация постов",
+        "client_payments": "📥 Платежи клиентов",
+        "gift_management": "🎁 Управление подарками",
+        "owner_dashboard": "🔐 Панель владельца",
+        "balance": "Баланс MonCash Business",
+        "transfer_funds": "💰 Перевести средства на свой счёт",
+        "amount_transfer": "Сумма для перевода ($)",
+        "transfer": "🚀 Перевести на MonCash",
+        "no_gifts": "Подарков пока нет.",
+        "payout_summary": "Сводка выплат",
+        "total_gifts_htg": "Всего подарков (HTG)",
+        "mark_paid": "Отметить все как оплаченные (симуляция)",
+        "contact_support": "📬 Контакты для поддержки / крупных платежей",
+        "logout_owner": "Выйти из пространства владельца",
+        "setup_instructions": "ℹ️ Инструкции по настройке (если загрузка не удалась)",
+        "storage_error": "Ошибка разрешения хранилища: настройте политики RLS для бакета 'avatars'.",
+    },
+    "ar": {
+        "login_title": "تسجيل الدخول",
+        "signup_title": "إنشاء حساب",
+        "forgot_password": "نسيت كلمة المرور",
+        "email": "البريد الإلكتروني",
+        "password": "كلمة المرور",
+        "full_name": "الاسم الكامل",
+        "remember_me": "تذكرني",
+        "login_button": "🚀 تسجيل الدخول",
+        "signup_button": "📝 إنشاء حساب",
+        "send_reset_link": "إرسال رابط إعادة التعيين",
+        "phone_method": "الهاتف (OTP)",
+        "email_method": "البريد الإلكتروني",
+        "phone_number": "رقم الهاتف (أرقام فقط، مثال: 50947385663)",
+        "send_otp": "📲 إرسال OTP",
+        "enter_otp": "أدخل رمز OTP المكون من 6 أرقام",
+        "verify_login": "✅ تحقق وتسجيل الدخول",
+        "back_resend": "← رجوع / إعادة إرسال OTP",
+        "feed": "📡 التغذية",
+        "friends_chat": "👥 الأصدقاء والمحادثة",
+        "satellite_map": "🛰️ خريطة الأقمار الصناعية",
+        "profile": "👤 الملف الشخصي",
+        "owner_space": "🕊️ مساحة المالك",
+        "logout": "🚪 تسجيل الخروج",
+        "system_health": "🛡️ صحة النظام",
+        "signal": "📡 الإشارة",
+        "latency": "⏱️ زمن الاستجابة",
+        "quality": "📊 الجودة",
+        "uptime": "⏰ وقت التشغيل",
+        "encrypted": "🔒 الحالة: مشفر",
+        "compensation": "💰 التعويض",
+        "logged_in_as": "👤 تم تسجيل الدخول باسم",
+        "go_live": "بدء البث المباشر",
+        "external_platform": "منصة خارجية (YouTube/Facebook/Twitch)",
+        "in_app_camera": "الكاميرا المدمجة",
+        "select_platform": "اختر المنصة",
+        "live_title": "عنوان البث",
+        "create_live_session": "إنشاء جلسة بث مباشر",
+        "you_are_live": "🔴 أنت على الهواء!",
+        "end_live_session": "إنهاء البث",
+        "set_stream_url": "📹 تعيين عنوان URL للبث",
+        "paste_url": "الصق رابط البث المباشر",
+        "update_url": "تحديث الرابط",
+        "shareable_link": "رابط قابل للمشاركة",
+        "live_chat_gifts": "الدردشة والهدايا",
+        "send_gift": "🎁 إرسال هدية",
+        "add_moncash": "أضف رقم MonCash في ملفك الشخصي لإرسال الهدايا.",
+        "total_gifts": "إجمالي الهدايا المستلمة",
+        "gifts_sent_to": "سيتم إرسال الهدايا إلى MonCash الخاص بك",
+        "write_comment": "اكتب تعليقاً...",
+        "send": "إرسال",
+        "back_to_feed": "العودة إلى التغذية",
+        "create_post": "إنشاء منشور",
+        "caption_placeholder": "اكتب شيئاً... أو الصق رابط فيديو",
+        "add_media": "إضافة صور أو فيديو (اختياري)",
+        "visibility": "الرؤية",
+        "public": "عام",
+        "private": "خاص",
+        "post": "🚀 نشر",
+        "delete_post": "🗑️ حذف",
+        "comments": "التعليقات",
+        "reply": "💬 رد",
+        "post_reply": "نشر الرد",
+        "your_reply": "ردك",
+        "clear_error": "مسح الخطأ",
+        "join_live": "انضم إلى البث",
+        "watch_stream": "▶ شاهد البث",
+        "start_broadcast": "▶ بدء البث",
+        "stop_broadcast": "■ إيقاف البث",
+        "you_are_broadcaster": "✅ أنت المذيع. استخدم عناصر التحكم أدناه لبدء البث.",
+        "you_are_viewer": "👀 أنت مشاهد. انقر على 'شاهد البث' لمشاهدة الفيديو.",
+        "choose_background": "🎨 مرشحات الخلفية",
+        "bg_option": "خلفية",
+        "upload_background": "أو حمِّل صورتك الخاصة",
+        "background_set": "تم تعيين الخلفية!",
+        "ready_to_start": "جاهز للبدء. انقر على الزر أعلاه.",
+        "camera_access": "📷 طلب الوصول إلى الكاميرا...",
+        "camera_granted": "✅ تم منح الوصول إلى الكاميرا. الاتصال بخادم النظير...",
+        "broadcasting": "✅ البث المباشر قيد التشغيل! معرف النظير الخاص بك",
+        "peer_error": "❌ خطأ في النظير",
+        "error": "❌ خطأ",
+        "broadcast_ended": "انتهى البث",
+        "initializing": "جاري التهيئة...",
+        "connected_requesting": "متصل. طلب البث من المذيع...",
+        "calling": "جارٍ الاتصال",
+        "received_stream": "تم استلام البث",
+        "now_watching": "✅ أنت تشاهد البث المباشر الآن",
+        "call_error": "❌ خطأ في المكالمة",
+        "call_ended": "انتهت المكالمة",
+        "disconnected": "تم قطع الاتصال. يرجى التحديث.",
+        "send_message": "إرسال",
+        "close_chat": "إغلاق الدردشة",
+        "active_call": "📞 مكالمة نشطة",
+        "room_id": "معرف الغرفة",
+        "share_room": "شارك هذا المعرف مع الشخص الذي تريد الاتصال به.",
+        "start_call": "بدء مكالمة جديدة",
+        "end_call": "إنهاء المكالمة",
+        "find_users": "🔍 البحث عن مستخدمين",
+        "search_by_name": "البحث بالاسم",
+        "add_friend": "➕ إضافة صديق",
+        "view_profile": "👤 عرض الملف الشخصي",
+        "friend_requests": "📨 طلبات الصداقة المستلمة",
+        "accept": "✅ قبول",
+        "reject": "❌ رفض",
+        "your_friends": "👥 أصدقاؤك",
+        "no_friends": "ليس لديك أصدقاء بعد",
+        "chat": "💬 دردشة",
+        "call": "📞 مكالمة",
+        "profile_btn": "👤 ملف شخصي",
+        "edit_profile": "تعديل الملف الشخصي",
+        "save_changes": "💾 حفظ التغييرات",
+        "change_picture": "📸 تغيير الصورة",
+        "bio": "نبذة",
+        "location": "الموقع",
+        "moncash_phone": "رقم MonCash (لاستقبال الهدايا)",
+        "posts_count": "المنشورات",
+        "connections": "الاتصالات",
+        "verified": "موثق",
+        "member_since": "عضو منذ",
+        "dashboard": "💰 لوحة التحكم",
+        "new_users": "📈 مستخدمين جدد",
+        "post_moderation": "🛡️ مراقبة المنشورات",
+        "client_payments": "📥 مدفوعات العملاء",
+        "gift_management": "🎁 إدارة الهدايا",
+        "owner_dashboard": "🔐 لوحة تحكم المالك",
+        "balance": "رصيد MonCash Business",
+        "transfer_funds": "💰 تحويل الأموال إلى حسابك",
+        "amount_transfer": "المبلغ المراد تحويله ($)",
+        "transfer": "🚀 تحويل إلى MonCash",
+        "no_gifts": "لا توجد هدايا بعد.",
+        "payout_summary": "ملخص المدفوعات",
+        "total_gifts_htg": "إجمالي الهدايا (HTG)",
+        "mark_paid": "تحديد الكل كمدفوع (محاكاة)",
+        "contact_support": "📬 اتصل بالدعم / المدفوعات الكبيرة",
+        "logout_owner": "تسجيل الخروج من مساحة المالك",
+        "setup_instructions": "ℹ️ إرشادات الإعداد (إذا فشل الرفع)",
+        "storage_error": "خطأ في إذن التخزين: يرجى إعداد سياسات RLS لحاوية 'avatars'.",
+    },
+    "zh": {
+        "login_title": "登录",
+        "signup_title": "注册",
+        "forgot_password": "忘记密码",
+        "email": "邮箱",
+        "password": "密码",
+        "full_name": "全名",
+        "remember_me": "记住我",
+        "login_button": "🚀 登录",
+        "signup_button": "📝 注册",
+        "send_reset_link": "发送重置链接",
+        "phone_method": "手机 (OTP)",
+        "email_method": "邮箱",
+        "phone_number": "手机号码（仅数字，例如 50947385663）",
+        "send_otp": "📲 发送验证码",
+        "enter_otp": "输入6位验证码",
+        "verify_login": "✅ 验证并登录",
+        "back_resend": "← 返回 / 重新发送",
+        "feed": "📡 动态",
+        "friends_chat": "👥 好友与聊天",
+        "satellite_map": "🛰️ 卫星地图",
+        "profile": "👤 个人资料",
+        "owner_space": "🕊️ 所有者空间",
+        "logout": "🚪 登出",
+        "system_health": "🛡️ 系统健康",
+        "signal": "📡 信号",
+        "latency": "⏱️ 延迟",
+        "quality": "📊 质量",
+        "uptime": "⏰ 运行时间",
+        "encrypted": "🔒 状态：已加密",
+        "compensation": "💰 补偿",
+        "logged_in_as": "👤 登录为",
+        "go_live": "开始直播",
+        "external_platform": "外部平台 (YouTube/Facebook/Twitch)",
+        "in_app_camera": "应用内相机",
+        "select_platform": "选择平台",
+        "live_title": "直播标题",
+        "create_live_session": "创建直播会话",
+        "you_are_live": "🔴 你正在直播！",
+        "end_live_session": "结束直播",
+        "set_stream_url": "📹 设置直播流URL",
+        "paste_url": "粘贴你的直播流URL",
+        "update_url": "更新URL",
+        "shareable_link": "可分享链接",
+        "live_chat_gifts": "直播聊天与礼物",
+        "send_gift": "🎁 发送礼物",
+        "add_moncash": "在你的个人资料中添加MonCash号码以发送礼物。",
+        "total_gifts": "收到的礼物总数",
+        "gifts_sent_to": "礼物将发送到你的MonCash",
+        "write_comment": "写评论...",
+        "send": "发送",
+        "back_to_feed": "返回动态",
+        "create_post": "创建帖子",
+        "caption_placeholder": "写点什么... 或粘贴视频链接",
+        "add_media": "添加图片或视频（可选）",
+        "visibility": "可见性",
+        "public": "公开",
+        "private": "私密",
+        "post": "🚀 发布",
+        "delete_post": "🗑️ 删除",
+        "comments": "评论",
+        "reply": "💬 回复",
+        "post_reply": "发布回复",
+        "your_reply": "你的回复",
+        "clear_error": "清除错误",
+        "join_live": "加入直播",
+        "watch_stream": "▶ 观看直播",
+        "start_broadcast": "▶ 开始直播",
+        "stop_broadcast": "■ 停止直播",
+        "you_are_broadcaster": "✅ 你是主播。使用下面的控件开始直播。",
+        "you_are_viewer": "👀 你是观众。点击“观看直播”观看视频。",
+        "choose_background": "🎨 背景滤镜",
+        "bg_option": "背景",
+        "upload_background": "或上传你自己的图片",
+        "background_set": "背景已设置！",
+        "ready_to_start": "准备开始。点击上面的按钮。",
+        "camera_access": "📷 请求相机访问...",
+        "camera_granted": "✅ 相机访问已授予。正在连接对等服务器...",
+        "broadcasting": "✅ 直播中！你的对等ID",
+        "peer_error": "❌ 对等错误",
+        "error": "❌ 错误",
+        "broadcast_ended": "直播结束",
+        "initializing": "初始化...",
+        "connected_requesting": "已连接。正在请求主播的流...",
+        "calling": "正在呼叫",
+        "received_stream": "已接收流",
+        "now_watching": "✅ 你现在正在观看直播",
+        "call_error": "❌ 呼叫错误",
+        "call_ended": "通话结束",
+        "disconnected": "已断开。请刷新。",
+        "send_message": "发送",
+        "close_chat": "关闭聊天",
+        "active_call": "📞 进行中的通话",
+        "room_id": "房间ID",
+        "share_room": "将此ID分享给你想通话的人。",
+        "start_call": "开始新通话",
+        "end_call": "结束通话",
+        "find_users": "🔍 查找用户",
+        "search_by_name": "按姓名搜索",
+        "add_friend": "➕ 添加好友",
+        "view_profile": "👤 查看个人资料",
+        "friend_requests": "📨 收到的好友请求",
+        "accept": "✅ 接受",
+        "reject": "❌ 拒绝",
+        "your_friends": "👥 你的好友",
+        "no_friends": "你还没有好友",
+        "chat": "💬 聊天",
+        "call": "📞 通话",
+        "profile_btn": "👤 个人资料",
+        "edit_profile": "编辑个人资料",
+        "save_changes": "💾 保存更改",
+        "change_picture": "📸 更换头像",
+        "bio": "简介",
+        "location": "位置",
+        "moncash_phone": "MonCash号码（用于接收礼物）",
+        "posts_count": "帖子数",
+        "connections": "连接数",
+        "verified": "已验证",
+        "member_since": "加入于",
+        "dashboard": "💰 仪表盘",
+        "new_users": "📈 新用户",
+        "post_moderation": "🛡️ 帖子审核",
+        "client_payments": "📥 客户付款",
+        "gift_management": "🎁 礼物管理",
+        "owner_dashboard": "🔐 所有者仪表盘",
+        "balance": "MonCash商业余额",
+        "transfer_funds": "💰 转账到你的账户",
+        "amount_transfer": "转账金额 ($)",
+        "transfer": "🚀 转到MonCash",
+        "no_gifts": "暂无礼物。",
+        "payout_summary": "支付摘要",
+        "total_gifts_htg": "礼物总额 (HTG)",
+        "mark_paid": "全部标记为已支付（模拟）",
+        "contact_support": "📬 联系支持 / 大额支付",
+        "logout_owner": "登出所有者空间",
+        "setup_instructions": "ℹ️ 设置说明（如果上传失败）",
+        "storage_error": "存储权限错误：请为'avatars'存储桶设置RLS策略。",
+    },
+    "hi": {
+        "login_title": "लॉग इन",
+        "signup_title": "साइन अप",
+        "forgot_password": "पासवर्ड भूल गए",
+        "email": "ईमेल",
+        "password": "पासवर्ड",
+        "full_name": "पूरा नाम",
+        "remember_me": "मुझे याद रखें",
+        "login_button": "🚀 लॉग इन",
+        "signup_button": "📝 साइन अप",
+        "send_reset_link": "रीसेट लिंक भेजें",
+        "phone_method": "फोन (OTP)",
+        "email_method": "ईमेल",
+        "phone_number": "फोन नंबर (केवल अंक, उदा. 50947385663)",
+        "send_otp": "📲 OTP भेजें",
+        "enter_otp": "6 अंकों का OTP कोड दर्ज करें",
+        "verify_login": "✅ सत्यापित करें और लॉग इन करें",
+        "back_resend": "← वापस / OTP पुनः भेजें",
+        "feed": "📡 फ़ीड",
+        "friends_chat": "👥 मित्र और चैट",
+        "satellite_map": "🛰️ उपग्रह मानचित्र",
+        "profile": "👤 प्रोफ़ाइल",
+        "owner_space": "🕊️ मालिक स्थान",
+        "logout": "🚪 लॉग आउट",
+        "system_health": "🛡️ सिस्टम स्वास्थ्य",
+        "signal": "📡 सिग्नल",
+        "latency": "⏱️ विलंबता",
+        "quality": "📊 गुणवत्ता",
+        "uptime": "⏰ अपटाइम",
+        "encrypted": "🔒 स्थिति: एन्क्रिप्टेड",
+        "compensation": "💰 मुआवजा",
+        "logged_in_as": "👤 के रूप में लॉग इन",
+        "go_live": "लाइव जाएं",
+        "external_platform": "बाहरी प्लेटफॉर्म (YouTube/Facebook/Twitch)",
+        "in_app_camera": "इन-ऐप कैमरा",
+        "select_platform": "प्लेटफॉर्म चुनें",
+        "live_title": "लाइव शीर्षक",
+        "create_live_session": "लाइव सत्र बनाएं",
+        "you_are_live": "🔴 आप लाइव हैं!",
+        "end_live_session": "लाइव सत्र समाप्त करें",
+        "set_stream_url": "📹 स्ट्रीम URL सेट करें",
+        "paste_url": "अपना लाइव स्ट्रीम URL चिपकाएं",
+        "update_url": "URL अपडेट करें",
+        "shareable_link": "साझा करने योग्य लिंक",
+        "live_chat_gifts": "लाइव चैट और उपहार",
+        "send_gift": "🎁 उपहार भेजें",
+        "add_moncash": "उपहार भेजने के लिए अपनी प्रोफ़ाइल में MonCash नंबर जोड़ें।",
+        "total_gifts": "कुल प्राप्त उपहार",
+        "gifts_sent_to": "उपहार आपके MonCash पर भेजे जाएंगे",
+        "write_comment": "टिप्पणी लिखें...",
+        "send": "भेजें",
+        "back_to_feed": "फ़ीड पर वापस",
+        "create_post": "पोस्ट बनाएं",
+        "caption_placeholder": "कुछ लिखें... या वीडियो लिंक चिपकाएं",
+        "add_media": "चित्र या वीडियो जोड़ें (वैकल्पिक)",
+        "visibility": "दृश्यता",
+        "public": "सार्वजनिक",
+        "private": "निजी",
+        "post": "🚀 पोस्ट करें",
+        "delete_post": "🗑️ हटाएं",
+        "comments": "टिप्पणियाँ",
+        "reply": "💬 उत्तर दें",
+        "post_reply": "उत्तर पोस्ट करें",
+        "your_reply": "आपका उत्तर",
+        "clear_error": "त्रुटि साफ़ करें",
+        "join_live": "लाइव में शामिल हों",
+        "watch_stream": "▶ स्ट्रीम देखें",
+        "start_broadcast": "▶ प्रसारण शुरू करें",
+        "stop_broadcast": "■ प्रसारण रोकें",
+        "you_are_broadcaster": "✅ आप प्रसारक हैं। शुरू करने के लिए नीचे दिए गए नियंत्रण का उपयोग करें।",
+        "you_are_viewer": "👀 आप दर्शक हैं। वीडियो देखने के लिए 'स्ट्रीम देखें' पर क्लिक करें।",
+        "choose_background": "🎨 पृष्ठभूमि फ़िल्टर",
+        "bg_option": "पृष्ठभूमि",
+        "upload_background": "या अपनी छवि अपलोड करें",
+        "background_set": "पृष्ठभूमि सेट!",
+        "ready_to_start": "शुरू करने के लिए तैयार। ऊपर दिए गए बटन पर क्लिक करें।",
+        "camera_access": "📷 कैमरा पहुंच का अनुरोध...",
+        "camera_granted": "✅ कैमरा पहुंच प्रदान की गई। पीयर सर्वर से कनेक्ट हो रहा है...",
+        "broadcasting": "✅ लाइव प्रसारण! आपका पीयर ID",
+        "peer_error": "❌ पीयर त्रुटि",
+        "error": "❌ त्रुटि",
+        "broadcast_ended": "प्रसारण समाप्त",
+        "initializing": "प्रारंभ हो रहा है...",
+        "connected_requesting": "कनेक्टेड। प्रसारक से स्ट्रीम का अनुरोध...",
+        "calling": "कॉलिंग",
+        "received_stream": "स्ट्रीम प्राप्त हुई",
+        "now_watching": "✅ अब आप लाइव स्ट्रीम देख रहे हैं",
+        "call_error": "❌ कॉल त्रुटि",
+        "call_ended": "कॉल समाप्त",
+        "disconnected": "डिस्कनेक्टेड। कृपया रीफ्रेश करें।",
+        "send_message": "भेजें",
+        "close_chat": "चैट बंद करें",
+        "active_call": "📞 सक्रिय कॉल",
+        "room_id": "रूम ID",
+        "share_room": "इस ID को उस व्यक्ति के साथ साझा करें जिसे आप कॉल करना चाहते हैं।",
+        "start_call": "नई कॉल शुरू करें",
+        "end_call": "कॉल समाप्त करें",
+        "find_users": "🔍 उपयोगकर्ता खोजें",
+        "search_by_name": "नाम से खोजें",
+        "add_friend": "➕ मित्र जोड़ें",
+        "view_profile": "👤 प्रोफ़ाइल देखें",
+        "friend_requests": "📨 प्राप्त मित्र अनुरोध",
+        "accept": "✅ स्वीकार करें",
+        "reject": "❌ अस्वीकार करें",
+        "your_friends": "👥 आपके मित्र",
+        "no_friends": "आपके अभी कोई मित्र नहीं है",
+        "chat": "💬 चैट",
+        "call": "📞 कॉल",
+        "profile_btn": "👤 प्रोफ़ाइल",
+        "edit_profile": "प्रोफ़ाइल संपादित करें",
+        "save_changes": "💾 परिवर्तन सहेजें",
+        "change_picture": "📸 चित्र बदलें",
+        "bio": "जीवनी",
+        "location": "स्थान",
+        "moncash_phone": "MonCash फ़ोन नंबर (उपहार प्राप्त करने के लिए)",
+        "posts_count": "पोस्ट",
+        "connections": "कनेक्शन",
+        "verified": "सत्यापित",
+        "member_since": "सदस्यता दिनांक",
+        "dashboard": "💰 डैशबोर्ड",
+        "new_users": "📈 नए उपयोगकर्ता",
+        "post_moderation": "🛡️ पोस्ट मॉडरेशन",
+        "client_payments": "📥 ग्राहक भुगतान",
+        "gift_management": "🎁 उपहार प्रबंधन",
+        "owner_dashboard": "🔐 मालिक डैशबोर्ड",
+        "balance": "MonCash Business शेष",
+        "transfer_funds": "💰 अपने खाते में धनराशि स्थानांतरित करें",
+        "amount_transfer": "स्थानांतरित राशि ($)",
+        "transfer": "🚀 MonCash में स्थानांतरित करें",
+        "no_gifts": "अभी तक कोई उपहार नहीं।",
+        "payout_summary": "भुगतान सारांश",
+        "total_gifts_htg": "कुल उपहार (HTG)",
+        "mark_paid": "सभी को भुगतान के रूप में चिह्नित करें (सिम्युलेटेड)",
+        "contact_support": "📬 सहायता / बड़े भुगतान के लिए संपर्क करें",
+        "logout_owner": "मालिक स्थान से लॉग आउट करें",
+        "setup_instructions": "ℹ️ सेटअप निर्देश (यदि अपलोड विफल होता है)",
+        "storage_error": "संग्रहण अनुमति त्रुटि: कृपया 'avatars' बकेट के लिए RLS नीतियां सेट करें।",
+    },
+}
+
+def t(key):
+    """Translate a key using the current language."""
+    return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
 
 # --- Cookie helpers ---
 def set_cookie(name, value, days=30):
@@ -568,7 +1683,7 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
                 frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 YouTube video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
@@ -578,7 +1693,7 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
                 frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Vimeo video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Vimeo {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
@@ -589,7 +1704,7 @@ def embed_video_from_url(url):
         <iframe frameborder="0" width="100%" height="400" 
                 src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
                 allowfullscreen allow="autoplay"></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Dailymotion video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Dailymotion {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
@@ -600,7 +1715,7 @@ def embed_video_from_url(url):
         <div id="fb-root"></div>
         <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
         <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div>
-        <p style="font-size:0.8rem; color:green;">🎥 Facebook video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Facebook {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=470)
         return True
@@ -612,13 +1727,13 @@ def embed_video_from_url(url):
             <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@username/video/{tiktok_id}" data-video-id="{tiktok_id}" style="max-width: 605px;min-width: 325px;" > 
             <section> <a target="_blank" title="TikTok" href="https://www.tiktok.com/@username/video/{tiktok_id}">View on TikTok</a> </section> </blockquote> 
             <script async src="https://www.tiktok.com/embed.js"></script>
-            <p style="font-size:0.8rem; color:green;">🎥 TikTok video embedded</p>
+            <p style="font-size:0.8rem; color:green;">🎥 TikTok {t('now_watching')}</p>
             """
         else:
             # For vm.tiktok.com short links, just embed the page
             embed_html = f"""
             <iframe width="100%" height="600" src="{url}" frameborder="0" allowfullscreen></iframe>
-            <p style="font-size:0.8rem; color:green;">🎥 TikTok video embedded</p>
+            <p style="font-size:0.8rem; color:green;">🎥 TikTok {t('now_watching')}</p>
             """
         st.components.v1.html(embed_html, height=650)
         return True
@@ -633,7 +1748,7 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe src="https://player.twitch.tv/?video={twitch_url.split('/')[-1]}&parent={parent}" 
                 height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Twitch video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Twitch {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
@@ -642,7 +1757,7 @@ def embed_video_from_url(url):
     if insta_url:
         embed_html = f"""
         <iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Instagram post embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Instagram {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=630)
         return True
@@ -652,14 +1767,14 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" 
                 frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Streamable video embedded</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Streamable {t('now_watching')}</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
     
     if is_direct_video_url(url):
         st.video(url)
-        st.markdown("<p style='font-size:0.8rem; color:green;'>🎥 Direct video file embedded</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     
     return False
@@ -719,7 +1834,7 @@ def upload_avatar(user_id, image_file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'avatars' bucket.")
+            st.error(t("storage_error"))
         else:
             st.session_state.last_error = f"Avatar upload failed: {e}"
         return None
@@ -745,7 +1860,7 @@ def upload_post_media(user_id, file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'post_media' bucket.")
+            st.error(t("storage_error").replace("avatars", "post_media"))
         else:
             st.session_state.last_error = f"Media upload failed: {e}"
         return None
@@ -771,7 +1886,7 @@ def upload_chat_media(user_id, file):
     except Exception as e:
         error_message = str(e)
         if "new row violates row-level security policy" in error_message:
-            st.error("Storage permission error: Please set up RLS policies for the 'chat_media' bucket.")
+            st.error(t("storage_error").replace("avatars", "chat_media"))
         else:
             st.session_state.last_error = f"Chat media upload failed: {e}"
         return None
@@ -938,7 +2053,7 @@ def create_post(user_id, content, media_files=None, is_public=True, existing_med
         if result.data:
             st.cache_data.clear()
             st.session_state.posts = load_posts()
-            st.success("✅ Post published!")
+            st.success(t("post"))
             return True
         else:
             st.session_state.last_error = "Post insertion failed."
@@ -1623,7 +2738,7 @@ def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
         st.error("This live session has ended or does not exist.")
-        if st.button("Back to Feed"):
+        if st.button(t("back_to_feed")):
             st.session_state.viewing_live = None
             st.rerun()
         return
@@ -1632,9 +2747,9 @@ def render_live_page(session_id):
     st.header(f"🔴 LIVE: {session['title']}")
 
     if is_broadcaster:
-        st.success("✅ You are the broadcaster. Use the controls below to start streaming.")
+        st.success(t("you_are_broadcaster"))
     else:
-        st.info("👀 You are a viewer. Click 'Watch Stream' to see the live video.")
+        st.info(t("you_are_viewer"))
 
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
@@ -1647,10 +2762,10 @@ def render_live_page(session_id):
             stream_url = session.get("stream_url")
             platform = session.get("platform")
             if is_broadcaster:
-                with st.expander("📹 Set Stream URL", expanded=not stream_url):
+                with st.expander(t("set_stream_url"), expanded=not stream_url):
                     with st.form("update_stream_url"):
-                        new_url = st.text_input("Paste your live stream URL (YouTube, Facebook, Twitch)", value=stream_url or "")
-                        if st.form_submit_button("Update Stream URL"):
+                        new_url = st.text_input(f"{t('paste_url')} (YouTube, Facebook, Twitch)", value=stream_url or "")
+                        if st.form_submit_button(t("update_url")):
                             if new_url:
                                 if update_live_stream_url(session_id, new_url):
                                     st.success("Stream URL updated! Refreshing...")
@@ -1689,8 +2804,8 @@ def render_live_page(session_id):
         else:  # in-app streaming
             if is_broadcaster:
                 # Background filter selection UI
-                st.markdown("### 🎨 Background Filters")
-                with st.expander("Choose Background", expanded=False):
+                st.markdown(f"### {t('choose_background')}")
+                with st.expander(t('choose_background'), expanded=False):
                     col_bg1, col_bg2, col_bg3 = st.columns(3)
                     # Predefined AI-generated backgrounds (replace with your own image URLs)
                     bg_options = [
@@ -1709,30 +2824,30 @@ def render_live_page(session_id):
                     for i in range(10):
                         col_idx = i % 3
                         with [col_bg1, col_bg2, col_bg3][col_idx]:
-                            if st.button(f"BG {i+1}", key=f"bg_{i}"):
+                            if st.button(f"{t('bg_option')} {i+1}", key=f"bg_{i}"):
                                 st.session_state.background_url = bg_options[i]
                     # Custom upload
-                    uploaded_bg = st.file_uploader("Or upload your own image", type=["png", "jpg", "jpeg"])
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"])
                     if uploaded_bg:
                         bytes_data = uploaded_bg.getvalue()
                         b64 = base64.b64encode(bytes_data).decode()
                         mime = uploaded_bg.type
                         data_url = f"data:{mime};base64,{b64}"
                         st.session_state.background_url = data_url
-                        st.success("Background set!")
+                        st.success(t("background_set"))
 
                 # BROADCASTER VIEW with background filter
                 broadcaster_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
-                    <div style="font-size: 24px; margin-bottom: 20px;">🎥 Your Live Stream</div>
+                    <div style="font-size: 24px; margin-bottom: 20px;">🎥 {t('you_are_broadcaster')}</div>
                     <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
                         <canvas id="outputCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
                     </div>
                     <div style="margin-top: 30px;">
-                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ START BROADCAST</button>
-                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">■ STOP BROADCAST</button>
+                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">{t('start_broadcast')}</button>
+                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">{t('stop_broadcast')}</button>
                     </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Ready to start. Click the button above.</p>
+                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <!-- MediaPipe Selfie Segmentation -->
@@ -1793,7 +2908,7 @@ def render_live_page(session_id):
 
                     startBtn.onclick = async () => {{
                         try {{
-                            statusEl.textContent = '📷 Requesting camera access...';
+                            statusEl.textContent = '{t('camera_access')}';
                             localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
                             const videoElement = document.createElement('video');
                             videoElement.srcObject = localStream;
@@ -1807,7 +2922,7 @@ def render_live_page(session_id):
                                 }};
                                 processFrame();
                             }};
-                            statusEl.textContent = '✅ Camera access granted. Connecting to peer server...';
+                            statusEl.textContent = '{t('camera_granted')}';
 
                             // PeerJS for streaming (sending original stream for simplicity)
                             peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
@@ -1823,7 +2938,7 @@ def render_live_page(session_id):
                             }});
 
                             peer.on('open', (id) => {{
-                                statusEl.textContent = `✅ Broadcasting live! Your peer ID: ${{id}}`;
+                                statusEl.textContent = `{t('broadcasting')}: ${{id}}`;
                                 startBtn.style.display = 'none';
                                 stopBtn.style.display = 'inline-block';
                             }});
@@ -1835,10 +2950,10 @@ def render_live_page(session_id):
                             }});
 
                             peer.on('error', (err) => {{
-                                statusEl.textContent = '❌ Peer error: ' + err;
+                                statusEl.textContent = '{t('peer_error')}: ' + err;
                             }});
                         }} catch (err) {{
-                            statusEl.textContent = '❌ Error: ' + err.message;
+                            statusEl.textContent = '{t('error')}: ' + err.message;
                         }}
                     }};
 
@@ -1848,7 +2963,7 @@ def render_live_page(session_id):
                         if (localStream) localStream.getTracks().forEach(track => track.stop());
                         startBtn.style.display = 'inline-block';
                         stopBtn.style.display = 'none';
-                        statusEl.textContent = 'Broadcast ended';
+                        statusEl.textContent = '{t('broadcast_ended')}';
                     }};
                 }})();
                 </script>
@@ -1858,14 +2973,14 @@ def render_live_page(session_id):
                 # VIEWER VIEW – improved with detailed status messages and error handling
                 viewer_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
-                    <div style="font-size: 24px; margin-bottom: 20px;">👀 Watching Live Stream</div>
+                    <div style="font-size: 24px; margin-bottom: 20px;">👀 {t('you_are_viewer')}</div>
                     <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
                         <video id="remoteVideo" autoplay style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></video>
                     </div>
                     <div style="margin-top: 30px;">
-                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ WATCH STREAM</button>
+                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">{t('watch_stream')}</button>
                     </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">Click the button to start watching.</p>
+                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
                     <div id="debug" style="margin-top: 10px; font-size: 14px; color: #aaa; text-align: left; background: #222; padding: 10px; border-radius: 8px; display: none;"></div>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -1886,8 +3001,8 @@ def render_live_page(session_id):
                     }}
 
                     watchBtn.onclick = () => {{
-                        log('Watch button clicked. Initializing peer...');
-                        statusEl.textContent = 'Initializing...';
+                        log('{t('watch_stream')}');
+                        statusEl.textContent = '{t('initializing')}';
                         
                         const peer = new Peer({{ 
                             host: '0.peerjs.com',
@@ -1903,38 +3018,38 @@ def render_live_page(session_id):
 
                         peer.on('open', (id) => {{
                             log(`Peer open with ID: ${{id}}`);
-                            statusEl.textContent = `Connected. Requesting stream from broadcaster...`;
+                            statusEl.textContent = `{t('connected_requesting')}`;
                             
                             const targetId = `broadcaster-${{sessionId}}`;
-                            log(`Calling ${{targetId}}...`);
+                            log(`{t('calling')} ${{targetId}}...`);
                             const call = peer.call(targetId, null);
                             
                             call.on('stream', (remoteStream) => {{
-                                log('Received remote stream');
+                                log('{t('received_stream')}');
                                 remoteVideo.srcObject = remoteStream;
-                                statusEl.textContent = '✅ Now watching live stream';
+                                statusEl.textContent = '{t('now_watching')}';
                                 watchBtn.style.display = 'none';
                             }});
                             
                             call.on('error', (err) => {{
-                                log('Call error: ' + err);
-                                statusEl.textContent = '❌ Call error: ' + err;
+                                log('{t('call_error')}: ' + err);
+                                statusEl.textContent = '{t('call_error')}: ' + err;
                             }});
                             
                             call.on('close', () => {{
-                                log('Call closed');
-                                statusEl.textContent = 'Call ended';
+                                log('{t('call_ended')}');
+                                statusEl.textContent = '{t('call_ended')}';
                             }});
                         }});
 
                         peer.on('error', (err) => {{
-                            log('Peer error: ' + err);
-                            statusEl.textContent = '❌ Peer error: ' + err;
+                            log('{t('peer_error')}: ' + err);
+                            statusEl.textContent = '{t('peer_error')}: ' + err;
                         }});
                         
                         peer.on('disconnected', () => {{
-                            log('Peer disconnected');
-                            statusEl.textContent = 'Disconnected. Please refresh.';
+                            log('{t('disconnected')}');
+                            statusEl.textContent = '{t('disconnected')}';
                         }});
                     }};
                 }})();
@@ -1948,15 +3063,15 @@ def render_live_page(session_id):
         except:
             base_url = "https://globalinternetpy.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
-        st.text_input("Shareable link", value=share_url)
+        st.text_input(t("shareable_link"), value=share_url)
 
     with col2:
         # Live chat and gifts
-        st.subheader("Live Chat & Gifts")
+        st.subheader(t("live_chat_gifts"))
         if not is_broadcaster:
-            st.markdown("### 🎁 Send a Gift")
+            st.markdown(f"### {t('send_gift')}")
             if not st.session_state.profile.get("moncash_phone"):
-                st.info("Add your MonCash phone number in your profile to send gifts.")
+                st.info(t("add_moncash"))
             else:
                 gift_options = [
                     {"label": "❤️ 50 HTG", "amount": 50, "currency": "HTG"},
@@ -1985,15 +3100,15 @@ def render_live_page(session_id):
                                 st.error(msg)
 
         if is_broadcaster:
-            st.metric("Total Gifts Received", f"{total_gifts_htg:.0f} HTG")
+            st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
             if session["profiles"]["moncash_phone"]:
-                st.info(f"Gifts will be sent to your MonCash: {session['profiles']['moncash_phone']}")
+                st.info(f"{t('gifts_sent_to')}: {session['profiles']['moncash_phone']}")
             else:
-                st.warning("Add your MonCash phone number in your profile to receive gifts.")
+                st.warning(t("add_moncash"))
 
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
-            msg = st.text_input("Write a comment...")
-            if st.form_submit_button("Send"):
+            msg = st.text_input(t("write_comment"))
+            if st.form_submit_button(t("send")):
                 if msg:
                     add_comment(session_id, st.session_state.user.id, msg)
                     st.rerun()
@@ -2019,7 +3134,7 @@ def render_live_page(session_id):
 def render_user_profile(user_id):
     if supabase is None:
         st.error("Database not connected.")
-        if st.button("Back to Feed"):
+        if st.button(t("back_to_feed")):
             st.session_state.viewing_profile = None
             st.rerun()
         return
@@ -2028,7 +3143,7 @@ def render_user_profile(user_id):
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not profile_resp.data:
             st.error("User not found.")
-            if st.button("Back to Feed"):
+            if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
                 st.rerun()
             return
@@ -2043,13 +3158,13 @@ def render_user_profile(user_id):
                         profile = profile_resp.data[0]
                     else:
                         st.error("User not found.")
-                        if st.button("Back to Feed"):
+                        if st.button(t("back_to_feed")):
                             st.session_state.viewing_profile = None
                             st.rerun()
                         return
                 except Exception as retry_e:
                     st.error(f"Error loading profile after refresh: {retry_e}")
-                    if st.button("Back to Feed"):
+                    if st.button(t("back_to_feed")):
                         st.session_state.viewing_profile = None
                         st.rerun()
                     return
@@ -2060,7 +3175,7 @@ def render_user_profile(user_id):
                 return
         else:
             st.error(f"Error loading profile: {error_str}")
-            if st.button("Back to Feed"):
+            if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
                 st.rerun()
             return
@@ -2072,19 +3187,19 @@ def render_user_profile(user_id):
             st.image(profile["avatar_url"], width=150)
         else:
             st.markdown("👤", unsafe_allow_html=True)
-        st.markdown(f"**Bio:** {profile.get('bio', 'No bio')}")
-        st.markdown(f"**Location:** {profile.get('location', 'Unknown')}")
-        st.markdown(f"**MonCash:** {profile.get('moncash_phone', 'Not set')}")
-        st.markdown(f"**Joined:** {profile.get('join_date', '')[:10]}")
-        if st.button("💬 Send Message"):
+        st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
+        st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
+        st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
+        if st.button(t("chat")):
             st.session_state.selected_chat = user_id
             st.session_state.viewing_profile = None
             st.rerun()
-        if st.button("← Back to Feed"):
+        if st.button(t("back_to_feed")):
             st.session_state.viewing_profile = None
             st.rerun()
     with col2:
-        st.subheader("Public Posts")
+        st.subheader(t("feed"))
         posts = load_user_posts(user_id)
         if not posts:
             st.info("This user has no public posts.")
@@ -2109,11 +3224,11 @@ def render_feed():
         render_user_profile(st.session_state.viewing_profile)
         return
 
-    st.header("🌐 Collaboration Feed")
+    st.header(t("feed"))
 
     if st.session_state.last_error:
         st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
-        if st.button("Clear error"):
+        if st.button(t("clear_error")):
             st.session_state.last_error = None
             st.rerun()
 
@@ -2132,7 +3247,7 @@ def render_feed():
         return
 
     # Post composer
-    st.markdown("### Create a post")
+    st.markdown(f"### {t('create_post')}")
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
@@ -2142,23 +3257,23 @@ def render_feed():
                 st.markdown("👤", unsafe_allow_html=True)
         with col_input:
             content = st.text_area(
-                "Caption / What's on your mind? (Paste a video link to embed – YouTube, Vimeo, Dailymotion, Facebook, TikTok, Twitch, Instagram, Streamable, or direct video file)",
+                t("caption_placeholder"),
                 height=150,
-                placeholder="Write something... or paste a video link",
+                placeholder=t("caption_placeholder"),
                 label_visibility="collapsed"
             )
         media_files = st.file_uploader(
-            "Add images or videos (optional)",
+            t("add_media"),
             type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
             accept_multiple_files=True
         )
         st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use a link (YouTube, etc.).")
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
-            visibility = st.radio("Visibility", ["Public", "Private"], horizontal=True, index=0)
-            is_public = (visibility == "Public")
+            visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
+            is_public = (visibility == t("public"))
         with col3:
-            posted = st.form_submit_button("🚀 Post", use_container_width=True)
+            posted = st.form_submit_button(t("post"), use_container_width=True)
 
         if posted:
             if not content and not media_files:
@@ -2182,7 +3297,7 @@ def render_feed():
                         st.markdown("👤")
                 with col_b:
                     st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
-                    if st.button(f"Join Live", key=f"join_{live['id']}"):
+                    if st.button(t("join_live"), key=f"join_{live['id']}"):
                         st.session_state.viewing_live = live["id"]
                         st.rerun()
                 st.divider()
@@ -2236,7 +3351,7 @@ def render_feed():
                     st.caption(post['created_at'][:16])
                 with col_d:
                     if st.session_state.user and post['user_id'] == st.session_state.user.id:
-                        if st.button("🗑️", key=f"del_post_{post['id']}"):
+                        if st.button(t("delete_post"), key=f"del_post_{post['id']}"):
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
@@ -2273,7 +3388,7 @@ def render_feed():
                             st.rerun()
 
                 with cols[len(emojis)]:
-                    st.markdown(f"💬 {post.get('comment_count',0)} Comments")
+                    st.markdown(f"💬 {post.get('comment_count',0)} {t('comments')}")
                 with cols[len(emojis)+1]:
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
@@ -2281,11 +3396,11 @@ def render_feed():
 
                 # Comment section
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
-                st.markdown("#### Comments")
+                st.markdown(f"#### {t('comments')}")
 
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
-                    msg = st.text_input("Write a comment...")
-                    if st.form_submit_button("Post Comment"):
+                    msg = st.text_input(t("write_comment"))
+                    if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
                             st.rerun()
@@ -2308,19 +3423,19 @@ def render_feed():
                             like_comment(c['id'], increment=True)
                             st.rerun()
                     with col3:
-                        if st.button("💬 Reply", key=f"reply_{c['id']}"):
+                        if st.button(t("reply"), key=f"reply_{c['id']}"):
                             st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
                             st.rerun()
                     with col4:
                         if st.session_state.user and c['user_id'] == st.session_state.user.id:
-                            if st.button("🗑️", key=f"del_comment_{c['id']}"):
+                            if st.button(t("delete_post"), key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
                                 st.rerun()
 
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
-                            reply = st.text_input("Your reply")
-                            if st.form_submit_button("Post Reply"):
+                            reply = st.text_input(t("your_reply"))
+                            if st.form_submit_button(t("post_reply")):
                                 if reply:
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
@@ -2341,7 +3456,7 @@ def render_feed():
                             pass
                         with colr4:
                             if st.session_state.user and r['user_id'] == st.session_state.user.id:
-                                if st.button("🗑️", key=f"del_comment_{r['id']}"):
+                                if st.button(t("delete_post"), key=f"del_comment_{r['id']}"):
                                     delete_comment(r['id'])
                                     st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -2351,9 +3466,9 @@ def render_feed():
 
 # --- Friends & Chat Page ---
 def render_friends_page():
-    st.header("👥 Friends & Chat")
+    st.header(t("friends_chat"))
 
-    with st.expander("ℹ️ Setup Instructions (if uploads fail)"):
+    with st.expander(t("setup_instructions")):
         st.markdown("""
         **If you get "new row violates row-level security policy" when uploading files:**
 
@@ -2370,10 +3485,10 @@ def render_friends_page():
            - USING expression: `true`
         """)
 
-    st.markdown(f"<div class='friend-count'>You have {len(st.session_state.friends)} friends</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='friend-count'>{t('your_friends')}: {len(st.session_state.friends)}</div>", unsafe_allow_html=True)
     st.divider()
 
-    with st.expander(f"🔔 Notifications ({st.session_state.unread_count} unread)", expanded=True):
+    with st.expander(f"🔔 {t('friend_requests')} ({st.session_state.unread_count})", expanded=True):
         if not st.session_state.notifications:
             st.info("No notifications")
         else:
@@ -2390,16 +3505,16 @@ def render_friends_page():
                             st.rerun()
                 st.divider()
 
-    st.subheader("📨 Friend Requests Received")
+    st.subheader(t("friend_requests"))
     if not st.session_state.friend_requests:
-        st.info("No pending requests")
+        st.info(t("no_friends"))
     else:
         for req in st.session_state.friend_requests:
             cols = st.columns([2,1,1])
             with cols[0]:
                 st.markdown(f"**{req['sender']['full_name']}**")
             with cols[1]:
-                if st.button("✅ Accept", key=f"accept_{req['id']}"):
+                if st.button(t("accept"), key=f"accept_{req['id']}"):
                     success, msg = respond_friend_request(req['id'], True)
                     if success:
                         load_friend_data()
@@ -2409,7 +3524,7 @@ def render_friends_page():
                     else:
                         st.error(msg)
             with cols[2]:
-                if st.button("❌ Reject", key=f"reject_{req['id']}"):
+                if st.button(t("reject"), key=f"reject_{req['id']}"):
                     success, msg = respond_friend_request(req['id'], False)
                     if success:
                         load_friend_data()
@@ -2418,8 +3533,8 @@ def render_friends_page():
                         st.error(msg)
             st.divider()
 
-    st.subheader("🔍 Find Users")
-    search_query = st.text_input("Search by name")
+    st.subheader(t("find_users"))
+    search_query = st.text_input(t("search_by_name"))
     if search_query:
         results = search_users(search_query)
         if not results:
@@ -2430,22 +3545,22 @@ def render_friends_page():
                 with cols[0]:
                     st.markdown(f"**{user['full_name']}**")
                 with cols[1]:
-                    if st.button("➕ Add Friend", key=f"add_{user['id']}"):
+                    if st.button(t("add_friend"), key=f"add_{user['id']}"):
                         success, msg = send_friend_request(st.session_state.user.id, user['id'])
                         if success:
                             st.success(msg)
                         else:
                             st.error(msg)
                 with cols[2]:
-                    if st.button("👤 View Profile", key=f"view_{user['id']}"):
+                    if st.button(t("view_profile"), key=f"view_{user['id']}"):
                         st.session_state.viewing_profile = user['id']
                         st.rerun()
                 st.divider()
 
     st.divider()
-    st.subheader("👥 Your Friends")
+    st.subheader(t("your_friends"))
     if not st.session_state.friends:
-        st.info("You have no friends yet")
+        st.info(t("no_friends"))
     else:
         for friend in st.session_state.friends:
             cols = st.columns([1,4,1,1,1])
@@ -2457,30 +3572,30 @@ def render_friends_page():
             with cols[1]:
                 st.markdown(f"**{friend['full_name']}**")
             with cols[2]:
-                if st.button("💬 Chat", key=f"chat_{friend['id']}"):
+                if st.button(t("chat"), key=f"chat_{friend['id']}"):
                     st.session_state.selected_chat = friend['id']
                     st.rerun()
             with cols[3]:
-                if st.button("📞 Call", key=f"call_{friend['id']}"):
+                if st.button(t("call"), key=f"call_{friend['id']}"):
                     room = hashlib.md5(f"{st.session_state.user.id}_{friend['id']}_{time.time()}".encode()).hexdigest()[:10]
                     send_message(st.session_state.user.id, friend['id'], f"📞 Join my call: room={room}")
                     start_call(room)
                     st.rerun()
             with cols[4]:
-                if st.button("👤 Profile", key=f"profile_{friend['id']}"):
+                if st.button(t("profile_btn"), key=f"profile_{friend['id']}"):
                     st.session_state.viewing_profile = friend['id']
                     st.rerun()
             st.divider()
 
     if st.session_state.selected_chat:
-        st.subheader("💬 Private Chat")
+        st.subheader(t("chat"))
         other_id = st.session_state.selected_chat
         other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
         if other.data:
             other_name = other.data["full_name"]
         else:
             other_name = "User"
-        st.write(f"Chat with **{other_name}**")
+        st.write(f"{t('chat')} with **{other_name}**")
 
         messages = load_messages(st.session_state.user.id, other_id)
         for msg in messages:
@@ -2503,7 +3618,7 @@ def render_friends_page():
                             with st.popover("Create post"):
                                 with st.form(f"share_own_form_{msg['id']}"):
                                     caption = st.text_area("Add a caption (optional)")
-                                    if st.form_submit_button("Post to Feed"):
+                                    if st.form_submit_button(t("post")):
                                         media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
                                         create_post(
                                             st.session_state.user.id,
@@ -2538,7 +3653,7 @@ def render_friends_page():
                             with st.popover("Create post"):
                                 with st.form(f"share_form_{msg['id']}"):
                                     caption = st.text_area("Add a caption (optional)")
-                                    if st.form_submit_button("Post to Feed"):
+                                    if st.form_submit_button(t("post")):
                                         media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
                                         create_post(
                                             st.session_state.user.id,
@@ -2556,40 +3671,40 @@ def render_friends_page():
                     st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
         with st.form("send_message", clear_on_submit=True):
-            msg_content = st.text_input("Type a message... (URLs become clickable)")
-            uploaded_file = st.file_uploader("Attach image/video", type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            msg_content = st.text_input(t("send_message"))
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
             st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
             col1, col2 = st.columns([1,5])
             with col1:
-                sent = st.form_submit_button("Send")
+                sent = st.form_submit_button(t("send"))
             if sent:
                 if msg_content or uploaded_file:
                     send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
                     st.rerun()
-        if st.button("Close chat"):
+        if st.button(t("close_chat")):
             st.session_state.selected_chat = None
             st.rerun()
         st.divider()
 
     if st.session_state.in_call and st.session_state.call_room:
-        st.subheader("📞 Active Call")
-        st.markdown(f"Room ID: `{st.session_state.call_room}`")
-        st.markdown("Share this room ID with the person you want to call.")
+        st.subheader(t("active_call"))
+        st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
+        st.markdown(t("share_room"))
         jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
         st.components.v1.html(f"""
             <iframe src="{jitsi_url}" width="100%" height="500" allow="camera; microphone; fullscreen"></iframe>
         """, height=520)
-        if st.button("End Call"):
+        if st.button(t("end_call")):
             end_call()
             st.rerun()
     else:
-        if st.button("Start a new call"):
+        if st.button(t("start_call")):
             start_call()
             st.rerun()
 
 # --- Map Page ---
 def render_map():
-    st.header("🛰️ Satellite Network")
+    st.header(t("satellite_map"))
     sats = {
         "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
         "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
@@ -2609,7 +3724,7 @@ def render_map():
 
 # --- Profile Page ---
 def render_profile():
-    st.header("👤 My Profile")
+    st.header(t("profile"))
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
@@ -2620,7 +3735,7 @@ def render_profile():
             st.image(profile["avatar_url"], width=200, caption="Profile Picture")
         else:
             st.image("https://via.placeholder.com/200", width=200, caption="No picture")
-        uploaded = st.file_uploader("📸 Change picture", type=["png","jpg","jpeg"], label_visibility="collapsed")
+        uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
             if url:
@@ -2631,35 +3746,35 @@ def render_profile():
     with col2:
         with st.form("edit_profile"):
             st.markdown("#### Account Information")
-            full_name = st.text_input("Full Name", value=profile.get("full_name", ""))
-            bio = st.text_area("Bio", value=profile.get("bio", ""), height=100)
-            location = st.text_input("Location", value=profile.get("location", ""))
-            moncash_phone = st.text_input("MonCash Phone Number (for receiving gifts)", value=profile.get("moncash_phone", ""))
-            if st.form_submit_button("💾 Save Changes", use_container_width=True):
+            full_name = st.text_input(t("full_name"), value=profile.get("full_name", ""))
+            bio = st.text_area(t("bio"), value=profile.get("bio", ""), height=100)
+            location = st.text_input(t("location"), value=profile.get("location", ""))
+            moncash_phone = st.text_input(t("moncash_phone"), value=profile.get("moncash_phone", ""))
+            if st.form_submit_button(t("save_changes"), use_container_width=True):
                 profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
                 if update_profile(profile):
-                    st.success("Profile updated successfully!")
+                    st.success(t("profile"))
                     st.rerun()
 
     st.divider()
     cola, colb, colc, cold = st.columns(4)
     with cola:
-        st.metric("Posts", len(st.session_state.posts))
+        st.metric(t("posts_count"), len(st.session_state.posts))
     with colb:
-        st.metric("Connections", profile.get("connections", 0))
+        st.metric(t("connections"), profile.get("connections", 0))
     with colc:
-        st.metric("Verified", "✅" if profile.get("verified", False) else "❌")
+        st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
     with cold:
-        st.metric("Member since", profile.get("join_date", "2024")[:10])
+        st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
 # --- Owner Space (fixed gift query, no joins) ---
 def owner_space():
-    st.header("🕊️ Owner Space (Private)")
+    st.header(t("owner_space"))
     
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
-            if st.form_submit_button("Access"):
+            if st.form_submit_button(t("login_button")):
                 if pwd == OWNSPACE_PASSWORD:
                     st.session_state.owner_space_access = True
                     st.rerun()
@@ -2673,10 +3788,10 @@ def owner_space():
         send_email_notification(new_users)
         update_last_seen_signup()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💰 Dashboard", "📈 New Users", "🛡️ User Post Moderation", "📥 Client Payments", "🎁 Gift Management"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management")])
 
     with tab1:
-        st.subheader("🔐 Owner's Dashboard")
+        st.subheader(t("owner_dashboard"))
         real_balance = None
         if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
             try:
@@ -2695,32 +3810,32 @@ def owner_space():
         col1, col2, col3 = st.columns(3)
         with col1:
             if real_balance is not None:
-                st.metric("MonCash Business Balance", f"${real_balance:,.2f}")
+                st.metric(t("balance"), f"${real_balance:,.2f}")
             else:
                 duration = time.time() - st.session_state.connection_time
                 st.session_state.data_comp = duration * 0.035
-                st.metric("Compensation (simulated)", f"${st.session_state.data_comp:.4f}")
+                st.metric(t("compensation"), f"${st.session_state.data_comp:.4f}")
         with col2:
-            st.metric("Uptime", get_uptime())
+            st.metric(t("uptime"), get_uptime())
         with col3:
-            st.metric("Network Users", np.random.randint(100, 500))
+            st.metric(t("connections"), np.random.randint(100, 500))
 
         st.divider()
 
-        st.subheader("💰 Transfer Funds to Your Account")
+        st.subheader(t("transfer_funds"))
         st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
         st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
 
         if real_balance is not None:
             amount = st.number_input(
-                "Amount to transfer ($)",
+                t("amount_transfer"),
                 min_value=1.0,
                 max_value=float(real_balance),
                 value=min(10.0, float(real_balance)),
                 step=10.0,
                 format="%.2f"
             )
-            if st.button("🚀 Transfer to My MonCash", use_container_width=True):
+            if st.button(t("transfer"), use_container_width=True):
                 if amount <= 0:
                     st.error("Enter a valid amount.")
                 else:
@@ -2743,7 +3858,7 @@ def owner_space():
             st.info("To enable real transfers, set up your backend and configure the secrets.")
 
     with tab2:
-        st.subheader("📈 New User Signups")
+        st.subheader(t("new_users"))
         st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
         if new_users:
             data = []
@@ -2759,7 +3874,7 @@ def owner_space():
             st.info("No new users since last check.")
 
     with tab3:
-        st.subheader("🛡️ User Post Moderation")
+        st.subheader(t("post_moderation"))
         st.markdown("Review all posts (public & private) and take action if needed.")
         try:
             posts = supabase.table("posts").select(
@@ -2787,7 +3902,7 @@ def owner_space():
                         st.markdown(f"**Visibility:** {'Public' if post.get('is_public', True) else 'Private'}")
                         st.caption(post['created_at'][:16])
                     with cols[3]:
-                        if st.button("🗑️ Delete", key=f"del_{post['id']}"):
+                        if st.button(t("delete_post"), key=f"del_{post['id']}"):
                             if delete_post(post['id']):
                                 st.success("Post deleted.")
                                 st.rerun()
@@ -2825,7 +3940,7 @@ def owner_space():
                     st.divider()
 
     with tab4:
-        st.subheader("📥 How Clients Can Pay You")
+        st.subheader(t("client_payments"))
         st.markdown("""
         **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
         Clients can send money directly to your MonCash personal number:  
@@ -2842,7 +3957,7 @@ def owner_space():
         """)
 
     with tab5:
-        st.subheader("🎁 Gift Management")
+        st.subheader(t("gift_management"))
         st.markdown("View all completed gifts and process payouts to streamers.")
 
         if supabase is None:
@@ -2858,7 +3973,7 @@ def owner_space():
             gifts_data = []
 
         if not gifts_data:
-            st.info("No gifts yet.")
+            st.info(t("no_gifts"))
         else:
             # Simple display with stored sender_name and recipient_id
             df = pd.DataFrame([{
@@ -2872,18 +3987,18 @@ def owner_space():
             } for g in gifts_data])
             st.dataframe(df, use_container_width=True)
 
-            st.markdown("### Payout Summary")
+            st.markdown(f"### {t('payout_summary')}")
             total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
-            st.metric("Total Gifts (HTG)", f"{total_pending:.0f} HTG")
+            st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
 
-            if st.button("Mark All as Paid (Simulated)"):
+            if st.button(t("mark_paid")):
                 st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
 
     st.divider()
-    st.markdown("### 📬 Contact for Support / Large Payments")
+    st.markdown(f"### {t('contact_support')}")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
 
-    if st.button("Logout from Owner Space"):
+    if st.button(t("logout_owner")):
         st.session_state.owner_space_access = False
         st.rerun()
 
@@ -2905,20 +4020,20 @@ def main_app():
             st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
 
         if st.session_state.profile and st.session_state.profile.get("is_live"):
-            st.markdown("🔴 **You are live!**")
-            if st.button("End Live Session"):
+            st.markdown(f"🔴 **{t('you_are_live')}**")
+            if st.button(t("end_live_session")):
                 for ls in st.session_state.live_sessions:
                     if ls["user_id"] == st.session_state.user.id:
                         end_live_session(ls["id"])
                         st.rerun()
                         break
         else:
-            with st.expander("Go Live (Real Streaming)"):
-                st.markdown("**Choose your method:**")
-                method = st.radio("Streaming method", ["External platform (YouTube/Facebook/Twitch)", "In-app camera"], index=0)
+            with st.expander(t("go_live")):
+                st.markdown(f"**{t('select_platform')}:**")
+                method = st.radio(t("select_platform"), [t("external_platform"), t("in_app_camera")], index=0)
                 platform = None
-                if method == "External platform (YouTube/Facebook/Twitch)":
-                    st.markdown("**Select platform:**")
+                if method == t("external_platform"):
+                    st.markdown(f"**{t('select_platform')}:**")
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         if st.button("📺 YouTube", key="yt"):
@@ -2933,10 +4048,10 @@ def main_app():
                     platform = "inapp"
 
                 if platform:
-                    st.markdown(f"**Selected: {platform if platform != 'inapp' else 'In-app Camera'}**")
+                    st.markdown(f"**Selected: {platform if platform != 'inapp' else t('in_app_camera')}**")
                     with st.form("go_live_form"):
-                        title = st.text_input("Live title")
-                        if st.form_submit_button("Create Live Session"):
+                        title = st.text_input(t("live_title"))
+                        if st.form_submit_button(t("create_live_session")):
                             if title:
                                 session_id = create_live_session(
                                     title, 
@@ -2945,9 +4060,9 @@ def main_app():
                                 )
                                 if session_id:
                                     if platform == 'inapp':
-                                        st.success("Live session created! You are now live. Use the in-app controls to start broadcasting.")
+                                        st.success(t("you_are_live"))
                                     else:
-                                        st.success("Live session created! You are now live.")
+                                        st.success(t("you_are_live"))
                                         st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
                                         st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
                                     st.rerun()
@@ -2957,33 +4072,33 @@ def main_app():
         st.divider()
 
         lat, sig, qual = get_network_status()
-        st.markdown("### 🛡️ System Health")
+        st.markdown(f"### {t('system_health')}")
         st.markdown(f"""
         <div class='health-text'>
-        📡 Signal: {sig}<br>
-        ⏱️ Latency: {lat}ms<br>
-        📊 Quality: {qual}%<br>
-        ⏰ Uptime: {get_uptime()}<br>
-        🔒 Status: ENCRYPTED
+        {t('signal')}: {sig}<br>
+        {t('latency')}: {lat}ms<br>
+        {t('quality')}: {qual}%<br>
+        {t('uptime')}: {get_uptime()}<br>
+        {t('encrypted')}
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-        st.markdown(f"💰 **Compensation:** ${st.session_state.data_comp:.4f}")
+        st.markdown(f"{t('compensation')}: ${st.session_state.data_comp:.4f}")
         st.divider()
         if st.session_state.profile:
-            st.markdown(f"👤 **Logged in as:** {st.session_state.profile.get('full_name', 'User')}")
-        if st.button("🚪 Logout"):
+            st.markdown(f"{t('logged_in_as')}: {st.session_state.profile.get('full_name', 'User')}")
+        if st.button(t("logout")):
             logout()
         st.divider()
 
         pages = {
-            "📡 Feed": render_feed,
-            "👥 Friends & Chat": render_friends_page,
-            "🛰️ Satellite Map": render_map,
-            "👤 Profile": render_profile,
-            "🕊️ Owner Space": owner_space
+            t("feed"): render_feed,
+            t("friends_chat"): render_friends_page,
+            t("satellite_map"): render_map,
+            t("profile"): render_profile,
+            t("owner_space"): owner_space
         }
-        choice = st.selectbox("Menu", list(pages.keys()))
+        choice = st.selectbox(t("feed"), list(pages.keys()))
     pages[choice]()
 
 # --- Login Interface ---
@@ -3001,34 +4116,50 @@ def login_interface():
         """, unsafe_allow_html=True)
         st.markdown("---")
 
-        auth_method = st.radio("Choose method", ["Email", "Phone (OTP)"], horizontal=True)
+        # Language selector
+        lang_options = {
+            "en": "English",
+            "fr": "Français",
+            "es": "Español",
+            "pt": "Português",
+            "ru": "Русский",
+            "ar": "العربية",
+            "zh": "中文",
+            "hi": "हिन्दी"
+        }
+        selected_lang = st.selectbox("Language / Langue / Idioma", options=list(lang_options.keys()), format_func=lambda x: lang_options[x], index=0)
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
 
-        if auth_method == "Email":
-            tab1, tab2, tab3 = st.tabs(["🔑 Login", "📝 Sign Up", "🔐 Forgot Password"])
+        auth_method = st.radio(t("login_title"), [t("email_method"), t("phone_method")], horizontal=True)
+
+        if auth_method == t("email_method"):
+            tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
             with tab1:
                 with st.form("login_email"):
-                    email = st.text_input("Email")
-                    password = st.text_input("Password", type="password")
-                    remember = st.checkbox("Remember me (stay logged in)")
-                    if st.form_submit_button("🚀 Login", use_container_width=True):
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    remember = st.checkbox(t("remember_me"))
+                    if st.form_submit_button(t("login_button"), use_container_width=True):
                         if email and password:
                             log_in_email(email, password, remember)
                         else:
                             st.warning("Please enter email and password")
             with tab2:
                 with st.form("signup_email"):
-                    full_name = st.text_input("Full Name")
-                    email = st.text_input("Email")
-                    password = st.text_input("Password", type="password")
-                    if st.form_submit_button("📝 Sign Up", use_container_width=True):
+                    full_name = st.text_input(t("full_name"))
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    if st.form_submit_button(t("signup_button"), use_container_width=True):
                         if full_name and email and password:
                             sign_up_email(email, password, full_name)
                         else:
                             st.warning("Please fill all fields")
             with tab3:
                 with st.form("reset_email"):
-                    reset_email = st.text_input("Enter your email address")
-                    if st.form_submit_button("Send Reset Link", use_container_width=True):
+                    reset_email = st.text_input(t("email"))
+                    if st.form_submit_button(t("send_reset_link"), use_container_width=True):
                         if reset_email:
                             reset_password_email(reset_email)
                         else:
@@ -3037,9 +4168,9 @@ def login_interface():
             st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
             if not st.session_state.phone_otp_sent:
                 with st.form("phone_request"):
-                    phone = st.text_input("Phone number (digits only, e.g., 50947385663)")
-                    remember = st.checkbox("Remember me (stay logged in)")
-                    if st.form_submit_button("📲 Send OTP", use_container_width=True):
+                    phone = st.text_input(t("phone_number"))
+                    remember = st.checkbox(t("remember_me"))
+                    if st.form_submit_button(t("send_otp"), use_container_width=True):
                         if phone:
                             if send_phone_otp(phone):
                                 st.session_state.phone_otp_sent = True
@@ -3051,14 +4182,14 @@ def login_interface():
             else:
                 st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
                 with st.form("phone_verify"):
-                    otp = st.text_input("Enter 6-digit OTP code")
-                    if st.form_submit_button("✅ Verify & Login", use_container_width=True):
+                    otp = st.text_input(t("enter_otp"))
+                    if st.form_submit_button(t("verify_login"), use_container_width=True):
                         if otp:
                             remember = st.session_state.get("phone_remember", False)
                             verify_phone_otp(st.session_state.temp_phone, otp, remember)
                         else:
                             st.warning("Please enter the OTP")
-                if st.button("← Back / Resend OTP"):
+                if st.button(t("back_resend")):
                     st.session_state.phone_otp_sent = False
                     st.session_state.temp_phone = ""
                     st.rerun()
