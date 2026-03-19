@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 75.0.0 (Multi-language support + session persistence)
+Version: 75.1.0 (Mobile session persistence + compact reactions + edit posts)
 """
 import streamlit as st
 import smtplib
@@ -142,6 +142,9 @@ if "background_url" not in st.session_state:
 # --- Language state ---
 if "language" not in st.session_state:
     st.session_state.language = "en"
+# --- Edit post state ---
+if "editing_post" not in st.session_state:
+    st.session_state.editing_post = None
 
 # --- Language dictionary ---
 LANG = {
@@ -1346,6 +1349,18 @@ if not st.session_state.logged_in and supabase:
         except Exception as e:
             st.session_state.last_error = str(e)
 
+# --- Token refresh on each run (for mobile persistence) ---
+if st.session_state.logged_in and supabase and st.session_state.refresh_token:
+    try:
+        # Try to refresh the session silently
+        new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
+        if new_session and new_session.user:
+            st.session_state.user = new_session.user
+            st.session_state.refresh_token = new_session.session.refresh_token
+    except Exception:
+        # If refresh fails, we'll let the user log in again later
+        pass
+
 # --- UI styling (mobile responsive) ---
 st.markdown("""
     <style>
@@ -2070,6 +2085,33 @@ def create_post(user_id, content, media_files=None, is_public=True, existing_med
         st.session_state.last_error = f"Error creating post: {e}"
         return False
 
+def update_post(post_id, user_id, content, media_files=None, existing_media_urls=None):
+    """Update an existing post."""
+    if supabase is None:
+        st.session_state.last_error = "Supabase not configured."
+        return False
+    try:
+        media_urls = existing_media_urls or []
+        if media_files:
+            for f in media_files:
+                media_info = upload_post_media(user_id, f)
+                if media_info:
+                    media_urls.append(media_info)
+
+        post_data = {
+            "content": content,
+            "media_urls": media_urls,
+            "updated_at": datetime.now().isoformat()
+        }
+        supabase.table("posts").update(post_data).eq("id", post_id).eq("user_id", user_id).execute()
+        st.cache_data.clear()
+        st.session_state.posts = load_posts()
+        st.success("Post updated!")
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error updating post: {e}"
+        return False
+
 def toggle_reaction(post_id, user_id, emoji):
     if supabase is None:
         return False
@@ -2484,6 +2526,7 @@ def logout():
     st.session_state.friends = []
     st.session_state.live_gifts = []
     st.session_state.background_url = None
+    st.session_state.editing_post = None
     # Do NOT touch st.session_state keys that might be widget keys (like 'yt', 'fb', etc.)
     st.rerun()
 
@@ -3234,7 +3277,7 @@ def render_user_profile(user_id):
                             st.video(media["url"])
                     st.divider()
 
-# --- Feed Page with auto-embed video links ---
+# --- Feed Page with auto-embed video links, compact reactions, and edit functionality ---
 def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
@@ -3343,8 +3386,8 @@ def render_feed():
     else:
         for post in st.session_state.posts:
             with st.container():
-                # Post header
-                col_a, col_b, col_c, col_d = st.columns([1, 5, 2, 1])
+                # Post header (with edit button)
+                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
                 with col_a:
                     avatar = post.get("profiles", {}).get("avatar_url")
                     if avatar:
@@ -3367,9 +3410,32 @@ def render_feed():
                     st.caption(post['created_at'][:16])
                 with col_d:
                     if st.session_state.user and post['user_id'] == st.session_state.user.id:
-                        if st.button(t("delete_post"), key=f"del_post_{post['id']}"):
+                        if st.button("✏️", key=f"edit_{post['id']}"):
+                            st.session_state.editing_post = post['id']
+                            st.rerun()
+                with col_e:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("🗑️", key=f"del_post_{post['id']}"):
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
+
+                # Edit form if this post is being edited
+                if st.session_state.editing_post == post['id']:
+                    with st.form(key=f"edit_form_{post['id']}"):
+                        new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Save"):
+                                existing = post.get('media_urls', [])
+                                if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
+                                    st.session_state.editing_post = None
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state.editing_post = None
+                                st.rerun()
+                    st.divider()
 
                 # Media files (uploaded)
                 media_urls = post.get("media_urls", [])
@@ -3387,35 +3453,42 @@ def render_feed():
 
                 # Embed video links found in content
                 if post['content']:
-                    # Find all URLs in the content
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
-                        embed_video_from_url(url)  # This will display an embed if supported
+                        embed_video_from_url(url)
 
-                # Reactions
+                # Reactions - compact design with popover
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
-                cols = st.columns(len(emojis) + 2)
-                for i, emoji in enumerate(emojis):
-                    with cols[i]:
-                        count = post.get("reactions", {}).get(emoji, 0)
-                        btn_label = f"{emoji} {count}" if count > 0 else emoji
-                        if st.button(btn_label, key=f"react_{post['id']}_{emoji}"):
-                            toggle_reaction(post['id'], st.session_state.user.id, emoji)
-                            st.rerun()
-
-                with cols[len(emojis)]:
-                    st.markdown(f"💬 {post.get('comment_count',0)} {t('comments')}")
-                with cols[len(emojis)+1]:
+                # Show summary of existing reactions (top 3)
+                reaction_counts = post.get("reactions", {})
+                summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
+                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                with col_react:
+                    with st.popover("👍 React"):
+                        st.markdown("**Choose reaction**")
+                        # Arrange emojis in a grid (3 columns)
+                        for i in range(0, len(emojis), 3):
+                            cols = st.columns(3)
+                            for j, emoji in enumerate(emojis[i:i+3]):
+                                with cols[j]:
+                                    if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
+                                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                                        st.rerun()
+                    if summary:
+                        st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
+                with col_comments:
+                    st.markdown(f"💬 {post.get('comment_count',0)}")
+                with col_shares:
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comment section
+                # Comment section (unchanged, but with compact icons)
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
 
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
-                    msg = st.text_input(t("write_comment"))
+                    msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
                     if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
@@ -3444,13 +3517,13 @@ def render_feed():
                             st.rerun()
                     with col4:
                         if st.session_state.user and c['user_id'] == st.session_state.user.id:
-                            if st.button(t("delete_post"), key=f"del_comment_{c['id']}"):
+                            if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
                                 st.rerun()
 
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
-                            reply = st.text_input(t("your_reply"))
+                            reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
                             if st.form_submit_button(t("post_reply")):
                                 if reply:
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
@@ -3472,7 +3545,7 @@ def render_feed():
                             pass
                         with colr4:
                             if st.session_state.user and r['user_id'] == st.session_state.user.id:
-                                if st.button(t("delete_post"), key=f"del_comment_{r['id']}"):
+                                if st.button("🗑️", key=f"del_comment_{r['id']}"):
                                     delete_comment(r['id'])
                                     st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
