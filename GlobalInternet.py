@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 75.2.0 (Improved OwnerSpace error handling + mobile persistence)
+Version: 75.3.0 (Mobile session persistence + debug messages)
 """
 import streamlit as st
 import smtplib
@@ -4102,6 +4102,26 @@ def owner_space():
 # --- Main App (Sidebar) ---
 def main_app():
     with st.sidebar:
+        # --- Debug: show refresh token status (remove after fixing) ---
+        if st.session_state.logged_in:
+            st.success("✅ Logged in")
+            if st.session_state.refresh_token:
+                st.info("🔑 Refresh token present")
+            else:
+                st.warning("⚠️ No refresh token")
+        else:
+            st.info("🔓 Not logged in")
+            # Show if a cookie exists (by checking query params)
+            try:
+                cookie_token = st.query_params.get("cookie_sb_refresh_token", [None])[0]
+                if cookie_token:
+                    st.info("🍪 Refresh token found in cookie")
+                else:
+                    st.info("🍪 No refresh token cookie")
+            except:
+                pass
+        st.divider()
+
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
         st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
