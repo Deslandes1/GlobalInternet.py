@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.9 (Final – all errors fixed, gift query fallback, safe logout)
+Version: 74.0.10 (Final – owner_state error handled, all functions restored)
 """
 import streamlit as st
 import smtplib
@@ -77,7 +77,7 @@ SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
 EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
-# --- Session state (all keys properly initialized) ---
+# --- Session state ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
@@ -113,7 +113,7 @@ if "delete_confirm" not in st.session_state:
 if "last_error" not in st.session_state:
     st.session_state.last_error = None
 if "replying_to" not in st.session_state:
-    st.session_state.replying_to = {}          # must be a dict
+    st.session_state.replying_to = {}
 # --- Friend/Chat state ---
 if "notifications" not in st.session_state:
     st.session_state.notifications = []
@@ -1515,14 +1515,7 @@ def ensure_owner_state_table():
                 # We need to use raw SQL via supabase.rpc or a direct API call
                 # Since supabase-py doesn't have a raw SQL method, we'll use requests
                 # But for simplicity, we'll just return False and let the owner create it manually.
-                st.error("The 'owner_state' table is missing. Please run the following SQL in your Supabase SQL editor:")
-                st.code("""
-CREATE TABLE IF NOT EXISTS owner_state (
-    id INT PRIMARY KEY,
-    last_seen_signup TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-INSERT INTO owner_state (id, last_seen_signup) VALUES (1, NOW()) ON CONFLICT DO NOTHING;
-                """, language="sql")
+                st.session_state.last_error = "The 'owner_state' table is missing. Please run the following SQL in your Supabase SQL editor: CREATE TABLE IF NOT EXISTS owner_state (id INT PRIMARY KEY, last_seen_signup TIMESTAMP WITH TIME ZONE DEFAULT NOW()); INSERT INTO owner_state (id, last_seen_signup) VALUES (1, NOW()) ON CONFLICT DO NOTHING;"
                 return False
             else:
                 st.session_state.last_error = f"Error checking owner_state: {e}"
