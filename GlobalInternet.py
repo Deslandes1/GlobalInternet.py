@@ -1,8 +1,9 @@
+"""
 GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 75.0.0 (Multi‑language support + session persistence)
+Version: 75.0.0 (Multi-language support + session persistence)
 """
 import streamlit as st
 import smtplib
