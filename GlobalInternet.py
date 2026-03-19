@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.7 (Enhanced video embedding with more platforms + visual feedback)
+Version: 74.0.8 (Fixed background filter preview & gift permissions)
 """
 import streamlit as st
 import smtplib
@@ -767,7 +767,7 @@ def fetch_exchange_rate():
     except:
         return 100.0
 
-# --- Live gift functions (with fallback) ---
+# --- Live gift functions (now stores sender name to avoid auth.users join) ---
 def send_gift(session_id, sender_id, recipient_id, amount, currency):
     if supabase is None:
         return False, "Supabase not configured"
@@ -778,9 +778,13 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
         else:
             amount_htg = amount
 
+        # Get sender's name from session profile
+        sender_name = st.session_state.profile["full_name"]
+
         gift_data = {
             "session_id": session_id,
             "sender_id": sender_id,
+            "sender_name": sender_name,  # store name directly
             "recipient_id": recipient_id,
             "amount": amount,
             "currency": currency,
@@ -798,7 +802,6 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
         payment_success = True
         if payment_success:
             supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
-            sender_name = st.session_state.profile["full_name"]
             supabase.table("notifications").insert({
                 "user_id": recipient_id,
                 "type": "gift",
@@ -814,26 +817,19 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
         return False, str(e)
 
 def load_gifts_for_session(session_id):
-    """Load gifts for a session, with fallback if foreign key relationship fails."""
+    """Load gifts for a session. No join needed because sender_name is stored."""
     if supabase is None:
         return []
     try:
-        # Try with join first
-        resp = supabase.table("live_gifts").select("*, sender:sender_id(full_name, avatar_url)").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
-        return resp.data
+        resp = supabase.table("live_gifts").select("*").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
+        gifts = resp.data or []
+        # Add dummy sender info for compatibility with existing display
+        for g in gifts:
+            g['sender'] = {'full_name': g.get('sender_name', 'Someone'), 'avatar_url': None}
+        return gifts
     except Exception as e:
-        # If join fails (foreign key missing), fall back to simple query
-        st.warning("Gift sender names unavailable (foreign key missing). Gifts still tracked.")
-        try:
-            resp = supabase.table("live_gifts").select("*").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
-            # Add dummy sender info
-            gifts = resp.data or []
-            for g in gifts:
-                g['sender'] = {'full_name': 'Someone', 'avatar_url': None}
-            return gifts
-        except Exception as e2:
-            st.session_state.last_error = f"Error loading gifts: {e2}"
-            return []
+        st.session_state.last_error = f"Error loading gifts: {e}"
+        return []
 
 # --- Post functions ---
 @st.cache_data(ttl=60, show_spinner=False)
@@ -1590,7 +1586,7 @@ def send_email_notification(new_users):
 
 # ========== PAGE RENDERING FUNCTIONS ==========
 
-# --- ENHANCED render_live_page with background filters ---
+# --- ENHANCED render_live_page with background filters (fixed preview) ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -1693,12 +1689,12 @@ def render_live_page(session_id):
                         st.session_state.background_url = data_url
                         st.success("Background set!")
 
-                # BROADCASTER VIEW with background filter
+                # BROADCASTER VIEW with background filter (fixed preview)
                 broadcaster_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">🎥 Your Live Stream</div>
                     <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
-                        <canvas id="outputCanvas" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
+                        <canvas id="outputCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
                     </div>
                     <div style="margin-top: 30px;">
                         <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">▶ START BROADCAST</button>
@@ -1729,6 +1725,11 @@ def render_live_page(session_id):
                         backgroundImage = new Image();
                         backgroundImage.crossOrigin = "Anonymous";
                         backgroundImage.src = bgUrl;
+                        backgroundImage.onload = () => {{
+                            // Ensure canvas is sized appropriately
+                            outputCanvas.width = 640;
+                            outputCanvas.height = 360;
+                        }};
                     }}
 
                     // MediaPipe setup
@@ -1765,6 +1766,8 @@ def render_live_page(session_id):
                             const videoElement = document.createElement('video');
                             videoElement.srcObject = localStream;
                             videoElement.autoplay = true;
+                            videoElement.width = 640;
+                            videoElement.height = 360;
                             videoElement.onloadeddata = () => {{
                                 const processFrame = async () => {{
                                     await selfieSegmentation.send({{image: videoElement}});
@@ -2784,40 +2787,27 @@ def owner_space():
             st.warning("Supabase not connected.")
             return
 
-        # Fetch all completed gifts – with fallback if foreign key joins fail
+        # Fetch all completed gifts – now using sender_name from the table
         try:
-            # Try to fetch with joins
-            gifts = supabase.table("live_gifts").select(
-                "*, sender:sender_id(full_name), recipient:recipient_id(full_name, moncash_phone), session:session_id(title)"
-            ).eq("status", "completed").order("created_at", desc=True).execute()
+            gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
             gifts_data = gifts.data if gifts.data else []
         except Exception as e:
-            # If joins fail, fallback to simple query without joins
-            st.warning("Could not load sender/recipient names (foreign keys missing). Showing basic gift data.")
-            try:
-                gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
-                gifts_data = gifts.data if gifts.data else []
-                # Add placeholder names
-                for g in gifts_data:
-                    g['sender'] = {'full_name': 'Unknown'}
-                    g['recipient'] = {'full_name': 'Unknown', 'moncash_phone': None}
-                    g['session'] = {'title': 'Unknown'}
-            except Exception as e2:
-                st.error(f"Failed to load gifts: {e2}")
-                gifts_data = []
+            st.error(f"Failed to load gifts: {e}")
+            gifts_data = []
 
         if not gifts_data:
             st.info("No gifts yet.")
         else:
+            # For display, we need sender_name and recipient info (but recipient name would require join – for now, show IDs)
+            # We'll just show the basic data with sender_name.
             df = pd.DataFrame([{
                 "ID": g['id'],
                 "Date": g['created_at'][:16],
-                "Session": g.get('session', {}).get('title', 'Unknown'),
-                "Sender": g.get('sender', {}).get('full_name', 'Unknown'),
-                "Recipient": g.get('recipient', {}).get('full_name', 'Unknown'),
+                "Session ID": g['session_id'],
+                "Sender": g.get('sender_name', 'Unknown'),
+                "Recipient ID": g['recipient_id'],
                 "Amount": f"{g['amount']} {g['currency']}",
-                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG",
-                "Recipient MonCash": g.get('recipient', {}).get('moncash_phone', 'Not set')
+                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
             } for g in gifts_data])
             st.dataframe(df, use_container_width=True)
 
