@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 74.0.12 (Complete – all functions defined, mobile responsive)
+Version: 74.0.12 (Final – no joins to auth.users, all features intact)
 """
 import streamlit as st
 import smtplib
@@ -77,7 +77,7 @@ SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
 EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
-# --- Session state (all keys properly initialized) ---
+# --- Session state ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
