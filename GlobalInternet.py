@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 75.1.0 (Mobile session persistence + compact reactions + edit posts)
+Version: 75.2.0 (Improved OwnerSpace error handling + mobile persistence)
 """
 import streamlit as st
 import smtplib
@@ -3856,7 +3856,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-# --- Owner Space (fixed gift query, no joins) ---
+# --- Owner Space (improved with error handling for new users) ---
 def owner_space():
     st.header(t("owner_space"))
     
@@ -3948,19 +3948,22 @@ def owner_space():
 
     with tab2:
         st.subheader(t("new_users"))
-        st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
+        # new_users already defined above
         if new_users:
-            data = []
-            for u in new_users:
-                data.append({
-                    "Full Name": u.get('full_name', 'N/A'),
-                    "User ID": u['id'],
-                    "Signed Up": u.get('join_date', '')[:16] if u.get('join_date') else ''
-                })
+            st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
+            data = [{
+                "Full Name": u.get('full_name', 'N/A'),
+                "User ID": u['id'],
+                "Signed Up": u.get('join_date', '')[:16] if u.get('join_date') else ''
+            } for u in new_users]
             df = pd.DataFrame(data)
             st.dataframe(df, use_container_width=True)
         else:
-            st.info("No new users since last check.")
+            # Check if there was a permission error
+            if st.session_state.last_error and "permission denied" in st.session_state.last_error.lower():
+                st.error("⚠️ Unable to load new users due to database permissions.\n\n" + st.session_state.last_error)
+            else:
+                st.info("No new users since last check.")
 
     with tab3:
         st.subheader(t("post_moderation"))
