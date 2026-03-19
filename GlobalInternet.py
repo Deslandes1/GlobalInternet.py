@@ -3457,14 +3457,18 @@ def render_feed():
                     for url in urls:
                         embed_video_from_url(url)
 
-                # Reactions - compact design with popover
+                # Reactions - compact design with toggle button (compatible with older Streamlit)
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 # Show summary of existing reactions (top 3)
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
                 col_react, col_comments, col_shares = st.columns([2, 1, 1])
                 with col_react:
-                    with st.popover("👍 React"):
+                    # Toggle button to show/hide reaction grid
+                    if st.button("👍 React", key=f"react_btn_{post['id']}"):
+                        st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
+                        st.rerun()
+                    if st.session_state.get(f"show_reactions_{post['id']}", False):
                         st.markdown("**Choose reaction**")
                         # Arrange emojis in a grid (3 columns)
                         for i in range(0, len(emojis), 3):
@@ -3473,6 +3477,7 @@ def render_feed():
                                 with cols[j]:
                                     if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
                                         toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                                        st.session_state[f"show_reactions_{post['id']}"] = False  # hide after selection
                                         st.rerun()
                     if summary:
                         st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
@@ -3483,7 +3488,7 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comment section (unchanged, but with compact icons)
+                # Comment section (unchanged)
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
 
