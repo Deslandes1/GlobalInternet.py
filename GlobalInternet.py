@@ -1,4 +1,3 @@
-"""
 GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
@@ -1963,7 +1962,7 @@ def send_gift(session_id, sender_id, recipient_id, amount, currency):
         return False, str(e)
 
 def load_gifts_for_session(session_id):
-    """Load gifts for a session. No join needed because sender_name is stored."""
+    """Load gifts for a session with error handling for permission issues."""
     if supabase is None:
         return []
     try:
@@ -1974,7 +1973,15 @@ def load_gifts_for_session(session_id):
             g['sender'] = {'full_name': g.get('sender_name', 'Someone'), 'avatar_url': None}
         return gifts
     except Exception as e:
-        st.session_state.last_error = f"Error loading gifts: {e}"
+        error_str = str(e)
+        if "permission denied" in error_str.lower() and "users" in error_str.lower():
+            st.session_state.last_error = (
+                "Permission denied while loading gifts. This is likely due to a Row Level Security (RLS) policy "
+                "that references the `users` table. Please check your Supabase policies on the `live_gifts` table "
+                "and ensure the anon role has the necessary permissions, or modify the policy to avoid using the `users` table."
+            )
+        else:
+            st.session_state.last_error = f"Error loading gifts: {e}"
         return []
 
 # --- Post functions ---
@@ -2698,6 +2705,7 @@ def update_last_seen_signup():
         st.session_state.last_error = f"Error updating last seen signup: {e}"
 
 def get_new_users(since):
+    """Fetch new users since a given timestamp with error handling."""
     if supabase is None:
         return []
     try:
@@ -2705,7 +2713,14 @@ def get_new_users(since):
         resp = supabase.table("profiles").select("id, full_name, avatar_url, join_date").gt("join_date", since_str).order("join_date").execute()
         return resp.data
     except Exception as e:
-        st.session_state.last_error = f"Error fetching new users: {e}"
+        error_str = str(e)
+        if "permission denied" in error_str.lower() and "users" in error_str.lower():
+            st.session_state.last_error = (
+                "Permission denied while fetching new users. This may be due to a policy on the `profiles` table "
+                "that references the `users` table. Please review your RLS policies and grant the necessary permissions."
+            )
+        else:
+            st.session_state.last_error = f"Error fetching new users: {e}"
         return []
 
 def send_email_notification(new_users):
