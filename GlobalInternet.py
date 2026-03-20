@@ -2895,7 +2895,7 @@ def render_live_page(session_id):
                         st.session_state.background_url = data_url
                         st.success(t("background_set"))
 
-                # BROADCASTER VIEW with background filter
+                # BROADCASTER VIEW – persistent connection + fixed background filter
                 broadcaster_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">🎥 {t('you_are_broadcaster')}</div>
@@ -2909,22 +2909,22 @@ def render_live_page(session_id):
                     <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-                <!-- MediaPipe Selfie Segmentation -->
                 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
                 <script>
                 (function() {{
+                    // Persistent state across reruns
+                    if (!window.broadcasterState) window.broadcasterState = {{}};
+                    const state = window.broadcasterState;
+                    
                     const sessionId = {session_id};
                     const userId = "{st.session_state.user.id}";
-                    let localStream = null;
-                    let peer = null;
-                    let call = null;
                     const startBtn = document.getElementById('startBtn');
                     const stopBtn = document.getElementById('stopBtn');
                     const statusEl = document.getElementById('status');
                     const outputCanvas = document.getElementById('outputCanvas');
                     const ctx = outputCanvas.getContext('2d');
                     
-                    // Background image (from session state)
+                    // Background image
                     let backgroundImage = null;
                     const bgUrl = "{st.session_state.background_url or ''}";
                     if (bgUrl) {{
@@ -2932,23 +2932,26 @@ def render_live_page(session_id):
                         backgroundImage.crossOrigin = "Anonymous";
                         backgroundImage.src = bgUrl;
                         backgroundImage.onload = () => {{
-                            // Ensure canvas is sized appropriately
                             outputCanvas.width = 640;
                             outputCanvas.height = 360;
                         }};
                     }}
-
+                    
                     // MediaPipe setup
-                    const selfieSegmentation = new SelfieSegmentation({{
-                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
-                    }});
-                    selfieSegmentation.setOptions({{
-                        modelSelection: 1,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
-                    }});
-                    selfieSegmentation.onResults(onResults);
-
+                    let selfieSegmentation = state.selfieSegmentation;
+                    if (!selfieSegmentation) {{
+                        selfieSegmentation = new SelfieSegmentation({{
+                            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
+                        }});
+                        selfieSegmentation.setOptions({{
+                            modelSelection: 1,
+                            minDetectionConfidence: 0.5,
+                            minTrackingConfidence: 0.5
+                        }});
+                        selfieSegmentation.onResults(onResults);
+                        state.selfieSegmentation = selfieSegmentation;
+                    }}
+                    
                     function onResults(results) {{
                         if (!results.segmentationMask) return;
                         // Draw background
@@ -2958,33 +2961,51 @@ def render_live_page(session_id):
                             ctx.fillStyle = '#00a8ff';
                             ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
                         }}
-                        // Draw person using mask
-                        ctx.globalCompositeOperation = 'destination-atop';
+                        // Draw person using mask as alpha
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'destination-out';
                         ctx.drawImage(results.segmentationMask, 0, 0, outputCanvas.width, outputCanvas.height);
                         ctx.globalCompositeOperation = 'source-over';
                         ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
+                        ctx.restore();
                     }}
-
+                    
+                    // Reuse existing stream and peer if already started
+                    if (state.localStream && state.peer && state.call) {{
+                        // Already broadcasting – just update UI
+                        startBtn.style.display = 'none';
+                        stopBtn.style.display = 'inline-block';
+                        statusEl.textContent = `{t('broadcasting')}: ${{state.peer.id}}`;
+                        // Ensure canvas processing continues
+                        if (state.videoElement) {{
+                            const processFrame = async () => {{
+                                await selfieSegmentation.send({{image: state.videoElement}});
+                                requestAnimationFrame(processFrame);
+                            }};
+                            processFrame();
+                        }}
+                        return;
+                    }}
+                    
                     startBtn.onclick = async () => {{
                         try {{
                             statusEl.textContent = '{t('camera_access')}';
-                            localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
-                            const videoElement = document.createElement('video');
-                            videoElement.srcObject = localStream;
-                            videoElement.autoplay = true;
-                            videoElement.width = 640;
-                            videoElement.height = 360;
-                            videoElement.onloadeddata = () => {{
+                            state.localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
+                            state.videoElement = document.createElement('video');
+                            state.videoElement.srcObject = state.localStream;
+                            state.videoElement.autoplay = true;
+                            state.videoElement.width = 640;
+                            state.videoElement.height = 360;
+                            state.videoElement.onloadeddata = () => {{
                                 const processFrame = async () => {{
-                                    await selfieSegmentation.send({{image: videoElement}});
+                                    await selfieSegmentation.send({{image: state.videoElement}});
                                     requestAnimationFrame(processFrame);
                                 }};
                                 processFrame();
                             }};
                             statusEl.textContent = '{t('camera_granted')}';
-
-                            // PeerJS for streaming (sending original stream for simplicity)
-                            peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
+                            
+                            state.peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
                                 host: '0.peerjs.com',
                                 port: 443,
                                 secure: true,
@@ -2995,31 +3016,35 @@ def render_live_page(session_id):
                                     ]
                                 }}
                             }});
-
-                            peer.on('open', (id) => {{
+                            
+                            state.peer.on('open', (id) => {{
                                 statusEl.textContent = `{t('broadcasting')}: ${{id}}`;
                                 startBtn.style.display = 'none';
                                 stopBtn.style.display = 'inline-block';
                             }});
-
-                            peer.on('call', (incomingCall) => {{
-                                // Answer with the original stream (background filter applied locally only)
-                                incomingCall.answer(localStream);
-                                call = incomingCall;
+                            
+                            state.peer.on('call', (incomingCall) => {{
+                                incomingCall.answer(state.localStream);
+                                state.call = incomingCall;
                             }});
-
-                            peer.on('error', (err) => {{
+                            
+                            state.peer.on('error', (err) => {{
                                 statusEl.textContent = '{t('peer_error')}: ' + err;
                             }});
                         }} catch (err) {{
                             statusEl.textContent = '{t('error')}: ' + err.message;
                         }}
                     }};
-
+                    
                     stopBtn.onclick = () => {{
-                        if (call) call.close();
-                        if (peer) peer.destroy();
-                        if (localStream) localStream.getTracks().forEach(track => track.stop());
+                        if (state.call) state.call.close();
+                        if (state.peer) state.peer.destroy();
+                        if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
+                        // Clear state
+                        state.localStream = null;
+                        state.peer = null;
+                        state.call = null;
+                        state.videoElement = null;
                         startBtn.style.display = 'inline-block';
                         stopBtn.style.display = 'none';
                         statusEl.textContent = '{t('broadcast_ended')}';
@@ -3029,7 +3054,7 @@ def render_live_page(session_id):
                 """
                 st.components.v1.html(broadcaster_html, height=750)
             else:
-                # VIEWER VIEW – improved with detailed status messages and error handling
+                # VIEWER VIEW – persistent connection
                 viewer_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">👀 {t('you_are_viewer')}</div>
@@ -3045,6 +3070,9 @@ def render_live_page(session_id):
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <script>
                 (function() {{
+                    if (!window.viewerState) window.viewerState = {{}};
+                    const state = window.viewerState;
+                    
                     const sessionId = {session_id};
                     const remoteVideo = document.getElementById('remoteVideo');
                     const watchBtn = document.getElementById('watchBtn');
@@ -3058,12 +3086,20 @@ def render_live_page(session_id):
                             debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
                         }}
                     }}
-
+                    
+                    // If already connected, reuse the stream
+                    if (state.call && state.peer && state.call.open) {{
+                        // Already watching
+                        watchBtn.style.display = 'none';
+                        statusEl.textContent = '{t('now_watching')}';
+                        return;
+                    }}
+                    
                     watchBtn.onclick = () => {{
                         log('{t('watch_stream')}');
                         statusEl.textContent = '{t('initializing')}';
                         
-                        const peer = new Peer({{ 
+                        state.peer = new Peer({{ 
                             host: '0.peerjs.com',
                             port: 443,
                             secure: true,
@@ -3074,39 +3110,42 @@ def render_live_page(session_id):
                                 ]
                             }}
                         }});
-
-                        peer.on('open', (id) => {{
+                        
+                        state.peer.on('open', (id) => {{
                             log(`Peer open with ID: ${{id}}`);
                             statusEl.textContent = `{t('connected_requesting')}`;
                             
                             const targetId = `broadcaster-${{sessionId}}`;
                             log(`{t('calling')} ${{targetId}}...`);
-                            const call = peer.call(targetId, null);
+                            state.call = state.peer.call(targetId, null);
                             
-                            call.on('stream', (remoteStream) => {{
+                            state.call.on('stream', (remoteStream) => {{
                                 log('{t('received_stream')}');
                                 remoteVideo.srcObject = remoteStream;
                                 statusEl.textContent = '{t('now_watching')}';
                                 watchBtn.style.display = 'none';
                             }});
                             
-                            call.on('error', (err) => {{
+                            state.call.on('error', (err) => {{
                                 log('{t('call_error')}: ' + err);
                                 statusEl.textContent = '{t('call_error')}: ' + err;
                             }});
                             
-                            call.on('close', () => {{
+                            state.call.on('close', () => {{
                                 log('{t('call_ended')}');
                                 statusEl.textContent = '{t('call_ended')}';
+                                watchBtn.style.display = 'inline-block';
+                                state.call = null;
+                                state.peer = null;
                             }});
                         }});
-
-                        peer.on('error', (err) => {{
+                        
+                        state.peer.on('error', (err) => {{
                             log('{t('peer_error')}: ' + err);
                             statusEl.textContent = '{t('peer_error')}: ' + err;
                         }});
                         
-                        peer.on('disconnected', () => {{
+                        state.peer.on('disconnected', () => {{
                             log('{t('disconnected')}');
                             statusEl.textContent = '{t('disconnected')}';
                         }});
@@ -3158,6 +3197,17 @@ def render_live_page(session_id):
                             else:
                                 st.error(msg)
 
+            # ---- NEW: Emoji Reactions ----
+            st.markdown("### 😊 Reactions")
+            reaction_emojis = ["❤️", "👍", "😂", "😮", "😢", "👏"]
+            cols = st.columns(len(reaction_emojis))
+            for i, emoji in enumerate(reaction_emojis):
+                with cols[i]:
+                    if st.button(emoji, key=f"reaction_{i}"):
+                        # Send reaction as a chat message
+                        add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
+                        st.rerun()
+
         if is_broadcaster:
             st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
             if session["profiles"]["moncash_phone"]:
@@ -3183,7 +3233,11 @@ def render_live_page(session_id):
         for ev in all_events:
             if ev['type'] == 'comment':
                 c = ev['data']
-                st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+                # Special handling for reactions: display them nicely
+                if c['content'].startswith("🎉"):
+                    st.markdown(f"**{c['profiles']['full_name']}** {c['content']}")
+                else:
+                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
             else:
                 g = ev['data']
                 sender = g.get('sender', {}).get('full_name', 'Someone')
