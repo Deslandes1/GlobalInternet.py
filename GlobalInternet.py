@@ -3951,24 +3951,52 @@ def owner_space():
         else:
             st.info("To enable real transfers, set up your backend and configure the secrets.")
 
+    # --- NEW: Enhanced New Users Report ---
     with tab2:
         st.subheader(t("new_users"))
-        # new_users already defined above
-        if new_users:
-            st.markdown(f"**{len(new_users)} new user(s) since your last visit.**")
-            data = [{
-                "Full Name": u.get('full_name', 'N/A'),
-                "User ID": u['id'],
-                "Signed Up": u.get('join_date', '')[:16] if u.get('join_date') else ''
-            } for u in new_users]
-            df = pd.DataFrame(data)
+        st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
+        
+        # Fetch recent users from profiles table (most recent first)
+        try:
+            with st.spinner("Loading user data..."):
+                # Get the latest 100 users sorted by join_date descending
+                response = supabase.table("profiles").select(
+                    "id, full_name, avatar_url, join_date, location, bio"
+                ).order("join_date", desc=True).limit(100).execute()
+                recent_users = response.data if response.data else []
+        except Exception as e:
+            st.error(f"Failed to load user data: {e}")
+            recent_users = []
+        
+        if recent_users:
+            # Prepare data for display
+            display_data = []
+            for u in recent_users:
+                display_data.append({
+                    "Full Name": u.get('full_name', 'N/A'),
+                    "User ID": u['id'],
+                    "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
+                    "Location": u.get('location', 'Not set'),
+                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else '')
+                })
+            df = pd.DataFrame(display_data)
             st.dataframe(df, use_container_width=True)
+            
+            # Download button
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Report as CSV",
+                data=csv,
+                file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
         else:
-            # Check if there was a permission error
-            if st.session_state.last_error and "permission denied" in st.session_state.last_error.lower():
-                st.error("⚠️ Unable to load new users due to database permissions.\n\n" + st.session_state.last_error)
-            else:
-                st.info("No new users since last check.")
+            st.info("No users found in the database.")
+        
+        # Refresh button to manually reload
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
 
     with tab3:
         st.subheader(t("post_moderation"))
