@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 75.3.0 (Mobile session persistence + debug messages)
+Version: 76.0.0 (Live stream with participant management, background filters, mic controls)
 """
 import streamlit as st
 import smtplib
@@ -2000,6 +2000,70 @@ def load_gifts_for_session(session_id):
             st.session_state.last_error = f"Error loading gifts: {e}"
         return []
 
+# --- New helper functions for live participants ---
+def accept_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error accepting participant: {e}"
+        return False
+
+def reject_participant(participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").delete().eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error rejecting participant: {e}"
+        return False
+
+def mute_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "muted"}).eq("id", participant_id).execute()
+        # Notify participant
+        supabase.table("notifications").insert({
+            "user_id": participant_id,
+            "type": "live_mute",
+            "message": "The broadcaster has muted your microphone.",
+            "read": False
+        }).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error muting participant: {e}"
+        return False
+
+def unmute_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
+        supabase.table("notifications").insert({
+            "user_id": participant_id,
+            "type": "live_unmute",
+            "message": "The broadcaster has unmuted your microphone.",
+            "read": False
+        }).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error unmuting participant: {e}"
+        return False
+
+def remove_participant(participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").delete().eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error removing participant: {e}"
+        return False
+
 # --- Post functions ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
@@ -2594,24 +2658,18 @@ def respond_friend_request(request_id, accept):
 
 def load_friend_data():
     if supabase is None or not st.session_state.user:
-        st.write("Supabase or user missing")
         return
     user_id = st.session_state.user.id
-    st.write(f"Loading friends for user {user_id}")
     pending = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "pending").execute()
-    st.write("Pending requests:", pending.data)
     st.session_state.friend_requests = pending.data if pending.data else []
     sent = supabase.table("friend_requests").select("*, receiver:receiver_id(full_name, avatar_url)").eq("sender_id", user_id).eq("status", "accepted").execute()
-    st.write("Accepted sent requests:", sent.data)
     received = supabase.table("friend_requests").select("*, sender:sender_id(full_name, avatar_url)").eq("receiver_id", user_id).eq("status", "accepted").execute()
-    st.write("Accepted received requests:", received.data)
     friends = []
     for r in sent.data:
         friends.append({"id": r["receiver"]["id"], "full_name": r["receiver"]["full_name"], "avatar_url": r["receiver"].get("avatar_url")})
     for r in received.data:
         friends.append({"id": r["sender"]["id"], "full_name": r["sender"]["full_name"], "avatar_url": r["sender"].get("avatar_url")})
     st.session_state.friends = friends
-    st.write("Final friends list:", friends)
 
 def search_users(query):
     if supabase is None or not st.session_state.user:
@@ -2792,7 +2850,7 @@ def send_email_notification(new_users):
 
 # ========== PAGE RENDERING FUNCTIONS ==========
 
-# --- ENHANCED render_live_page with background filters and improved viewer ---
+# --- ENHANCED render_live_page with background filters and participant management ---
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -2805,11 +2863,39 @@ def render_live_page(session_id):
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
 
-    if is_broadcaster:
-        st.success(t("you_are_broadcaster"))
-    else:
-        st.info(t("you_are_viewer"))
+    # --- Background filter handling (for both broadcaster and participants) ---
+    if st.session_state.user:
+        # Store background URL in session for this live session
+        bg_key = f"bg_{session_id}_{st.session_state.user.id}"
+        if st.session_state.get(bg_key) is None:
+            st.session_state[bg_key] = None
 
+        # Background upload UI (only show for participants if they are accepted)
+        if not is_broadcaster:
+            # Check if this user is a participant
+            participant_status = None
+            try:
+                part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                if part.data:
+                    participant_status = part.data[0]["status"]
+            except Exception as e:
+                st.warning(f"Error checking participant status: {e}")
+
+            if participant_status == "accepted":
+                with st.expander(t("choose_background"), expanded=False):
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_{session_id}")
+                    if uploaded_bg:
+                        bytes_data = uploaded_bg.getvalue()
+                        b64 = base64.b64encode(bytes_data).decode()
+                        mime = uploaded_bg.type
+                        data_url = f"data:{mime};base64,{b64}"
+                        st.session_state[bg_key] = data_url
+                        # Save to DB
+                        supabase.table("live_participants").update({"background_url": data_url}).eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                        st.success(t("background_set"))
+                        st.rerun()
+
+    # --- Gifts and chat columns ---
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
 
@@ -2817,7 +2903,7 @@ def render_live_page(session_id):
     with col1:
         stream_method = session.get("stream_method", "external")
         if stream_method == "external":
-            # External streaming code
+            # External streaming code (unchanged)
             stream_url = session.get("stream_url")
             platform = session.get("platform")
             if is_broadcaster:
@@ -2860,15 +2946,14 @@ def render_live_page(session_id):
                     st.video(stream_url)
             else:
                 st.info("The streamer has not provided a video URL yet.")
-        else:  # in-app streaming
+        else:  # in-app streaming with participant support
+            # --- Broadcaster view ---
             if is_broadcaster:
-                # Background filter selection UI
-                st.markdown(f"### {t('choose_background')}")
+                st.markdown(f"### {t('choose_background')} (Your background)")
                 with st.expander(t('choose_background'), expanded=False):
-                    col_bg1, col_bg2, col_bg3 = st.columns(3)
-                    # Predefined AI-generated backgrounds (replace with your own image URLs)
+                    # Predefined backgrounds (replace with your URLs)
                     bg_options = [
-                        "https://example.com/bg1.jpg",  # Replace with actual image URLs
+                        "https://example.com/bg1.jpg",  # Replace
                         "https://example.com/bg2.jpg",
                         "https://example.com/bg3.jpg",
                         "https://example.com/bg4.jpg",
@@ -2879,65 +2964,137 @@ def render_live_page(session_id):
                         "https://example.com/bg9.jpg",
                         "https://example.com/bg10.jpg",
                     ]
-                    # Show 10 backgrounds in a grid
-                    for i in range(10):
-                        col_idx = i % 3
-                        with [col_bg1, col_bg2, col_bg3][col_idx]:
-                            if st.button(f"{t('bg_option')} {i+1}", key=f"bg_{i}"):
-                                st.session_state.background_url = bg_options[i]
+                    col_bg = st.columns(5)
+                    for i, url in enumerate(bg_options[:10]):
+                        with col_bg[i % 5]:
+                            if st.button(f"{t('bg_option')} {i+1}", key=f"bg_{session_id}_{i}"):
+                                st.session_state[f"bg_{session_id}_{st.session_state.user.id}"] = url
+                                st.success(t("background_set"))
+                                st.rerun()
                     # Custom upload
-                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"])
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_broadcaster")
                     if uploaded_bg:
                         bytes_data = uploaded_bg.getvalue()
                         b64 = base64.b64encode(bytes_data).decode()
                         mime = uploaded_bg.type
                         data_url = f"data:{mime};base64,{b64}"
-                        st.session_state.background_url = data_url
+                        st.session_state[f"bg_{session_id}_{st.session_state.user.id}"] = data_url
                         st.success(t("background_set"))
+                        st.rerun()
 
-                # BROADCASTER VIEW – persistent connection + fixed background filter
+                # --- Participant management UI ---
+                st.subheader("🎤 Participant Requests")
+                # Fetch pending requests
+                try:
+                    pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
+                    pending_list = pending.data or []
+                except Exception as e:
+                    st.error(f"Error loading requests: {e}")
+                    pending_list = []
+
+                if pending_list:
+                    for req in pending_list:
+                        cols = st.columns([3,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{req['profiles']['full_name']}** wants to join")
+                        with cols[1]:
+                            if st.button("✅ Accept", key=f"accept_{req['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", req["id"]).execute()
+                                # Send notification to user
+                                supabase.table("notifications").insert({
+                                    "user_id": req["user_id"],
+                                    "type": "live_join_accepted",
+                                    "message": f"You have been accepted to join the live stream: {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("❌ Reject", key=f"reject_{req['id']}"):
+                                supabase.table("live_participants").delete().eq("id", req["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No pending requests")
+
+                st.subheader("🎤 Active Participants")
+                # Fetch accepted participants
+                try:
+                    accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "accepted").execute()
+                    accepted_list = accepted.data or []
+                except Exception as e:
+                    st.error(f"Error loading participants: {e}")
+                    accepted_list = []
+
+                if accepted_list:
+                    for part in accepted_list:
+                        cols = st.columns([2,1,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{part['profiles']['full_name']}**")
+                        with cols[1]:
+                            if st.button("🔊 Mute", key=f"mute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "muted"}).eq("id", part["id"]).execute()
+                                # Send signal to participant (via notification)
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_mute",
+                                    "message": f"The broadcaster has muted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("🔊 Unmute", key=f"unmute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", part["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_unmute",
+                                    "message": f"The broadcaster has unmuted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[3]:
+                            if st.button("❌ Remove", key=f"remove_{part['id']}"):
+                                supabase.table("live_participants").delete().eq("id", part["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No participants yet")
+
+                # Broadcaster's own video with background filter
+                st.markdown("### Your Broadcast")
                 broadcaster_html = f"""
                 <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
                     <div style="font-size: 24px; margin-bottom: 20px;">🎥 {t('you_are_broadcaster')}</div>
                     <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
-                        <canvas id="outputCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
+                        <canvas id="broadcasterCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
                     </div>
                     <div style="margin-top: 30px;">
                         <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">{t('start_broadcast')}</button>
                         <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">{t('stop_broadcast')}</button>
                     </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    <p id="broadcasterStatus" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
                 </div>
                 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
                 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
                 <script>
                 (function() {{
-                    // Persistent state across reruns
                     if (!window.broadcasterState) window.broadcasterState = {{}};
                     const state = window.broadcasterState;
-                    
-                    const sessionId = {session_id};
+                    const sessionId = "{session_id}";
                     const userId = "{st.session_state.user.id}";
                     const startBtn = document.getElementById('startBtn');
                     const stopBtn = document.getElementById('stopBtn');
-                    const statusEl = document.getElementById('status');
-                    const outputCanvas = document.getElementById('outputCanvas');
-                    const ctx = outputCanvas.getContext('2d');
-                    
-                    // Background image
+                    const statusEl = document.getElementById('broadcasterStatus');
+                    const canvas = document.getElementById('broadcasterCanvas');
+                    const ctx = canvas.getContext('2d');
+                    const bgUrl = "{st.session_state.get(f'bg_{session_id}_{st.session_state.user.id}', '')}";
                     let backgroundImage = null;
-                    const bgUrl = "{st.session_state.background_url or ''}";
                     if (bgUrl) {{
                         backgroundImage = new Image();
                         backgroundImage.crossOrigin = "Anonymous";
                         backgroundImage.src = bgUrl;
                         backgroundImage.onload = () => {{
-                            outputCanvas.width = 640;
-                            outputCanvas.height = 360;
+                            canvas.width = 640;
+                            canvas.height = 360;
                         }};
                     }}
-                    
-                    // MediaPipe setup
                     let selfieSegmentation = state.selfieSegmentation;
                     if (!selfieSegmentation) {{
                         selfieSegmentation = new SelfieSegmentation({{
@@ -2951,32 +3108,25 @@ def render_live_page(session_id):
                         selfieSegmentation.onResults(onResults);
                         state.selfieSegmentation = selfieSegmentation;
                     }}
-                    
                     function onResults(results) {{
                         if (!results.segmentationMask) return;
-                        // Draw background
                         if (backgroundImage) {{
-                            ctx.drawImage(backgroundImage, 0, 0, outputCanvas.width, outputCanvas.height);
+                            ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
                         }} else {{
                             ctx.fillStyle = '#00a8ff';
-                            ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
                         }}
-                        // Draw person using mask as alpha
                         ctx.save();
                         ctx.globalCompositeOperation = 'destination-out';
-                        ctx.drawImage(results.segmentationMask, 0, 0, outputCanvas.width, outputCanvas.height);
+                        ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
                         ctx.globalCompositeOperation = 'source-over';
-                        ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
+                        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
                         ctx.restore();
                     }}
-                    
-                    // Reuse existing stream and peer if already started
                     if (state.localStream && state.peer && state.call) {{
-                        // Already broadcasting – just update UI
                         startBtn.style.display = 'none';
                         stopBtn.style.display = 'inline-block';
                         statusEl.textContent = `{t('broadcasting')}: ${{state.peer.id}}`;
-                        // Ensure canvas processing continues
                         if (state.videoElement) {{
                             const processFrame = async () => {{
                                 await selfieSegmentation.send({{image: state.videoElement}});
@@ -2986,7 +3136,6 @@ def render_live_page(session_id):
                         }}
                         return;
                     }}
-                    
                     startBtn.onclick = async () => {{
                         try {{
                             statusEl.textContent = '{t('camera_access')}';
@@ -3004,7 +3153,6 @@ def render_live_page(session_id):
                                 processFrame();
                             }};
                             statusEl.textContent = '{t('camera_granted')}';
-                            
                             state.peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
                                 host: '0.peerjs.com',
                                 port: 443,
@@ -3016,18 +3164,38 @@ def render_live_page(session_id):
                                     ]
                                 }}
                             }});
-                            
                             state.peer.on('open', (id) => {{
                                 statusEl.textContent = `{t('broadcasting')}: ${{id}}`;
                                 startBtn.style.display = 'none';
                                 stopBtn.style.display = 'inline-block';
                             }});
-                            
-                            state.peer.on('call', (incomingCall) => {{
-                                incomingCall.answer(state.localStream);
-                                state.call = incomingCall;
+                            // Handle incoming calls from participants
+                            state.peer.on('call', (call) => {{
+                                if (!state.localStream) return;
+                                call.answer(state.localStream);
+                                // Store call for later
+                                if (!state.participants) state.participants = [];
+                                state.participants.push(call);
+                                // Show participant video
+                                call.on('stream', (remoteStream) => {{
+                                    const participantId = call.peer;
+                                    let videoEl = document.getElementById(`participant_${{participantId}}`);
+                                    if (!videoEl) {{
+                                        videoEl = document.createElement('video');
+                                        videoEl.id = `participant_${{participantId}}`;
+                                        videoEl.autoplay = true;
+                                        videoEl.style.width = '200px';
+                                        videoEl.style.margin = '10px';
+                                        document.getElementById('participantsContainer').appendChild(videoEl);
+                                    }}
+                                    videoEl.srcObject = remoteStream;
+                                }});
+                                call.on('close', () => {{
+                                    const participantId = call.peer;
+                                    const videoEl = document.getElementById(`participant_${{participantId}}`);
+                                    if (videoEl) videoEl.remove();
+                                }});
                             }});
-                            
                             state.peer.on('error', (err) => {{
                                 statusEl.textContent = '{t('peer_error')}: ' + err;
                             }});
@@ -3035,16 +3203,15 @@ def render_live_page(session_id):
                             statusEl.textContent = '{t('error')}: ' + err.message;
                         }}
                     }};
-                    
                     stopBtn.onclick = () => {{
-                        if (state.call) state.call.close();
+                        if (state.participants) {{
+                            state.participants.forEach(call => call.close());
+                        }}
                         if (state.peer) state.peer.destroy();
                         if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
-                        // Clear state
                         state.localStream = null;
                         state.peer = null;
-                        state.call = null;
-                        state.videoElement = null;
+                        state.participants = [];
                         startBtn.style.display = 'inline-block';
                         stopBtn.style.display = 'none';
                         statusEl.textContent = '{t('broadcast_ended')}';
@@ -3052,110 +3219,247 @@ def render_live_page(session_id):
                 }})();
                 </script>
                 """
+                # Container for participant videos
+                st.markdown("<div id='participantsContainer' style='display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px;'></div>", unsafe_allow_html=True)
                 st.components.v1.html(broadcaster_html, height=750)
-            else:
-                # VIEWER VIEW – persistent connection
-                viewer_html = f"""
-                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
-                    <div style="font-size: 24px; margin-bottom: 20px;">👀 {t('you_are_viewer')}</div>
-                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
-                        <video id="remoteVideo" autoplay style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></video>
-                    </div>
-                    <div style="margin-top: 30px;">
-                        <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">{t('watch_stream')}</button>
-                    </div>
-                    <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
-                    <div id="debug" style="margin-top: 10px; font-size: 14px; color: #aaa; text-align: left; background: #222; padding: 10px; border-radius: 8px; display: none;"></div>
-                </div>
-                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-                <script>
-                (function() {{
-                    if (!window.viewerState) window.viewerState = {{}};
-                    const state = window.viewerState;
-                    
-                    const sessionId = {session_id};
-                    const remoteVideo = document.getElementById('remoteVideo');
-                    const watchBtn = document.getElementById('watchBtn');
-                    const statusEl = document.getElementById('status');
-                    const debugEl = document.getElementById('debug');
-                    
-                    function log(message) {{
-                        console.log(message);
-                        if (debugEl) {{
-                            debugEl.style.display = 'block';
-                            debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
-                        }}
-                    }}
-                    
-                    // If already connected, reuse the stream
-                    if (state.call && state.peer && state.call.open) {{
-                        // Already watching
-                        watchBtn.style.display = 'none';
-                        statusEl.textContent = '{t('now_watching')}';
-                        return;
-                    }}
-                    
-                    watchBtn.onclick = () => {{
-                        log('{t('watch_stream')}');
-                        statusEl.textContent = '{t('initializing')}';
-                        
-                        state.peer = new Peer({{ 
-                            host: '0.peerjs.com',
-                            port: 443,
-                            secure: true,
-                            config: {{
-                                'iceServers': [
-                                    {{ urls: 'stun:stun.l.google.com:19302' }},
-                                    {{ urls: 'stun:stun1.l.google.com:19302' }}
-                                ]
-                            }}
-                        }});
-                        
-                        state.peer.on('open', (id) => {{
-                            log(`Peer open with ID: ${{id}}`);
-                            statusEl.textContent = `{t('connected_requesting')}`;
-                            
-                            const targetId = `broadcaster-${{sessionId}}`;
-                            log(`{t('calling')} ${{targetId}}...`);
-                            state.call = state.peer.call(targetId, null);
-                            
-                            state.call.on('stream', (remoteStream) => {{
-                                log('{t('received_stream')}');
-                                remoteVideo.srcObject = remoteStream;
-                                statusEl.textContent = '{t('now_watching')}';
-                                watchBtn.style.display = 'none';
-                            }});
-                            
-                            state.call.on('error', (err) => {{
-                                log('{t('call_error')}: ' + err);
-                                statusEl.textContent = '{t('call_error')}: ' + err;
-                            }});
-                            
-                            state.call.on('close', () => {{
-                                log('{t('call_ended')}');
-                                statusEl.textContent = '{t('call_ended')}';
-                                watchBtn.style.display = 'inline-block';
-                                state.call = null;
-                                state.peer = null;
-                            }});
-                        }});
-                        
-                        state.peer.on('error', (err) => {{
-                            log('{t('peer_error')}: ' + err);
-                            statusEl.textContent = '{t('peer_error')}: ' + err;
-                        }});
-                        
-                        state.peer.on('disconnected', () => {{
-                            log('{t('disconnected')}');
-                            statusEl.textContent = '{t('disconnected')}';
-                        }});
-                    }};
-                }})();
-                </script>
-                """
-                st.components.v1.html(viewer_html, height=650)
 
-        # Shareable link
+            else:
+                # --- Viewer view with participant capabilities ---
+                # Check participant status
+                try:
+                    part = supabase.table("live_participants").select("status, background_url").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                    participant = part.data[0] if part.data else None
+                except Exception as e:
+                    participant = None
+                    st.error(f"Error checking participation: {e}")
+
+                if not participant or participant["status"] == "pending":
+                    st.info("You have not joined this live session yet.")
+                    if st.button("Request to Join"):
+                        try:
+                            supabase.table("live_participants").insert({
+                                "session_id": session_id,
+                                "user_id": st.session_state.user.id,
+                                "status": "pending"
+                            }).execute()
+                            # Notify broadcaster
+                            supabase.table("notifications").insert({
+                                "user_id": session["user_id"],
+                                "type": "live_join_request",
+                                "message": f"{st.session_state.profile['full_name']} requests to join your live session: {session['title']}",
+                                "read": False
+                            }).execute()
+                            st.success("Request sent! Please wait for the broadcaster to accept.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to send request: {e}")
+                elif participant["status"] == "accepted":
+                    st.success("You are an active participant! You can now share your video and audio.")
+                    # Show controls for participant
+                    with st.expander("Your Video Controls", expanded=True):
+                        col_mic, col_bg = st.columns(2)
+                        with col_mic:
+                            if st.button("🎤 Mute / Unmute Mic", key=f"toggle_mic_{session_id}"):
+                                # Send mute/unmute signal to broadcaster via PeerJS (implement in JS)
+                                st.warning("Mute toggling will be implemented client-side via PeerJS.")
+                        with col_bg:
+                            # Background upload handled above, but we can also show a button to refresh
+                            pass
+
+                    # Participant HTML with local video and background filter
+                    bg_url = participant.get("background_url") or st.session_state.get(f"bg_{session_id}_{st.session_state.user.id}", "")
+                    participant_html = f"""
+                    <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                        <div style="font-size: 24px; margin-bottom: 20px;">🎤 You are a participant</div>
+                        <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
+                            <canvas id="participantCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
+                        </div>
+                        <div style="margin-top: 30px;">
+                            <button id="connectBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer;">{t('start_broadcast')}</button>
+                            <button id="disconnectBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">{t('stop_broadcast')}</button>
+                        </div>
+                        <p id="participantStatus" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    </div>
+                    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+                    <script>
+                    (function() {{
+                        if (!window.participantState) window.participantState = {{}};
+                        const state = window.participantState;
+                        const sessionId = "{session_id}";
+                        const userId = "{st.session_state.user.id}";
+                        const broadcasterId = `broadcaster-${{sessionId}}`;
+                        const canvas = document.getElementById('participantCanvas');
+                        const ctx = canvas.getContext('2d');
+                        const connectBtn = document.getElementById('connectBtn');
+                        const disconnectBtn = document.getElementById('disconnectBtn');
+                        const statusEl = document.getElementById('participantStatus');
+                        const bgUrl = "{bg_url}";
+                        let backgroundImage = null;
+                        if (bgUrl) {{
+                            backgroundImage = new Image();
+                            backgroundImage.crossOrigin = "Anonymous";
+                            backgroundImage.src = bgUrl;
+                            backgroundImage.onload = () => {{
+                                canvas.width = 640;
+                                canvas.height = 360;
+                            }};
+                        }}
+                        let selfieSegmentation = state.selfieSegmentation;
+                        if (!selfieSegmentation) {{
+                            selfieSegmentation = new SelfieSegmentation({{
+                                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
+                            }});
+                            selfieSegmentation.setOptions({{
+                                modelSelection: 1,
+                                minDetectionConfidence: 0.5,
+                                minTrackingConfidence: 0.5
+                            }});
+                            selfieSegmentation.onResults(onResults);
+                            state.selfieSegmentation = selfieSegmentation;
+                        }}
+                        function onResults(results) {{
+                            if (!results.segmentationMask) return;
+                            if (backgroundImage) {{
+                                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+                            }} else {{
+                                ctx.fillStyle = '#00a8ff';
+                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            }}
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'destination-out';
+                            ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+                            ctx.globalCompositeOperation = 'source-over';
+                            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                            ctx.restore();
+                        }}
+                        if (state.localStream && state.peer && state.call) {{
+                            connectBtn.style.display = 'none';
+                            disconnectBtn.style.display = 'inline-block';
+                            statusEl.textContent = 'Connected to broadcaster';
+                            if (state.videoElement) {{
+                                const processFrame = async () => {{
+                                    await selfieSegmentation.send({{image: state.videoElement}});
+                                    requestAnimationFrame(processFrame);
+                                }};
+                                processFrame();
+                            }}
+                            return;
+                        }}
+                        connectBtn.onclick = async () => {{
+                            try {{
+                                statusEl.textContent = '{t('camera_access')}';
+                                state.localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
+                                state.videoElement = document.createElement('video');
+                                state.videoElement.srcObject = state.localStream;
+                                state.videoElement.autoplay = true;
+                                state.videoElement.width = 640;
+                                state.videoElement.height = 360;
+                                state.videoElement.onloadeddata = () => {{
+                                    const processFrame = async () => {{
+                                        await selfieSegmentation.send({{image: state.videoElement}});
+                                        requestAnimationFrame(processFrame);
+                                    }};
+                                    processFrame();
+                                }};
+                                statusEl.textContent = '{t('camera_granted')}';
+                                state.peer = new Peer({{ 
+                                    host: '0.peerjs.com',
+                                    port: 443,
+                                    secure: true,
+                                    config: {{
+                                        'iceServers': [
+                                            {{ urls: 'stun:stun.l.google.com:19302' }},
+                                            {{ urls: 'stun:stun1.l.google.com:19302' }}
+                                        ]
+                                    }}
+                                }});
+                                state.peer.on('open', (id) => {{
+                                    statusEl.textContent = 'Calling broadcaster...';
+                                    state.call = state.peer.call(broadcasterId, state.localStream);
+                                    state.call.on('stream', (remoteStream) => {{
+                                        // Optionally display broadcaster's video (if needed)
+                                        console.log('Broadcaster stream received');
+                                    }});
+                                    state.call.on('close', () => {{
+                                        statusEl.textContent = '{t('call_ended')}';
+                                        connectBtn.style.display = 'inline-block';
+                                        disconnectBtn.style.display = 'none';
+                                    }});
+                                    connectBtn.style.display = 'none';
+                                    disconnectBtn.style.display = 'inline-block';
+                                    statusEl.textContent = 'Connected to broadcaster';
+                                }});
+                                state.peer.on('error', (err) => {{
+                                    statusEl.textContent = '{t('peer_error')}: ' + err;
+                                }});
+                            }} catch (err) {{
+                                statusEl.textContent = '{t('error')}: ' + err.message;
+                            }}
+                        }};
+                        disconnectBtn.onclick = () => {{
+                            if (state.call) state.call.close();
+                            if (state.peer) state.peer.destroy();
+                            if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
+                            state.localStream = null;
+                            state.peer = null;
+                            state.call = null;
+                            connectBtn.style.display = 'inline-block';
+                            disconnectBtn.style.display = 'none';
+                            statusEl.textContent = '{t('broadcast_ended')}';
+                        }};
+                    }})();
+                    </script>
+                    """
+                    st.components.v1.html(participant_html, height=750)
+                elif participant["status"] == "muted":
+                    st.warning("Your microphone has been muted by the broadcaster. You can still watch but cannot speak.")
+                    # Show viewer only (no video)
+                    viewer_html = f"""
+                    <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                        <div style="font-size: 24px;">👀 {t('you_are_viewer')} (Muted)</div>
+                        <div style="margin-top: 20px;">
+                            <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer;">{t('watch_stream')}</button>
+                        </div>
+                        <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    </div>
+                    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                    <script>
+                    (function() {{
+                        const sessionId = "{session_id}";
+                        const watchBtn = document.getElementById('watchBtn');
+                        const statusEl = document.getElementById('status');
+                        watchBtn.onclick = () => {{
+                            statusEl.textContent = '{t('initializing')}';
+                            const peer = new Peer({{
+                                host: '0.peerjs.com',
+                                port: 443,
+                                secure: true
+                            }});
+                            peer.on('open', (id) => {{
+                                const call = peer.call(`broadcaster-${{sessionId}}`, null);
+                                call.on('stream', (remoteStream) => {{
+                                    const video = document.createElement('video');
+                                    video.autoplay = true;
+                                    video.style.width = '100%';
+                                    video.style.maxHeight = '60vh';
+                                    video.style.borderRadius = '12px';
+                                    document.body.appendChild(video);
+                                    video.srcObject = remoteStream;
+                                    statusEl.textContent = '{t('now_watching')}';
+                                    watchBtn.style.display = 'none';
+                                }});
+                                call.on('error', (err) => {{
+                                    statusEl.textContent = '{t('call_error')}: ' + err;
+                                }});
+                            }});
+                        }};
+                    }})();
+                    </script>
+                    """
+                    st.components.v1.html(viewer_html, height=500)
+
+        # Shareable link (unchanged)
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -3164,7 +3468,7 @@ def render_live_page(session_id):
         st.text_input(t("shareable_link"), value=share_url)
 
     with col2:
-        # Live chat and gifts
+        # Live chat and gifts (unchanged)
         st.subheader(t("live_chat_gifts"))
         if not is_broadcaster:
             st.markdown(f"### {t('send_gift')}")
@@ -3197,14 +3501,12 @@ def render_live_page(session_id):
                             else:
                                 st.error(msg)
 
-            # ---- NEW: Emoji Reactions ----
             st.markdown("### 😊 Reactions")
             reaction_emojis = ["❤️", "👍", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(reaction_emojis))
             for i, emoji in enumerate(reaction_emojis):
                 with cols[i]:
                     if st.button(emoji, key=f"reaction_{i}"):
-                        # Send reaction as a chat message
                         add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
                         st.rerun()
 
@@ -3233,7 +3535,6 @@ def render_live_page(session_id):
         for ev in all_events:
             if ev['type'] == 'comment':
                 c = ev['data']
-                # Special handling for reactions: display them nicely
                 if c['content'].startswith("🎉"):
                     st.markdown(f"**{c['profiles']['full_name']}** {c['content']}")
                 else:
@@ -3243,7 +3544,7 @@ def render_live_page(session_id):
                 sender = g.get('sender', {}).get('full_name', 'Someone')
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
-# --- User Profile Page ---
+# --- User Profile Page (unchanged) ---
 def render_user_profile(user_id):
     if supabase is None:
         st.error("Database not connected.")
@@ -3331,7 +3632,7 @@ def render_user_profile(user_id):
                             st.video(media["url"])
                     st.divider()
 
-# --- Feed Page with auto-embed video links, compact reactions, and edit functionality ---
+# --- Feed Page (unchanged) ---
 def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
@@ -3612,7 +3913,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# --- Friends & Chat Page ---
+# --- Friends & Chat Page (unchanged) ---
 def render_friends_page():
     st.header(t("friends_chat"))
 
@@ -3850,7 +4151,7 @@ def render_friends_page():
             start_call()
             st.rerun()
 
-# --- Map Page ---
+# --- Map Page (unchanged) ---
 def render_map():
     st.header(t("satellite_map"))
     sats = {
@@ -3870,7 +4171,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Profile Page ---
+# --- Profile Page (unchanged) ---
 def render_profile():
     st.header(t("profile"))
     if st.session_state.profile is None:
@@ -3915,7 +4216,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-# --- Owner Space (improved with error handling for new users) ---
+# --- Owner Space (unchanged) ---
 def owner_space():
     st.header(t("owner_space"))
     
@@ -4005,7 +4306,6 @@ def owner_space():
         else:
             st.info("To enable real transfers, set up your backend and configure the secrets.")
 
-    # --- NEW: Enhanced New Users Report ---
     with tab2:
         st.subheader(t("new_users"))
         st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
