@@ -3,7 +3,7 @@ GLOBALINTERNET.PY - Satellite Communication Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 76.3.0 (Full live stream with background filters, participant management, fixed gift RLS)
+Version: 76.4.0 (Fixed st.popover error, participant table, gift policy)
 """
 import streamlit as st
 import smtplib
@@ -3705,7 +3705,7 @@ def render_user_profile(user_id):
                             st.video(media["url"])
                     st.divider()
 
-# --- Feed Page ---
+# --- Feed Page (with fixed reaction toggle) ---
 def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
@@ -3986,7 +3986,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# --- Friends & Chat Page ---
+# --- Friends & Chat Page (unchanged) ---
 def render_friends_page():
     st.header(t("friends_chat"))
 
@@ -4224,7 +4224,7 @@ def render_friends_page():
             start_call()
             st.rerun()
 
-# --- Map Page ---
+# --- Map Page (unchanged) ---
 def render_map():
     st.header(t("satellite_map"))
     sats = {
@@ -4244,7 +4244,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# --- Profile Page ---
+# --- Profile Page (unchanged) ---
 def render_profile():
     st.header(t("profile"))
     if st.session_state.profile is None:
@@ -4289,7 +4289,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-# --- Owner Space ---
+# --- Owner Space (unchanged) ---
 def owner_space():
     st.header(t("owner_space"))
     
