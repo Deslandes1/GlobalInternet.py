@@ -1138,12 +1138,13 @@ st.markdown("""
         color: #1e2a3a;
         font-size: 1.1rem;
     }
-    .citadel-image {
-        width: 100%;
-        border-radius: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-        border: 2px solid rgba(255,255,255,0.3);
+    /* White Dove symbol on login page */
+    .dove-symbol {
+        font-size: 4rem;
+        color: #ffffff;
+        text-shadow: 0 0 20px rgba(0,0,0,0.1);
+        display: block;
+        margin: 0 auto;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -2448,11 +2449,13 @@ def log_in_email(email, password, remember=False, show_debug=False):
 
 # ====== LOGIN INTERFACE ======
 def login_interface():
-    citadel_url = "https://raw.githubusercontent.com/Deslandes1/GlobalInternet.py/main/Citadel2026.jpg"
+    # Show a white dove as a symbol of hope instead of the Citadel image
     st.markdown(
-        f"""
-        <div style="text-align: center; padding: 10px 0;">
-            <img src="{citadel_url}" class="citadel-image" alt="Citadelle Laferrière, Cap-Haïtien, Haiti">
+        """
+        <div style="text-align: center; padding: 20px 0;">
+            <span class="dove-symbol">🕊️</span>
+            <h2 style="color: #0a2a44; margin-top: -5px;">Welcome to Home Sweet Home</h2>
+            <p style="color: #1e2a3a; opacity: 0.8;">A space of hope, connection, and community</p>
         </div>
         """,
         unsafe_allow_html=True
@@ -3203,8 +3206,10 @@ def render_profile():
             if url:
                 profile["avatar_url"] = url
                 update_profile(profile)
+                # Rerun to refresh the display
                 st.rerun()
-
+            else:
+                st.error("Failed to upload avatar. Check storage permissions.")
     with col2:
         with st.form("edit_profile"):
             st.markdown("#### Account Information")
@@ -3860,25 +3865,19 @@ def main_app():
 
         st.divider()
 
-        # ====== NAVIGATION (fixed: separate state for page) ======
-        # Define page keys and their translated titles
+        # ====== NAVIGATION ======
         page_keys = ["feed", "friends_chat", "satellite_map", "profile", "owner_space"]
-        # Build a dict for lookup
         page_titles = {key: t(key) for key in page_keys}
-        # Initialize current page if not set
         if "current_page" not in st.session_state:
             st.session_state.current_page = "feed"
-        # Ensure current_page is a valid key
         if st.session_state.current_page not in page_keys:
             st.session_state.current_page = "feed"
 
-        # Selectbox: display titles, but map back to key
         selected_title = st.selectbox(
             "Navigate",
             options=[page_titles[key] for key in page_keys],
             index=page_keys.index(st.session_state.current_page),
         )
-        # Map back to key
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
         st.session_state.current_page = selected_key
 
@@ -3901,7 +3900,6 @@ def main_app():
                         st.error("Invalid password")
 
     # ====== RENDER SELECTED PAGE ======
-    # Map page keys to render functions
     page_functions = {
         "feed": render_feed,
         "friends_chat": render_friends_page,
@@ -3909,7 +3907,6 @@ def main_app():
         "profile": render_profile,
         "owner_space": owner_space
     }
-    # Call the appropriate function
     page_functions.get(st.session_state.current_page, render_feed)()
 
 # ========== ENTRY ==========
