@@ -3860,19 +3860,27 @@ def main_app():
 
         st.divider()
 
-        # ====== NAVIGATION ======
-        # Define page list
-        pages_list = [t("feed"), t("friends_chat"), t("satellite_map"), t("profile"), t("owner_space")]
-        if "page_select" not in st.session_state:
-            st.session_state.page_select = pages_list[0]  # default to feed
+        # ====== NAVIGATION (fixed: separate state for page) ======
+        # Define page keys and their translated titles
+        page_keys = ["feed", "friends_chat", "satellite_map", "profile", "owner_space"]
+        # Build a dict for lookup
+        page_titles = {key: t(key) for key in page_keys}
+        # Initialize current page if not set
+        if "current_page" not in st.session_state:
+            st.session_state.current_page = "feed"
+        # Ensure current_page is a valid key
+        if st.session_state.current_page not in page_keys:
+            st.session_state.current_page = "feed"
 
-        # Use selectbox with session state to keep it in sync
-        choice = st.selectbox(
+        # Selectbox: display titles, but map back to key
+        selected_title = st.selectbox(
             "Navigate",
-            pages_list,
-            index=pages_list.index(st.session_state.page_select),
-            key="page_select"
+            options=[page_titles[key] for key in page_keys],
+            index=page_keys.index(st.session_state.current_page),
         )
+        # Map back to key
+        selected_key = next(key for key, title in page_titles.items() if title == selected_title)
+        st.session_state.current_page = selected_key
 
         # ====== OWNER SPACE SIDEBAR SECTION ======
         st.divider()
@@ -3880,7 +3888,7 @@ def main_app():
         if st.session_state.owner_space_access:
             st.success("✅ Access granted")
             if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
-                st.session_state.page_select = t("owner_space")
+                st.session_state.current_page = "owner_space"
                 st.rerun()
         else:
             with st.form("owner_sidebar_form"):
@@ -3893,18 +3901,16 @@ def main_app():
                         st.error("Invalid password")
 
     # ====== RENDER SELECTED PAGE ======
+    # Map page keys to render functions
     page_functions = {
-        t("feed"): render_feed,
-        t("friends_chat"): render_friends_page,
-        t("satellite_map"): render_map,
-        t("profile"): render_profile,
-        t("owner_space"): owner_space
+        "feed": render_feed,
+        "friends_chat": render_friends_page,
+        "satellite_map": render_map,
+        "profile": render_profile,
+        "owner_space": owner_space
     }
-    # If choice is in page_functions, call it, else fallback to feed
-    if choice in page_functions:
-        page_functions[choice]()
-    else:
-        render_feed()
+    # Call the appropriate function
+    page_functions.get(st.session_state.current_page, render_feed)()
 
 # ========== ENTRY ==========
 if __name__ == "__main__":
