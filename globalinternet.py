@@ -1,10 +1,9 @@
-"""
-Home Sweet Home - Haitian Social Media Platform
-Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
-               Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 77.8.0 (Fixed friend request relationship join)
-"""
+# ====== FULL app.py (with fixed load_friend_data) ======
+# Home Sweet Home - Haitian Social Media Platform
+# Lead Developer: Gesner Deslandes (Python Developer, Haiti)
+# Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
+#                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
+# Version: 77.8.1 (Fixed friend request relationship without foreign keys)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -585,7 +584,7 @@ LANG = {
         "save_changes": "💾 Guardar cambios",
         "change_picture": "📸 Cambiar foto",
         "bio": "Biografía",
-        "location": "Ubicación",
+        "location": "Localización",
         "moncash_phone": "Número MonCash (para recibir regalos)",
         "posts_count": "Publicaciones",
         "connections": "Conexiones",
@@ -1941,42 +1940,82 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
+# ====== FIXED load_friend_data (without foreign key joins) ======
 def load_friend_data():
-    """Fetch friend requests and friends with proper joins to profiles."""
+    """Fetch friend requests and friends without relying on foreign key joins."""
     if supabase is None or not st.session_state.user:
         return
     user_id = st.session_state.user.id
-    # Use explicit join with profiles: friend_requests.sender_id -> profiles.id
-    pending = supabase.table("friend_requests").select(
-        "*, sender:profiles!friend_requests_sender_id_fkey(full_name, avatar_url)"
+
+    # 1. Get all pending requests where user is receiver
+    pending_resp = supabase.table("friend_requests").select(
+        "id, sender_id, receiver_id, status, created_at"
     ).eq("receiver_id", user_id).eq("status", "pending").execute()
-    st.session_state.friend_requests = pending.data if pending.data else []
-    # Sent friend requests (accepted)
-    sent = supabase.table("friend_requests").select(
-        "*, receiver:profiles!friend_requests_receiver_id_fkey(full_name, avatar_url)"
+    pending_raw = pending_resp.data or []
+
+    # 2. Get all accepted friend requests (sent and received)
+    sent_resp = supabase.table("friend_requests").select(
+        "id, sender_id, receiver_id, status, created_at"
     ).eq("sender_id", user_id).eq("status", "accepted").execute()
-    # Received friend requests (accepted)
-    received = supabase.table("friend_requests").select(
-        "*, sender:profiles!friend_requests_sender_id_fkey(full_name, avatar_url)"
+    received_resp = supabase.table("friend_requests").select(
+        "id, sender_id, receiver_id, status, created_at"
     ).eq("receiver_id", user_id).eq("status", "accepted").execute()
-    
+    accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
+
+    # Collect all unique user IDs from these requests
+    user_ids = set()
+    for req in pending_raw:
+        user_ids.add(req["sender_id"])
+    for req in accepted_raw:
+        user_ids.add(req["sender_id"])
+        user_ids.add(req["receiver_id"])
+    # Remove current user's own ID
+    user_ids.discard(user_id)
+
+    # 3. Fetch profiles for all these users
+    profiles = {}
+    if user_ids:
+        profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url").in_("id", list(user_ids)).execute()
+        for p in profiles_resp.data or []:
+            profiles[p["id"]] = p
+
+    # 4. Build the pending friend_requests list with sender info
+    pending_requests = []
+    for req in pending_raw:
+        sender_id = req["sender_id"]
+        sender = profiles.get(sender_id, {})
+        pending_requests.append({
+            "id": req["id"],
+            "sender": {
+                "id": sender_id,
+                "full_name": sender.get("full_name", "Unknown"),
+                "avatar_url": sender.get("avatar_url"),
+            },
+            "receiver_id": req["receiver_id"],
+            "status": req["status"],
+        })
+    st.session_state.friend_requests = pending_requests
+
+    # 5. Build the friends list (accepted)
     friends = []
-    for r in sent.data:
-        if r.get('receiver'):
-            friends.append({
-                "id": r["receiver"]["id"],
-                "full_name": r["receiver"]["full_name"],
-                "avatar_url": r["receiver"].get("avatar_url")
-            })
-    for r in received.data:
-        if r.get('sender'):
-            friends.append({
-                "id": r["sender"]["id"],
-                "full_name": r["sender"]["full_name"],
-                "avatar_url": r["sender"].get("avatar_url")
-            })
+    seen = set()
+    for req in accepted_raw:
+        if req["sender_id"] == user_id:
+            other_id = req["receiver_id"]
+        else:
+            other_id = req["sender_id"]
+        if other_id in seen:
+            continue
+        seen.add(other_id)
+        other = profiles.get(other_id, {})
+        friends.append({
+            "id": other_id,
+            "full_name": other.get("full_name", "Unknown"),
+            "avatar_url": other.get("avatar_url"),
+        })
     st.session_state.friends = friends
 
+# ====== (rest of the functions: search_users, send_message, load_messages, start_call, end_call, etc.) ======
 def search_users(query):
     if supabase is None or not st.session_state.user:
         return []
