@@ -1,9 +1,9 @@
-# ====== FULL app.py (with both foreign‑key fixes) ======
+# ====== FULL app.py (all foreign-key joins replaced) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.2 (Live sessions & friends now work without foreign keys)
+# Version: 77.8.3 (Posts, comments, live sessions & friends now work without foreign keys)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1559,18 +1559,20 @@ def remove_participant(participant_id):
         return False
 
 # ---- Posts ----
+# ====== FIXED load_posts_cached (no foreign keys) ======
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
     if supabase is None:
         return []
     try:
-        select_cols = "*, profiles!posts_user_id_fkey(full_name, avatar_url, is_live)"
+        # Build query
+        query = supabase.table("posts").select("*")
         if author_id is not None:
-            resp = supabase.table("posts").select(select_cols).eq("user_id", author_id).eq("is_public", True).order("created_at", desc=True).execute()
-            posts = resp.data
+            query = query.eq("user_id", author_id).eq("is_public", True)
         elif user_id is not None:
-            public_resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
-            private_resp = supabase.table("posts").select(select_cols).eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
+            # We'll fetch public all, and private for user_id
+            public_resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
+            private_resp = supabase.table("posts").select("*").eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
             seen = set()
             unique_posts = []
@@ -1581,10 +1583,27 @@ def load_posts_cached(user_id=None, author_id=None):
             posts = unique_posts
             posts.sort(key=lambda x: x['created_at'], reverse=True)
         else:
-            resp = supabase.table("posts").select(select_cols).eq("is_public", True).order("created_at", desc=True).limit(50).execute()
+            resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
+
+        # Collect user IDs from posts
+        user_ids = {p["user_id"] for p in posts}
+        profiles = {}
+        if user_ids:
+            profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, is_live").in_("id", list(user_ids)).execute()
+            for p in profiles_resp.data or []:
+                profiles[p["id"]] = p
+
+        # Inject profile data into each post
         for post in posts:
+            p = profiles.get(post["user_id"], {})
+            post["profiles"] = {
+                "full_name": p.get("full_name", "Unknown"),
+                "avatar_url": p.get("avatar_url"),
+                "is_live": p.get("is_live", False),
+            }
             post["media_urls"] = post.get("media_urls", [])
+            # reactions
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -1592,8 +1611,10 @@ def load_posts_cached(user_id=None, author_id=None):
                     emoji = r["emoji"]
                     counts[emoji] = counts.get(emoji, 0) + 1
             post["reactions"] = counts
+            # comment count
             comments_resp = supabase.table("comments").select("id", count="exact").eq("post_id", post["id"]).execute()
             post["comment_count"] = comments_resp.count if hasattr(comments_resp, 'count') else 0
+
         return posts
     except Exception as e:
         st.session_state.last_error = f"Error loading posts: {e}"
@@ -1711,6 +1732,33 @@ def share_post(original_post_id, user_id, is_public=True):
         return False
 
 # ---- Comments ----
+# ====== FIXED load_comments (no foreign keys) ======
+def load_comments(post_id):
+    if supabase is None:
+        return []
+    try:
+        resp = supabase.table("comments").select("*").eq("post_id", post_id).order("created_at").execute()
+        comments = resp.data or []
+
+        # Collect user IDs from comments
+        user_ids = {c["user_id"] for c in comments}
+        profiles = {}
+        if user_ids:
+            profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url").in_("id", list(user_ids)).execute()
+            for p in profiles_resp.data or []:
+                profiles[p["id"]] = p
+
+        for c in comments:
+            p = profiles.get(c["user_id"], {})
+            c["profiles"] = {
+                "full_name": p.get("full_name", "Unknown"),
+                "avatar_url": p.get("avatar_url"),
+            }
+        return comments
+    except Exception as e:
+        st.session_state.last_error = f"Error loading comments: {e}"
+        return []
+
 def add_comment(post_id, user_id, content, parent_id=None):
     if supabase is None:
         return False
@@ -1731,18 +1779,6 @@ def add_comment(post_id, user_id, content, parent_id=None):
     except Exception as e:
         st.session_state.last_error = f"Error adding comment: {e}"
         return False
-
-def load_comments(post_id):
-    if supabase is None:
-        return []
-    try:
-        response = supabase.table("comments").select(
-            "*, profiles!comments_user_id_fkey(full_name, avatar_url)"
-        ).eq("post_id", post_id).order("created_at").execute()
-        return response.data
-    except Exception as e:
-        st.session_state.last_error = f"Error loading comments: {e}"
-        return []
 
 def delete_comment(comment_id):
     if supabase is None:
@@ -3581,10 +3617,22 @@ def owner_space():
         st.subheader(t("post_moderation"))
         st.markdown("Review all posts (public & private) and take action if needed.")
         try:
-            posts = supabase.table("posts").select(
-                "*, profiles!posts_user_id_fkey(full_name, avatar_url, id)"
-            ).order("created_at", desc=True).execute()
-            all_posts = posts.data
+            posts = supabase.table("posts").select("*").order("created_at", desc=True).execute()
+            all_posts = posts.data or []
+            # Fetch profiles for these posts
+            user_ids = {p["user_id"] for p in all_posts}
+            profiles = {}
+            if user_ids:
+                profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url").in_("id", list(user_ids)).execute()
+                for p in profiles_resp.data or []:
+                    profiles[p["id"]] = p
+            for p in all_posts:
+                prof = profiles.get(p["user_id"], {})
+                p["profiles"] = {
+                    "full_name": prof.get("full_name", "Unknown"),
+                    "avatar_url": prof.get("avatar_url"),
+                    "id": p["user_id"]
+                }
         except Exception as e:
             st.error(f"Failed to load posts: {e}")
             all_posts = []
