@@ -3,7 +3,7 @@ Home Sweet Home - Haitian Social Media Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-Version: 77.6.0 (Full social media features restored)
+Version: 77.7.0 (Fixed syntax error in friends page)
 """
 import streamlit as st
 import smtplib
@@ -2886,6 +2886,7 @@ def render_friends_page():
                                         )
                                         st.rerun()
                     with col3:
+                        # Fixed: using double quotes for the HTML attribute
                         st.markdown(f"""
                         <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
                         """, unsafe_allow_html=True)
@@ -2921,5 +2922,24 @@ def render_friends_page():
                                         )
                                         st.rerun()
                     with col3:
+                        # Fixed: using double quotes for the HTML attribute
                         st.markdown(f"""
-                        <button onclick="navigator.clipboard.writeText('{
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+
+        with st.form("send_message", clear_on_submit=True):
+            msg_content = st.text_input(t("send_message"))
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
+            col1, col2 = st.columns([1,5])
+            with col1:
+                sent = st.form_submit_button(t("send"))
+            if sent:
+                if msg_content or uploaded_file:
+                    send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
+                    st.rerun()
+        if st.button(t("close_chat")):
+            st.session_state.selected_chat = None
