@@ -3860,15 +3860,51 @@ def main_app():
 
         st.divider()
 
-        pages = {
-            t("feed"): render_feed,
-            t("friends_chat"): render_friends_page,
-            t("satellite_map"): render_map,
-            t("profile"): render_profile,
-            t("owner_space"): owner_space
-        }
-        choice = st.selectbox(t("feed"), list(pages.keys()))
-    pages[choice]()
+        # ====== NAVIGATION ======
+        # Define page list
+        pages_list = [t("feed"), t("friends_chat"), t("satellite_map"), t("profile"), t("owner_space")]
+        if "page_select" not in st.session_state:
+            st.session_state.page_select = pages_list[0]  # default to feed
+
+        # Use selectbox with session state to keep it in sync
+        choice = st.selectbox(
+            "Navigate",
+            pages_list,
+            index=pages_list.index(st.session_state.page_select),
+            key="page_select"
+        )
+
+        # ====== OWNER SPACE SIDEBAR SECTION ======
+        st.divider()
+        st.markdown("### 🕊️ Owner Space")
+        if st.session_state.owner_space_access:
+            st.success("✅ Access granted")
+            if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
+                st.session_state.page_select = t("owner_space")
+                st.rerun()
+        else:
+            with st.form("owner_sidebar_form"):
+                pwd = st.text_input("Password", type="password", placeholder="Enter owner password")
+                if st.form_submit_button("🔓 Unlock Owner Space", use_container_width=True):
+                    if pwd == OWNSPACE_PASSWORD:
+                        st.session_state.owner_space_access = True
+                        st.rerun()
+                    else:
+                        st.error("Invalid password")
+
+    # ====== RENDER SELECTED PAGE ======
+    page_functions = {
+        t("feed"): render_feed,
+        t("friends_chat"): render_friends_page,
+        t("satellite_map"): render_map,
+        t("profile"): render_profile,
+        t("owner_space"): owner_space
+    }
+    # If choice is in page_functions, call it, else fallback to feed
+    if choice in page_functions:
+        page_functions[choice]()
+    else:
+        render_feed()
 
 # ========== ENTRY ==========
 if __name__ == "__main__":
