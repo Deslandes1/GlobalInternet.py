@@ -1,6 +1,9 @@
 """
 Home Sweet Home - Haitian Social Media Platform
-Full version with all functions - 2026
+Lead Developer: Gesner Deslandes (Python Developer, Haiti)
+Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
+               Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
+Version: 77.6.0 (Full social media features restored)
 """
 import streamlit as st
 import smtplib
@@ -78,18 +81,19 @@ def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
     if not url or not key:
-        st.warning("⚠️ Supabase credentials not found.")
+        st.warning("⚠️ Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY in your Streamlit secrets.")
         return None
     if not url.startswith("https://"):
-        st.error("❌ SUPABASE_URL must start with 'https://'.")
+        st.error("❌ SUPABASE_URL must start with 'https://'. Please correct your secrets.")
         return None
     try:
         return create_client(url, key)
     except Exception as e:
-        if "Name or service not known" in str(e):
-            st.error("❌ Cannot resolve Supabase domain. Check your URL.")
+        error_msg = str(e)
+        if "Name or service not known" in error_msg or "Failed to resolve" in error_msg:
+            st.error("❌ Cannot resolve Supabase domain. Please check your SUPABASE_URL (must be a valid internet address).")
         else:
-            st.error(f"❌ Failed to connect: {e}")
+            st.error(f"❌ Failed to connect to Supabase: {error_msg}")
         return None
 
 supabase = init_supabase()
@@ -1145,8 +1149,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ========== HELPER FUNCTIONS (ALL REQUIRED) ==========
-
+# ====== HELPER FUNCTIONS ======
 def make_clickable(text):
     url_pattern = r'(https?://[^\s]+)'
     return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
@@ -2436,150 +2439,487 @@ def login_interface():
                 st.session_state.temp_phone = ""
                 st.rerun()
 
-# ====== RENDER FUNCTIONS (placeholders – they are in the full code) ======
-# (These are kept short for brevity; the full code includes them all)
+# ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
+
 def render_feed():
-    st.write("Feed – full implementation in code")
-def render_friends_page():
-    st.write("Friends – full implementation in code")
-def render_map():
-    st.write("Map – full implementation in code")
-def render_profile():
-    st.write("Profile – full implementation in code")
-def owner_space():
-    st.write("Owner Space – full implementation in code")
-def render_live_page(session_id):
-    st.write("Live – full implementation in code")
+    """Full feed with posts, reactions, comments, sharing, video embedding."""
+    if st.session_state.viewing_profile:
+        render_user_profile(st.session_state.viewing_profile)
+        return
 
-# ====== MAIN APP ======
-def main_app():
-    with st.sidebar:
-        if st.session_state.logged_in:
-            st.success("✅ Logged in")
-        else:
-            st.info("🔓 Not logged in")
-        st.divider()
+    st.header(t("feed"))
 
-        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
-        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class='collaborators'>
-            <b>Collaborators:</b><br>
-            Gesner Junior Deslandes · Roosevert Deslandes<br>
-            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
-        </div>
-        """, unsafe_allow_html=True)
-        st.divider()
+    if st.session_state.last_error:
+        st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
+        if st.button(t("clear_error")):
+            st.session_state.last_error = None
+            st.rerun()
 
-        if st.session_state.unread_count > 0:
-            st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
+    # Check for live session in URL
+    try:
+        params = st.query_params
+    except AttributeError:
+        params = st.experimental_get_query_params()
+    if "live" in params and params["live"]:
+        try:
+            session_id = int(params["live"][0] if isinstance(params["live"], list) else params["live"])
+            st.session_state.viewing_live = session_id
+        except:
+            pass
+    if st.session_state.viewing_live:
+        render_live_page(st.session_state.viewing_live)
+        return
 
-        if st.session_state.profile and st.session_state.profile.get("is_live"):
-            st.markdown(f"🔴 **{t('you_are_live')}**")
-            if st.button(t("end_live_session")):
-                for ls in st.session_state.live_sessions:
-                    if ls["user_id"] == st.session_state.user.id:
-                        end_live_session(ls["id"])
-                        st.rerun()
-                        break
-        else:
-            with st.expander(t("go_live")):
-                st.markdown(f"**{t('select_platform')}:**")
-                method = st.radio(t("select_platform"), [t("external_platform"), t("in_app_camera")], index=0)
-                platform = None
-                if method == t("external_platform"):
-                    st.markdown(f"**{t('select_platform')}:**")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("📺 YouTube", key="yt"):
-                            platform = "YouTube"
-                    with col2:
-                        if st.button("📘 Facebook", key="fb"):
-                            platform = "Facebook"
-                    with col3:
-                        if st.button("🎮 Twitch", key="tw"):
-                            platform = "Twitch"
-                else:
-                    platform = "inapp"
-
-                if platform:
-                    st.markdown(f"**Selected: {platform if platform != 'inapp' else t('in_app_camera')}**")
-                    with st.form("go_live_form"):
-                        title = st.text_input(t("live_title"))
-                        if st.form_submit_button(t("create_live_session")):
-                            if title:
-                                session_id = create_live_session(title, platform, method='external' if platform != 'inapp' else 'inapp')
-                                if session_id:
-                                    if platform == 'inapp':
-                                        st.success(t("you_are_live"))
-                                    else:
-                                        st.success(t("you_are_live"))
-                                        st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
-                                        st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
-                                    st.rerun()
-                            else:
-                                st.warning("Please enter a title")
-
-        st.divider()
-        lat, sig, qual = get_network_status()
-        st.markdown(f"### {t('system_health')}")
-        st.markdown(f"""
-        <div class='health-text'>
-        {t('signal')}: {sig}<br>
-        {t('latency')}: {lat}ms<br>
-        {t('quality')}: {qual}%<br>
-        {t('uptime')}: {get_uptime()}<br>
-        {t('encrypted')}
-        </div>
-        """, unsafe_allow_html=True)
-        st.divider()
-        st.markdown(f"{t('compensation')}: ${st.session_state.data_comp:.4f}")
-        st.divider()
-        if st.session_state.profile:
-            st.markdown(f"{t('logged_in_as')}: {st.session_state.profile.get('full_name', 'User')}")
-        if st.button(t("logout")):
-            logout()
-        st.divider()
-
-        # Audio explanation
-        if st.button(t("listen_explanation"), use_container_width=True):
-            voice_map = {
-                "en": "en-US-JennyNeural",
-                "fr": "fr-FR-DeniseNeural",
-                "es": "es-ES-ElviraNeural",
-                "ht": "ht-HT-FabriceNeural"
-            }
-            voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
-            text = t("app_explanation")
-            audio_file = generate_audio(text, voice)
-            if audio_file:
-                play_audio(audio_file)
+    # --- Create Post ---
+    st.markdown(f"### {t('create_post')}")
+    with st.form("new_post", clear_on_submit=True):
+        col_avatar, col_input = st.columns([1, 8])
+        with col_avatar:
+            if st.session_state.profile and st.session_state.profile.get("avatar_url"):
+                st.image(st.session_state.profile["avatar_url"], width=50)
             else:
-                st.error("Failed to generate audio.")
+                st.markdown("👤", unsafe_allow_html=True)
+        with col_input:
+            content = st.text_area(
+                t("caption_placeholder"),
+                height=150,
+                placeholder=t("caption_placeholder"),
+                label_visibility="collapsed"
+            )
+        media_files = st.file_uploader(
+            t("add_media"),
+            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+            accept_multiple_files=True
+        )
+        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use a link (YouTube, etc.).")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
+            is_public = (visibility == t("public"))
+        with col3:
+            posted = st.form_submit_button(t("post"), use_container_width=True)
 
+        if posted:
+            if not content and not media_files:
+                st.warning("Please add a caption or media.")
+            else:
+                if create_post(st.session_state.user.id, content, media_files, is_public):
+                    st.rerun()
+    st.divider()
+
+    # --- Live sessions banner ---
+    active_lives = st.session_state.live_sessions
+    if active_lives:
+        st.markdown("### 🔴 Live Now")
+        for live in active_lives:
+            with st.container():
+                col_a, col_b = st.columns([1,4])
+                with col_a:
+                    if live["profiles"]["avatar_url"]:
+                        st.image(live["profiles"]["avatar_url"], width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
+                    if st.button(t("join_live"), key=f"join_{live['id']}"):
+                        st.session_state.viewing_live = live["id"]
+                        st.rerun()
+                st.divider()
+    st.divider()
+
+    # --- Delete confirmation ---
+    if st.session_state.delete_confirm:
+        post_id, _ = st.session_state.delete_confirm
+        st.warning("Are you sure you want to delete this post?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes, delete"):
+                delete_post(post_id)
+                st.cache_data.clear()
+                st.session_state.posts = load_posts()
+                st.session_state.delete_confirm = None
+                st.rerun()
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.delete_confirm = None
+                st.rerun()
         st.divider()
 
-        pages = {
-            t("feed"): render_feed,
-            t("friends_chat"): render_friends_page,
-            t("satellite_map"): render_map,
-            t("profile"): render_profile,
-            t("owner_space"): owner_space
-        }
-        choice = st.selectbox(t("feed"), list(pages.keys()))
-    pages[choice]()
-
-# ====== ENTRY ======
-if __name__ == "__main__":
-    if (st.session_state.get("app_authenticated", False) or not APP_PASSWORD) and st.session_state.logged_in:
-        st.markdown("""
-        <div class="home-title">
-            <h1>🏠 Home Sweet Home</h1>
-            <p>Your Haitian social media platform</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    if not st.session_state.logged_in:
-        login_interface()
+    # --- Posts feed ---
+    if not st.session_state.posts:
+        st.info("No posts yet. Be the first to create one!")
     else:
-        main_app()
+        for post in st.session_state.posts:
+            with st.container():
+                # Post header
+                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
+                with col_a:
+                    avatar = post.get("profiles", {}).get("avatar_url")
+                    if avatar:
+                        st.image(avatar, width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    name = post['profiles']['full_name']
+                    if post['user_id'] != st.session_state.user.id:
+                        if st.button(name, key=f"view_profile_{post['id']}"):
+                            st.session_state.viewing_profile = post['user_id']
+                            st.rerun()
+                    else:
+                        st.markdown(f"**{name}**")
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
+                    if not post.get("is_public", True):
+                        st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                with col_c:
+                    st.caption(post['created_at'][:16])
+                with col_d:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("✏️", key=f"edit_{post['id']}"):
+                            st.session_state.editing_post = post['id']
+                            st.rerun()
+                with col_e:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("🗑️", key=f"del_post_{post['id']}"):
+                            st.session_state.delete_confirm = (post['id'], post['content'][:30])
+                            st.rerun()
+
+                # Edit form
+                if st.session_state.editing_post == post['id']:
+                    with st.form(key=f"edit_form_{post['id']}"):
+                        new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Save"):
+                                existing = post.get('media_urls', [])
+                                if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
+                                    st.session_state.editing_post = None
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state.editing_post = None
+                                st.rerun()
+                    st.divider()
+
+                # Media
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+
+                # Caption with clickable links and video embedding
+                if post['content']:
+                    clickable_content = make_clickable(post['content'])
+                    st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    # Auto-embed video links
+                    urls = re.findall(r'(https?://[^\s]+)', post['content'])
+                    for url in urls:
+                        embed_video_from_url(url)
+
+                # Reactions
+                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                reaction_counts = post.get("reactions", {})
+                summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
+                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                with col_react:
+                    if st.button("👍 React", key=f"react_btn_{post['id']}"):
+                        st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
+                        st.rerun()
+                    if st.session_state.get(f"show_reactions_{post['id']}", False):
+                        st.markdown("**Choose reaction**")
+                        for i in range(0, len(emojis), 3):
+                            cols = st.columns(3)
+                            for j, emoji in enumerate(emojis[i:i+3]):
+                                with cols[j]:
+                                    if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
+                                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                                        st.session_state[f"show_reactions_{post['id']}"] = False
+                                        st.rerun()
+                    if summary:
+                        st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
+                with col_comments:
+                    st.markdown(f"💬 {post.get('comment_count',0)}")
+                with col_shares:
+                    if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                        share_post(post['id'], st.session_state.user.id, is_public=True)
+                        st.rerun()
+
+                # Comments section
+                st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
+                st.markdown(f"#### {t('comments')}")
+
+                with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
+                    msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
+                    if st.form_submit_button(t("post")):
+                        if msg:
+                            add_comment(post['id'], st.session_state.user.id, msg)
+                            st.rerun()
+
+                comments = load_comments(post['id'])
+                top_level = [c for c in comments if not c.get('parent_id')]
+                replies = {}
+                for c in comments:
+                    if c.get('parent_id'):
+                        replies.setdefault(c['parent_id'], []).append(c)
+
+                for c in top_level:
+                    col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                    with col1:
+                        clickable_comment = make_clickable(c['content'])
+                        st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
+                        st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                    with col2:
+                        if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
+                            like_comment(c['id'], increment=True)
+                            st.rerun()
+                    with col3:
+                        if st.button(t("reply"), key=f"reply_{c['id']}"):
+                            st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
+                            st.rerun()
+                    with col4:
+                        if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                            if st.button("🗑️", key=f"del_comment_{c['id']}"):
+                                delete_comment(c['id'])
+                                st.rerun()
+
+                    if st.session_state.replying_to.get(c['id'], False):
+                        with st.form(key=f"reply_form_{c['id']}"):
+                            reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
+                            if st.form_submit_button(t("post_reply")):
+                                if reply:
+                                    add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                    st.session_state.replying_to[c['id']] = False
+                                    st.rerun()
+
+                    for r in replies.get(c['id'], []):
+                        st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
+                        colr1, colr2, colr3, colr4 = st.columns([4, 1, 1, 1])
+                        with colr1:
+                            clickable_reply = make_clickable(r['content'])
+                            st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
+                            st.markdown(f"<span class='comment-meta'>{r['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with colr2:
+                            if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
+                                like_comment(r['id'], increment=True)
+                                st.rerun()
+                        with colr3:
+                            pass
+                        with colr4:
+                            if st.session_state.user and r['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_comment_{r['id']}"):
+                                    delete_comment(r['id'])
+                                    st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.divider()
+
+def render_friends_page():
+    """Full friends, chat, and calling interface."""
+    st.header(t("friends_chat"))
+
+    with st.expander(t("setup_instructions")):
+        st.markdown("""
+        **If you get "new row violates row-level security policy" when uploading files:**
+
+        1. Go to your Supabase Dashboard → Storage.
+        2. For each bucket (`avatars`, `post_media`, `chat_media`), click on the bucket → "Policies".
+        3. Add a new policy:
+           - Policy name: `Allow authenticated uploads`
+           - Allowed operations: `INSERT`
+           - Target roles: `authenticated`
+           - USING expression: `(auth.role() = 'authenticated')`
+        4. Also add a policy for SELECT (reading) if needed:
+           - Policy name: `Allow public read`
+           - Allowed operations: `SELECT`
+           - USING expression: `true`
+        """)
+
+    st.markdown(f"<div class='friend-count'>{t('your_friends')}: {len(st.session_state.friends)}</div>", unsafe_allow_html=True)
+    st.divider()
+
+    # Notifications
+    with st.expander(f"🔔 {t('friend_requests')} ({st.session_state.unread_count})", expanded=True):
+        if not st.session_state.notifications:
+            st.info("No notifications")
+        else:
+            for n in st.session_state.notifications:
+                cols = st.columns([5,1])
+                with cols[0]:
+                    st.markdown(f"**{n['message']}**  \n*{n['created_at'][:16]}*")
+                with cols[1]:
+                    if not n['read']:
+                        if st.button("✓", key=f"read_{n['id']}"):
+                            mark_notification_read(n['id'])
+                            st.session_state.notifications = load_notifications(st.session_state.user.id)
+                            st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+                            st.rerun()
+                st.divider()
+
+    # Friend requests received
+    st.subheader(t("friend_requests"))
+    if not st.session_state.friend_requests:
+        st.info(t("no_friends"))
+    else:
+        for req in st.session_state.friend_requests:
+            cols = st.columns([2,1,1])
+            with cols[0]:
+                st.markdown(f"**{req['sender']['full_name']}**")
+            with cols[1]:
+                if st.button(t("accept"), key=f"accept_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], True)
+                    if success:
+                        load_friend_data()
+                        st.session_state.notifications = load_notifications(st.session_state.user.id)
+                        st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            with cols[2]:
+                if st.button(t("reject"), key=f"reject_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], False)
+                    if success:
+                        load_friend_data()
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            st.divider()
+
+    # Find users
+    st.subheader(t("find_users"))
+    search_query = st.text_input(t("search_by_name"))
+    if search_query:
+        results = search_users(search_query)
+        if not results:
+            st.info("No users found")
+        else:
+            for user in results:
+                cols = st.columns([3,1,1])
+                with cols[0]:
+                    st.markdown(f"**{user['full_name']}**")
+                with cols[1]:
+                    if st.button(t("add_friend"), key=f"add_{user['id']}"):
+                        success, msg = send_friend_request(st.session_state.user.id, user['id'])
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                with cols[2]:
+                    if st.button(t("view_profile"), key=f"view_{user['id']}"):
+                        st.session_state.viewing_profile = user['id']
+                        st.rerun()
+                st.divider()
+
+    st.divider()
+    st.subheader(t("your_friends"))
+    if not st.session_state.friends:
+        st.info(t("no_friends"))
+    else:
+        for friend in st.session_state.friends:
+            cols = st.columns([1,4,1,1,1])
+            with cols[0]:
+                if friend.get('avatar_url'):
+                    st.image(friend['avatar_url'], width=30)
+                else:
+                    st.markdown("👤")
+            with cols[1]:
+                st.markdown(f"**{friend['full_name']}**")
+            with cols[2]:
+                if st.button(t("chat"), key=f"chat_{friend['id']}"):
+                    st.session_state.selected_chat = friend['id']
+                    st.rerun()
+            with cols[3]:
+                if st.button(t("call"), key=f"call_{friend['id']}"):
+                    room = hashlib.md5(f"{st.session_state.user.id}_{friend['id']}_{time.time()}".encode()).hexdigest()[:10]
+                    send_message(st.session_state.user.id, friend['id'], f"📞 Join my call: room={room}")
+                    start_call(room)
+                    st.rerun()
+            with cols[4]:
+                if st.button(t("profile_btn"), key=f"profile_{friend['id']}"):
+                    st.session_state.viewing_profile = friend['id']
+                    st.rerun()
+            st.divider()
+
+    # Chat interface
+    if st.session_state.selected_chat:
+        st.subheader(t("chat"))
+        other_id = st.session_state.selected_chat
+        other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
+        if other.data:
+            other_name = other.data["full_name"]
+        else:
+            other_name = "User"
+        st.write(f"{t('chat')} with **{other_name}**")
+
+        messages = load_messages(st.session_state.user.id, other_id)
+        for msg in messages:
+            if msg["sender_id"] == st.session_state.user.id:
+                if msg.get("media_url"):
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_own_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+            else:
+                if msg.get("media_url"):
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{
