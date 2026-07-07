@@ -1,7 +1,7 @@
 """
 Home Sweet Home - Haitian Social Media Platform
 Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-Version: 77.4.0 (Better error handling + debug mode)
+Version: 77.5.0 (Added Quick Login button)
 """
 import streamlit as st
 import smtplib
@@ -73,7 +73,7 @@ try:
 except AttributeError:
     pass
 
-# --- Supabase client with better error handling ---
+# --- Supabase client ---
 @st.cache_resource
 def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
@@ -85,7 +85,6 @@ def init_supabase():
         st.error("❌ SUPABASE_URL must start with 'https://'. Please correct your secrets.")
         return None
     try:
-        # Test connectivity by making a simple request (optional)
         return create_client(url, key)
     except Exception as e:
         error_msg = str(e)
@@ -107,7 +106,6 @@ BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
 EXCHANGE_RATE_API = st.secrets.get("EXCHANGE_RATE_API", "https://api.exchangerate-api.com/v4/latest/USD")
 
-# Optional email settings
 SMTP_SERVER = st.secrets.get("SMTP_SERVER")
 SMTP_PORT = st.secrets.get("SMTP_PORT")
 SMTP_USERNAME = st.secrets.get("SMTP_USERNAME")
@@ -179,7 +177,7 @@ if "language" not in st.session_state:
 if "editing_post" not in st.session_state:
     st.session_state.editing_post = None
 
-# ====== LANGUAGE DICTIONARY (4 LANGUAGES: EN, FR, ES, HT) ======
+# ====== LANGUAGE DICTIONARY ======
 LANG = {
     "en": {
         "login_title": "Login",
@@ -190,6 +188,7 @@ LANG = {
         "full_name": "Full Name",
         "remember_me": "Remember me",
         "login_button": "🚀 Login",
+        "quick_login": "⚡ Quick Login (Demo)",
         "signup_button": "📝 Sign Up",
         "send_reset_link": "Send Reset Link",
         "phone_method": "Phone (OTP)",
@@ -334,6 +333,7 @@ LANG = {
         "full_name": "Nom complet",
         "remember_me": "Se souvenir de moi",
         "login_button": "🚀 Connexion",
+        "quick_login": "⚡ Connexion rapide (Démo)",
         "signup_button": "📝 Inscription",
         "send_reset_link": "Envoyer le lien de réinitialisation",
         "phone_method": "Téléphone (OTP)",
@@ -478,6 +478,7 @@ LANG = {
         "full_name": "Nombre completo",
         "remember_me": "Recordarme",
         "login_button": "🚀 Iniciar sesión",
+        "quick_login": "⚡ Inicio rápido (Demostración)",
         "signup_button": "📝 Registrarse",
         "send_reset_link": "Enviar enlace de restablecimiento",
         "phone_method": "Teléfono (OTP)",
@@ -622,6 +623,7 @@ LANG = {
         "full_name": "Non konplè",
         "remember_me": "Sonje m",
         "login_button": "🚀 Konekte",
+        "quick_login": "⚡ Koneksyon rapid (Demo)",
         "signup_button": "📝 Enskri",
         "send_reset_link": "Voye lyen reyinisyalizasyon",
         "phone_method": "Telefòn (OTP)",
@@ -1146,9 +1148,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========== HELPER FUNCTIONS ==========
-# (These are the same as in the previous version – make_clickable, get_youtube_id, etc.)
-# They are all included here in the final file, but to keep this message concise I'll
-# indicate that they are present in the actual code you paste.
+# (All helper functions are the same as in the previous version – 
+#  including make_clickable, get_or_create_profile, upload_*, send_gift, etc.
+#  They are all included in the final code you paste.)
 
 # ====== AUDIO FUNCTION ======
 def generate_audio(text, voice):
@@ -1170,7 +1172,7 @@ def play_audio(audio_path):
             st.markdown(f'<audio controls src="data:audio/mp3;base64,{b64}" autoplay style="width:100%;"></audio>', unsafe_allow_html=True)
         os.unlink(audio_path)
 
-# ====== LOGIN FUNCTION WITH DEBUG OPTION ======
+# ====== LOGIN FUNCTION WITH QUICK LOGIN ======
 def log_in_email(email, password, remember=False):
     if supabase is None:
         st.error("❌ Authentication service is not configured. Please contact the administrator.")
@@ -1244,15 +1246,31 @@ def login_interface():
     if auth_method == t("email_method"):
         tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
         with tab1:
+            # Demo email and password from secrets (if available)
+            demo_email = st.secrets.get("DEMO_EMAIL", "")
+            demo_password = st.secrets.get("DEMO_PASSWORD", "")
+
             with st.form("login_email"):
-                email = st.text_input(t("email"), value="deslandes78@gmail.com")
-                password = st.text_input(t("password"), type="password")
+                email = st.text_input(t("email"), value=demo_email)
+                password = st.text_input(t("password"), type="password", value="")
                 remember = st.checkbox(t("remember_me"))
-                if st.form_submit_button(t("login_button"), use_container_width=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
+                with col2:
+                    quick_login_clicked = st.form_submit_button(t("quick_login"), use_container_width=True)
+
+                if login_clicked:
                     if email and password:
                         log_in_email(email, password, remember)
                     else:
                         st.warning("Please enter email and password")
+
+                if quick_login_clicked:
+                    if demo_email and demo_password:
+                        log_in_email(demo_email, demo_password, remember)
+                    else:
+                        st.error("❌ Demo credentials not set in secrets. Please add DEMO_EMAIL and DEMO_PASSWORD.")
         with tab2:
             with st.form("signup_email"):
                 full_name = st.text_input(t("full_name"))
