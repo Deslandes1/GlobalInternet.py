@@ -2841,4 +2841,1853 @@ def render_live_page(session_id):
     st.header(f"🔴 LIVE: {session['title']}")
 
     if st.session_state.user:
-        bg_key = f"bg_{session_id}_{
+        bg_key = f"bg_{session_id}_{st.session_state.user.id}"
+        if st.session_state.get(bg_key) is None:
+            st.session_state[bg_key] = None
+
+        if not is_broadcaster:
+            participant_status = None
+            try:
+                part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                if part.data:
+                    participant_status = part.data[0]["status"]
+            except Exception as e:
+                st.warning(f"Error checking participant status: {e}")
+
+            if participant_status == "accepted":
+                with st.expander(t("choose_background"), expanded=False):
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_{session_id}")
+                    if uploaded_bg:
+                        bytes_data = uploaded_bg.getvalue()
+                        b64 = base64.b64encode(bytes_data).decode()
+                        mime = uploaded_bg.type
+                        data_url = f"data:{mime};base64,{b64}"
+                        st.session_state[bg_key] = data_url
+                        supabase.table("live_participants").update({"background_url": data_url}).eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                        st.success(t("background_set"))
+                        st.rerun()
+
+    gifts = load_gifts_for_session(session_id)
+    total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        stream_method = session.get("stream_method", "external")
+        if stream_method == "external":
+            stream_url = session.get("stream_url")
+            platform = session.get("platform")
+            if is_broadcaster:
+                with st.expander(t("set_stream_url"), expanded=not stream_url):
+                    with st.form("update_stream_url"):
+                        new_url = st.text_input(f"{t('paste_url')} (YouTube, Facebook, Twitch)", value=stream_url or "")
+                        if st.form_submit_button(t("update_url")):
+                            if new_url:
+                                if update_live_stream_url(session_id, new_url):
+                                    st.success("Stream URL updated! Refreshing...")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a URL")
+            if stream_url:
+                if "facebook.com" in stream_url:
+                    embed_code = f"""
+                    <div id="fb-root"></div>
+                    <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
+                    <div class="fb-video" data-href="{stream_url}" 
+                         data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
+                    """
+                    st.components.v1.html(embed_code, height=450)
+                elif "youtube.com" in stream_url or "youtu.be" in stream_url:
+                    if "youtu.be" in stream_url:
+                        video_id = stream_url.split("/")[-1].split("?")[0]
+                    elif "watch?v=" in stream_url:
+                        video_id = stream_url.split("v=")[-1].split("&")[0]
+                    else:
+                        video_id = None
+                    if video_id:
+                        embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                    else:
+                        st.video(stream_url)
+                elif "twitch.tv" in stream_url:
+                    channel = stream_url.split("/")[-1]
+                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
+                    st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
+                else:
+                    st.video(stream_url)
+            else:
+                st.info("The streamer has not provided a video URL yet.")
+        else:
+            if is_broadcaster:
+                st.markdown(f"### {t('choose_background')} (Your background)")
+                with st.expander(t('choose_background'), expanded=False):
+                    bg_options = [
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg1.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg2.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg3.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg4.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg5.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg6.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg7.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg8.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg9.jpg",
+                        "https://yourproject.supabase.co/storage/v1/object/public/backgrounds/bg10.jpg",
+                    ]
+                    col_bg = st.columns(5)
+                    for i, url in enumerate(bg_options[:10]):
+                        with col_bg[i % 5]:
+                            if st.button(f"{t('bg_option')} {i+1}", key=f"bg_{session_id}_{i}"):
+                                st.session_state[f"bg_{session_id}_{st.session_state.user.id}"] = url
+                                st.success(t("background_set"))
+                                st.rerun()
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_broadcaster")
+                    if uploaded_bg:
+                        bytes_data = uploaded_bg.getvalue()
+                        b64 = base64.b64encode(bytes_data).decode()
+                        mime = uploaded_bg.type
+                        data_url = f"data:{mime};base64,{b64}"
+                        st.session_state[f"bg_{session_id}_{st.session_state.user.id}"] = data_url
+                        st.success(t("background_set"))
+                        st.rerun()
+
+                st.subheader("🎤 Participant Requests")
+                try:
+                    pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
+                    pending_list = pending.data or []
+                except Exception as e:
+                    st.error(f"Error loading requests: {e}")
+                    pending_list = []
+
+                if pending_list:
+                    for req in pending_list:
+                        cols = st.columns([3,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{req['profiles']['full_name']}** wants to join")
+                        with cols[1]:
+                            if st.button("✅ Accept", key=f"accept_{req['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", req["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": req["user_id"],
+                                    "type": "live_join_accepted",
+                                    "message": f"You have been accepted to join the live stream: {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("❌ Reject", key=f"reject_{req['id']}"):
+                                supabase.table("live_participants").delete().eq("id", req["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No pending requests")
+
+                st.subheader("🎤 Active Participants")
+                try:
+                    accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "accepted").execute()
+                    accepted_list = accepted.data or []
+                except Exception as e:
+                    st.error(f"Error loading participants: {e}")
+                    accepted_list = []
+
+                if accepted_list:
+                    for part in accepted_list:
+                        cols = st.columns([2,1,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{part['profiles']['full_name']}**")
+                        with cols[1]:
+                            if st.button("🔊 Mute", key=f"mute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "muted"}).eq("id", part["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_mute",
+                                    "message": f"The broadcaster has muted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("🔊 Unmute", key=f"unmute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", part["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_unmute",
+                                    "message": f"The broadcaster has unmuted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[3]:
+                            if st.button("❌ Remove", key=f"remove_{part['id']}"):
+                                supabase.table("live_participants").delete().eq("id", part["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No participants yet")
+
+                st.markdown("### Your Broadcast")
+                broadcaster_html = f"""
+                <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                    <div style="font-size: 24px; margin-bottom: 20px;">🎥 {t('you_are_broadcaster')}</div>
+                    <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
+                        <canvas id="broadcasterCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
+                    </div>
+                    <div style="margin-top: 30px;">
+                        <button id="startBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 8px 20px rgba(0,168,255,0.4);">{t('start_broadcast')}</button>
+                        <button id="stopBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">{t('stop_broadcast')}</button>
+                    </div>
+                    <p id="broadcasterStatus" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    <div id="debug" style="margin-top: 10px; font-size: 12px; text-align: left; background: rgba(0,0,0,0.7); padding: 5px; border-radius: 5px; display: none;"></div>
+                </div>
+                <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+                <script>
+                (function() {{
+                    if (!window.broadcasterState) window.broadcasterState = {{}};
+                    const state = window.broadcasterState;
+                    const sessionId = "{session_id}";
+                    const userId = "{st.session_state.user.id}";
+                    const startBtn = document.getElementById('startBtn');
+                    const stopBtn = document.getElementById('stopBtn');
+                    const statusEl = document.getElementById('broadcasterStatus');
+                    const canvas = document.getElementById('broadcasterCanvas');
+                    const ctx = canvas.getContext('2d');
+                    const debugEl = document.getElementById('debug');
+                    
+                    function log(msg) {{
+                        console.log(msg);
+                        debugEl.style.display = 'block';
+                        debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + msg + '</div>';
+                        const lines = debugEl.innerHTML.split('</div>');
+                        if (lines.length > 10) debugEl.innerHTML = lines.slice(-10).join('</div>');
+                    }}
+                    
+                    const bgUrl = "{st.session_state.get(f'bg_{session_id}_{st.session_state.user.id}', '')}";
+                    let backgroundImage = null;
+                    if (bgUrl) {{
+                        log('Loading background from: ' + bgUrl.substring(0, 100));
+                        backgroundImage = new Image();
+                        backgroundImage.crossOrigin = "Anonymous";
+                        backgroundImage.src = bgUrl;
+                        backgroundImage.onerror = (e) => {{
+                            log('Failed to load background image: ' + e);
+                            statusEl.textContent = 'Background image failed to load. Using default color.';
+                            backgroundImage = null;
+                        }};
+                        backgroundImage.onload = () => {{
+                            log('Background loaded successfully');
+                            canvas.width = 640;
+                            canvas.height = 360;
+                        }};
+                    }} else {{
+                        log('No background selected, using blue color');
+                    }}
+                    
+                    let selfieSegmentation = state.selfieSegmentation;
+                    if (!selfieSegmentation) {{
+                        log('Creating SelfieSegmentation instance');
+                        selfieSegmentation = new SelfieSegmentation({{
+                            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
+                        }});
+                        selfieSegmentation.setOptions({{
+                            modelSelection: 1,
+                            minDetectionConfidence: 0.5,
+                            minTrackingConfidence: 0.5
+                        }});
+                        selfieSegmentation.onResults(onResults);
+                        state.selfieSegmentation = selfieSegmentation;
+                        log('SelfieSegmentation initialized');
+                    }}
+                    
+                    let isProcessing = false;
+                    function onResults(results) {{
+                        if (!results.segmentationMask) {{
+                            log('No segmentation mask received');
+                            return;
+                        }}
+                        try {{
+                            if (backgroundImage) {{
+                                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+                            }} else {{
+                                ctx.fillStyle = '#00a8ff';
+                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            }}
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'destination-out';
+                            ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+                            ctx.globalCompositeOperation = 'source-over';
+                            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                            ctx.restore();
+                            if (!isProcessing) {{
+                                log('Frame processed');
+                                isProcessing = false;
+                            }}
+                        }} catch (err) {{
+                            log('Error in onResults: ' + err);
+                        }}
+                    }}
+                    
+                    if (state.localStream && state.peer && state.call) {{
+                        log('Broadcast already running');
+                        startBtn.style.display = 'none';
+                        stopBtn.style.display = 'inline-block';
+                        statusEl.textContent = `{t('broadcasting')}: ${{state.peer.id}}`;
+                        if (state.videoElement) {{
+                            const processFrame = async () => {{
+                                if (!state.videoElement || state.videoElement.readyState < 2) {{
+                                    requestAnimationFrame(processFrame);
+                                    return;
+                                }}
+                                isProcessing = true;
+                                await selfieSegmentation.send({{image: state.videoElement}});
+                                requestAnimationFrame(processFrame);
+                            }};
+                            processFrame();
+                        }}
+                        return;
+                    }}
+                    
+                    startBtn.onclick = async () => {{
+                        try {{
+                            log('Requesting camera access');
+                            statusEl.textContent = '{t('camera_access')}';
+                            state.localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
+                            log('Camera stream obtained');
+                            
+                            state.videoElement = document.createElement('video');
+                            state.videoElement.srcObject = state.localStream;
+                            state.videoElement.autoplay = true;
+                            state.videoElement.width = 640;
+                            state.videoElement.height = 360;
+                            state.videoElement.onloadeddata = () => {{
+                                log('Video element ready');
+                                const processFrame = async () => {{
+                                    if (!state.videoElement || state.videoElement.readyState < 2) {{
+                                        requestAnimationFrame(processFrame);
+                                        return;
+                                    }}
+                                    isProcessing = true;
+                                    await selfieSegmentation.send({{image: state.videoElement}});
+                                    requestAnimationFrame(processFrame);
+                                }};
+                                processFrame();
+                            }};
+                            statusEl.textContent = '{t('camera_granted')}';
+                            
+                            state.peer = new Peer(`broadcaster-${{sessionId}}`, {{ 
+                                host: '0.peerjs.com',
+                                port: 443,
+                                secure: true,
+                                config: {{
+                                    'iceServers': [
+                                        {{ urls: 'stun:stun.l.google.com:19302' }},
+                                        {{ urls: 'stun:stun1.l.google.com:19302' }}
+                                    ]
+                                }}
+                            }});
+                            
+                            state.peer.on('open', (id) => {{
+                                log('Peer opened with ID: ' + id);
+                                statusEl.textContent = `{t('broadcasting')}: ${{id}}`;
+                                startBtn.style.display = 'none';
+                                stopBtn.style.display = 'inline-block';
+                            }});
+                            
+                            state.peer.on('call', (call) => {{
+                                if (!state.localStream) return;
+                                log('Incoming call from ' + call.peer);
+                                call.answer(state.localStream);
+                                if (!state.participants) state.participants = [];
+                                state.participants.push(call);
+                                call.on('stream', (remoteStream) => {{
+                                    const participantId = call.peer;
+                                    let videoEl = document.getElementById(`participant_${{participantId}}`);
+                                    if (!videoEl) {{
+                                        videoEl = document.createElement('video');
+                                        videoEl.id = `participant_${{participantId}}`;
+                                        videoEl.autoplay = true;
+                                        videoEl.style.width = '200px';
+                                        videoEl.style.margin = '10px';
+                                        document.getElementById('participantsContainer').appendChild(videoEl);
+                                    }}
+                                    videoEl.srcObject = remoteStream;
+                                    log('Added participant video: ' + participantId);
+                                }});
+                                call.on('close', () => {{
+                                    const participantId = call.peer;
+                                    const videoEl = document.getElementById(`participant_${{participantId}}`);
+                                    if (videoEl) videoEl.remove();
+                                    log('Removed participant: ' + participantId);
+                                }});
+                            }});
+                            
+                            state.peer.on('error', (err) => {{
+                                log('Peer error: ' + err);
+                                statusEl.textContent = '{t('peer_error')}: ' + err;
+                            }});
+                        }} catch (err) {{
+                            log('Error starting broadcast: ' + err);
+                            statusEl.textContent = '{t('error')}: ' + err.message;
+                        }}
+                    }};
+                    
+                    stopBtn.onclick = () => {{
+                        log('Stopping broadcast');
+                        if (state.participants) {{
+                            state.participants.forEach(call => call.close());
+                        }}
+                        if (state.peer) state.peer.destroy();
+                        if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
+                        state.localStream = null;
+                        state.peer = null;
+                        state.participants = [];
+                        startBtn.style.display = 'inline-block';
+                        stopBtn.style.display = 'none';
+                        statusEl.textContent = '{t('broadcast_ended')}';
+                        log('Broadcast ended');
+                    }};
+                }})();
+                </script>
+                """
+                st.markdown("<div id='participantsContainer' style='display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px;'></div>", unsafe_allow_html=True)
+                st.components.v1.html(broadcaster_html, height=750)
+
+            else:
+                try:
+                    part = supabase.table("live_participants").select("status, background_url").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                    participant = part.data[0] if part.data else None
+                except Exception as e:
+                    participant = None
+                    st.error(f"Error checking participation: {e}")
+
+                if not participant or participant["status"] == "pending":
+                    st.info("You have not joined this live session yet.")
+                    if st.button("Request to Join"):
+                        try:
+                            supabase.table("live_participants").insert({
+                                "session_id": session_id,
+                                "user_id": st.session_state.user.id,
+                                "status": "pending"
+                            }).execute()
+                            supabase.table("notifications").insert({
+                                "user_id": session["user_id"],
+                                "type": "live_join_request",
+                                "message": f"{st.session_state.profile['full_name']} requests to join your live session: {session['title']}",
+                                "read": False
+                            }).execute()
+                            st.success("Request sent! Please wait for the broadcaster to accept.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to send request: {e}")
+                elif participant["status"] == "accepted":
+                    st.success("You are an active participant! You can now share your video and audio.")
+                    with st.expander("Your Video Controls", expanded=True):
+                        col_mic, col_bg = st.columns(2)
+                        with col_mic:
+                            if st.button("🎤 Mute / Unmute Mic", key=f"toggle_mic_{session_id}"):
+                                st.warning("Mute toggling will be implemented client-side via PeerJS.")
+                        with col_bg:
+                            pass
+
+                    bg_url = participant.get("background_url") or st.session_state.get(f"bg_{session_id}_{st.session_state.user.id}", "")
+                    participant_html = f"""
+                    <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                        <div style="font-size: 24px; margin-bottom: 20px;">🎤 You are a participant</div>
+                        <div style="background: #000; width: 100%; max-width: 600px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 3px solid #00a8ff;">
+                            <canvas id="participantCanvas" width="640" height="360" style="width: 100%; aspect-ratio: 16/9; background: #111; display: block;"></canvas>
+                        </div>
+                        <div style="margin-top: 30px;">
+                            <button id="connectBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer;">{t('start_broadcast')}</button>
+                            <button id="disconnectBtn" style="background: #ff4444; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer; display: none; margin-left: 20px;">{t('stop_broadcast')}</button>
+                        </div>
+                        <p id="participantStatus" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    </div>
+                    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+                    <script>
+                    (function() {{
+                        if (!window.participantState) window.participantState = {{}};
+                        const state = window.participantState;
+                        const sessionId = "{session_id}";
+                        const userId = "{st.session_state.user.id}";
+                        const broadcasterId = `broadcaster-${{sessionId}}`;
+                        const canvas = document.getElementById('participantCanvas');
+                        const ctx = canvas.getContext('2d');
+                        const connectBtn = document.getElementById('connectBtn');
+                        const disconnectBtn = document.getElementById('disconnectBtn');
+                        const statusEl = document.getElementById('participantStatus');
+                        const bgUrl = "{bg_url}";
+                        let backgroundImage = null;
+                        if (bgUrl) {{
+                            backgroundImage = new Image();
+                            backgroundImage.crossOrigin = "Anonymous";
+                            backgroundImage.src = bgUrl;
+                            backgroundImage.onerror = (e) => {{
+                                console.error('Participant background load failed:', e);
+                                statusEl.textContent = 'Background image failed to load. Using default.';
+                                backgroundImage = null;
+                            }};
+                            backgroundImage.onload = () => {{
+                                canvas.width = 640;
+                                canvas.height = 360;
+                            }};
+                        }}
+                        let selfieSegmentation = state.selfieSegmentation;
+                        if (!selfieSegmentation) {{
+                            selfieSegmentation = new SelfieSegmentation({{
+                                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${{file}}`
+                            }});
+                            selfieSegmentation.setOptions({{
+                                modelSelection: 1,
+                                minDetectionConfidence: 0.5,
+                                minTrackingConfidence: 0.5
+                            }});
+                            selfieSegmentation.onResults(onResults);
+                            state.selfieSegmentation = selfieSegmentation;
+                        }}
+                        function onResults(results) {{
+                            if (!results.segmentationMask) return;
+                            if (backgroundImage) {{
+                                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+                            }} else {{
+                                ctx.fillStyle = '#00a8ff';
+                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            }}
+                            ctx.save();
+                            ctx.globalCompositeOperation = 'destination-out';
+                            ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+                            ctx.globalCompositeOperation = 'source-over';
+                            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                            ctx.restore();
+                        }}
+                        if (state.localStream && state.peer && state.call) {{
+                            connectBtn.style.display = 'none';
+                            disconnectBtn.style.display = 'inline-block';
+                            statusEl.textContent = 'Connected to broadcaster';
+                            if (state.videoElement) {{
+                                const processFrame = async () => {{
+                                    await selfieSegmentation.send({{image: state.videoElement}});
+                                    requestAnimationFrame(processFrame);
+                                }};
+                                processFrame();
+                            }}
+                            return;
+                        }}
+                        connectBtn.onclick = async () => {{
+                            try {{
+                                statusEl.textContent = '{t('camera_access')}';
+                                state.localStream = await navigator.mediaDevices.getUserMedia({{ video: true, audio: true }});
+                                state.videoElement = document.createElement('video');
+                                state.videoElement.srcObject = state.localStream;
+                                state.videoElement.autoplay = true;
+                                state.videoElement.width = 640;
+                                state.videoElement.height = 360;
+                                state.videoElement.onloadeddata = () => {{
+                                    const processFrame = async () => {{
+                                        await selfieSegmentation.send({{image: state.videoElement}});
+                                        requestAnimationFrame(processFrame);
+                                    }};
+                                    processFrame();
+                                }};
+                                statusEl.textContent = '{t('camera_granted')}';
+                                state.peer = new Peer({{ 
+                                    host: '0.peerjs.com',
+                                    port: 443,
+                                    secure: true,
+                                    config: {{
+                                        'iceServers': [
+                                            {{ urls: 'stun:stun.l.google.com:19302' }},
+                                            {{ urls: 'stun:stun1.l.google.com:19302' }}
+                                        ]
+                                    }}
+                                }});
+                                state.peer.on('open', (id) => {{
+                                    statusEl.textContent = 'Calling broadcaster...';
+                                    state.call = state.peer.call(broadcasterId, state.localStream);
+                                    state.call.on('stream', (remoteStream) => {{
+                                        console.log('Broadcaster stream received');
+                                    }});
+                                    state.call.on('close', () => {{
+                                        statusEl.textContent = '{t('call_ended')}';
+                                        connectBtn.style.display = 'inline-block';
+                                        disconnectBtn.style.display = 'none';
+                                    }});
+                                    connectBtn.style.display = 'none';
+                                    disconnectBtn.style.display = 'inline-block';
+                                    statusEl.textContent = 'Connected to broadcaster';
+                                }});
+                                state.peer.on('error', (err) => {{
+                                    statusEl.textContent = '{t('peer_error')}: ' + err;
+                                }});
+                            }} catch (err) {{
+                                statusEl.textContent = '{t('error')}: ' + err.message;
+                            }}
+                        }};
+                        disconnectBtn.onclick = () => {{
+                            if (state.call) state.call.close();
+                            if (state.peer) state.peer.destroy();
+                            if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
+                            state.localStream = null;
+                            state.peer = null;
+                            state.call = null;
+                            connectBtn.style.display = 'inline-block';
+                            disconnectBtn.style.display = 'none';
+                            statusEl.textContent = '{t('broadcast_ended')}';
+                        }};
+                    }})();
+                    </script>
+                    """
+                    st.components.v1.html(participant_html, height=750)
+                elif participant["status"] == "muted":
+                    st.warning("Your microphone has been muted by the broadcaster. You can still watch but cannot speak.")
+                    viewer_html = f"""
+                    <div style="background: #1e2a3a; padding: 30px; border-radius: 20px; text-align: center; color: white;">
+                        <div style="font-size: 24px;">👀 {t('you_are_viewer')} (Muted)</div>
+                        <div style="margin-top: 20px;">
+                            <button id="watchBtn" style="background: #00a8ff; color: white; border: none; border-radius: 60px; padding: 18px 50px; font-size: 24px; font-weight: bold; cursor: pointer;">{t('watch_stream')}</button>
+                        </div>
+                        <p id="status" style="margin-top: 20px; font-size: 18px; color: #ccc;">{t('ready_to_start')}</p>
+                    </div>
+                    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+                    <script>
+                    (function() {{
+                        const sessionId = "{session_id}";
+                        const watchBtn = document.getElementById('watchBtn');
+                        const statusEl = document.getElementById('status');
+                        watchBtn.onclick = () => {{
+                            statusEl.textContent = '{t('initializing')}';
+                            const peer = new Peer({{
+                                host: '0.peerjs.com',
+                                port: 443,
+                                secure: true
+                            }});
+                            peer.on('open', (id) => {{
+                                const call = peer.call(`broadcaster-${{sessionId}}`, null);
+                                call.on('stream', (remoteStream) => {{
+                                    const video = document.createElement('video');
+                                    video.autoplay = true;
+                                    video.style.width = '100%';
+                                    video.style.maxHeight = '60vh';
+                                    video.style.borderRadius = '12px';
+                                    document.body.appendChild(video);
+                                    video.srcObject = remoteStream;
+                                    statusEl.textContent = '{t('now_watching')}';
+                                    watchBtn.style.display = 'none';
+                                }});
+                                call.on('error', (err) => {{
+                                    statusEl.textContent = '{t('call_error')}: ' + err;
+                                }});
+                            }});
+                        }};
+                    }})();
+                    </script>
+                    """
+                    st.components.v1.html(viewer_html, height=500)
+
+        try:
+            base_url = st.request.url.split('?')[0]
+        except:
+            base_url = "https://home-sweet-home.streamlit.app"
+        share_url = f"{base_url}?live={session_id}"
+        st.text_input(t("shareable_link"), value=share_url)
+
+    with col2:
+        st.subheader(t("live_chat_gifts"))
+        if not is_broadcaster:
+            st.markdown(f"### {t('send_gift')}")
+            if not st.session_state.profile.get("moncash_phone"):
+                st.info(t("add_moncash"))
+            else:
+                gift_options = [
+                    {"label": "❤️ 50 HTG", "amount": 50, "currency": "HTG"},
+                    {"label": "🎉 100 HTG", "amount": 100, "currency": "HTG"},
+                    {"label": "🌟 500 HTG", "amount": 500, "currency": "HTG"},
+                    {"label": "💵 1 USD", "amount": 1, "currency": "USD"},
+                    {"label": "💵 5 USD", "amount": 5, "currency": "USD"},
+                    {"label": "💵 10 USD", "amount": 10, "currency": "USD"},
+                ]
+                cols = st.columns(3)
+                for i, opt in enumerate(gift_options):
+                    with cols[i % 3]:
+                        if st.button(opt["label"], key=f"gift_{i}"):
+                            success, msg = send_gift(
+                                session_id,
+                                st.session_state.user.id,
+                                session["user_id"],
+                                opt["amount"],
+                                opt["currency"]
+                            )
+                            if success:
+                                st.success(msg)
+                                st.session_state.live_gifts = load_gifts_for_session(session_id)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+            st.markdown("### 😊 Reactions")
+            reaction_emojis = ["❤️", "👍", "😂", "😮", "😢", "👏"]
+            cols = st.columns(len(reaction_emojis))
+            for i, emoji in enumerate(reaction_emojis):
+                with cols[i]:
+                    if st.button(emoji, key=f"reaction_{i}"):
+                        add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
+                        st.rerun()
+
+        if is_broadcaster:
+            st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
+            if session["profiles"]["moncash_phone"]:
+                st.info(f"{t('gifts_sent_to')}: {session['profiles']['moncash_phone']}")
+            else:
+                st.warning(t("add_moncash"))
+
+        with st.form(f"live_comment_{session_id}", clear_on_submit=True):
+            msg = st.text_input(t("write_comment"))
+            if st.form_submit_button(t("send")):
+                if msg:
+                    add_comment(session_id, st.session_state.user.id, msg)
+                    st.rerun()
+
+        comments = load_comments(session_id)
+        all_events = []
+        for c in comments:
+            all_events.append({"type": "comment", "data": c, "time": c['created_at']})
+        for g in gifts:
+            all_events.append({"type": "gift", "data": g, "time": g['created_at']})
+        all_events.sort(key=lambda x: x['time'])
+
+        for ev in all_events:
+            if ev['type'] == 'comment':
+                c = ev['data']
+                if c['content'].startswith("🎉"):
+                    st.markdown(f"**{c['profiles']['full_name']}** {c['content']}")
+                else:
+                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+            else:
+                g = ev['data']
+                sender = g.get('sender', {}).get('full_name', 'Someone')
+                st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
+
+def render_user_profile(user_id):
+    if supabase is None:
+        st.error("Database not connected.")
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
+
+    try:
+        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not profile_resp.data:
+            st.error("User not found.")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+        profile = profile_resp.data[0]
+    except Exception as e:
+        error_str = str(e)
+        if "JWT expired" in error_str:
+            if refresh_supabase_session():
+                try:
+                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+                    if profile_resp.data:
+                        profile = profile_resp.data[0]
+                    else:
+                        st.error("User not found.")
+                        if st.button(t("back_to_feed")):
+                            st.session_state.viewing_profile = None
+                            st.rerun()
+                        return
+                except Exception as retry_e:
+                    st.error(f"Error loading profile after refresh: {retry_e}")
+                    if st.button(t("back_to_feed")):
+                        st.session_state.viewing_profile = None
+                        st.rerun()
+                    return
+            else:
+                st.error("Session expired. Please log in again.")
+                logout()
+                st.rerun()
+                return
+        else:
+            st.error(f"Error loading profile: {error_str}")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+
+    st.header(f"👤 {profile['full_name']}'s Profile")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=150)
+        else:
+            st.markdown("👤", unsafe_allow_html=True)
+        st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
+        st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
+        st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
+        if st.button(t("chat")):
+            st.session_state.selected_chat = user_id
+            st.session_state.viewing_profile = None
+            st.rerun()
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_profile = None
+            st.rerun()
+    with col2:
+        st.subheader(t("feed"))
+        posts = load_user_posts(user_id)
+        if not posts:
+            st.info("This user has no public posts.")
+        else:
+            for post in posts:
+                with st.container():
+                    st.markdown(f"**{post['profiles']['full_name']}**")
+                    st.caption(post['created_at'][:16])
+                    if post['content']:
+                        clickable_content = make_clickable(post['content'])
+                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    for media in post.get("media_urls", []):
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+                    st.divider()
+
+def render_feed():
+    if st.session_state.viewing_profile:
+        render_user_profile(st.session_state.viewing_profile)
+        return
+
+    st.header(t("feed"))
+
+    if st.session_state.last_error:
+        st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
+        if st.button(t("clear_error")):
+            st.session_state.last_error = None
+            st.rerun()
+
+    try:
+        params = st.query_params
+    except AttributeError:
+        params = st.experimental_get_query_params()
+    if "live" in params and params["live"]:
+        try:
+            session_id = int(params["live"][0] if isinstance(params["live"], list) else params["live"])
+            st.session_state.viewing_live = session_id
+        except:
+            pass
+    if st.session_state.viewing_live:
+        render_live_page(st.session_state.viewing_live)
+        return
+
+    st.markdown(f"### {t('create_post')}")
+    with st.form("new_post", clear_on_submit=True):
+        col_avatar, col_input = st.columns([1, 8])
+        with col_avatar:
+            if st.session_state.profile and st.session_state.profile.get("avatar_url"):
+                st.image(st.session_state.profile["avatar_url"], width=50)
+            else:
+                st.markdown("👤", unsafe_allow_html=True)
+        with col_input:
+            content = st.text_area(
+                t("caption_placeholder"),
+                height=150,
+                placeholder=t("caption_placeholder"),
+                label_visibility="collapsed"
+            )
+        media_files = st.file_uploader(
+            t("add_media"),
+            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+            accept_multiple_files=True
+        )
+        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use a link (YouTube, etc.).")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
+            is_public = (visibility == t("public"))
+        with col3:
+            posted = st.form_submit_button(t("post"), use_container_width=True)
+
+        if posted:
+            if not content and not media_files:
+                st.warning("Please add a caption or media.")
+            else:
+                if create_post(st.session_state.user.id, content, media_files, is_public):
+                    st.rerun()
+    st.divider()
+
+    active_lives = st.session_state.live_sessions
+    if active_lives:
+        st.markdown("### 🔴 Live Now")
+        for live in active_lives:
+            with st.container():
+                col_a, col_b = st.columns([1,4])
+                with col_a:
+                    if live["profiles"]["avatar_url"]:
+                        st.image(live["profiles"]["avatar_url"], width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
+                    if st.button(t("join_live"), key=f"join_{live['id']}"):
+                        st.session_state.viewing_live = live["id"]
+                        st.rerun()
+                st.divider()
+    st.divider()
+
+    if st.session_state.delete_confirm:
+        post_id, _ = st.session_state.delete_confirm
+        st.warning("Are you sure you want to delete this post?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Yes, delete"):
+                delete_post(post_id)
+                st.cache_data.clear()
+                st.session_state.posts = load_posts()
+                st.session_state.delete_confirm = None
+                st.rerun()
+        with col2:
+            if st.button("Cancel"):
+                st.session_state.delete_confirm = None
+                st.rerun()
+        st.divider()
+
+    if not st.session_state.posts:
+        st.info("No posts yet. Be the first to create one!")
+    else:
+        for post in st.session_state.posts:
+            with st.container():
+                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
+                with col_a:
+                    avatar = post.get("profiles", {}).get("avatar_url")
+                    if avatar:
+                        st.image(avatar, width=40)
+                    else:
+                        st.markdown("👤")
+                with col_b:
+                    name = post['profiles']['full_name']
+                    if post['user_id'] != st.session_state.user.id:
+                        if st.button(name, key=f"view_profile_{post['id']}"):
+                            st.session_state.viewing_profile = post['user_id']
+                            st.rerun()
+                    else:
+                        st.markdown(f"**{name}**")
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
+                    if not post.get("is_public", True):
+                        st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                with col_c:
+                    st.caption(post['created_at'][:16])
+                with col_d:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("✏️", key=f"edit_{post['id']}"):
+                            st.session_state.editing_post = post['id']
+                            st.rerun()
+                with col_e:
+                    if st.session_state.user and post['user_id'] == st.session_state.user.id:
+                        if st.button("🗑️", key=f"del_post_{post['id']}"):
+                            st.session_state.delete_confirm = (post['id'], post['content'][:30])
+                            st.rerun()
+
+                if st.session_state.editing_post == post['id']:
+                    with st.form(key=f"edit_form_{post['id']}"):
+                        new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Save"):
+                                existing = post.get('media_urls', [])
+                                if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
+                                    st.session_state.editing_post = None
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state.editing_post = None
+                                st.rerun()
+                    st.divider()
+
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+
+                if post['content']:
+                    clickable_content = make_clickable(post['content'])
+                    st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+
+                if post['content']:
+                    urls = re.findall(r'(https?://[^\s]+)', post['content'])
+                    for url in urls:
+                        embed_video_from_url(url)
+
+                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                reaction_counts = post.get("reactions", {})
+                summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
+                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                with col_react:
+                    if st.button("👍 React", key=f"react_btn_{post['id']}"):
+                        st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
+                        st.rerun()
+                    if st.session_state.get(f"show_reactions_{post['id']}", False):
+                        st.markdown("**Choose reaction**")
+                        for i in range(0, len(emojis), 3):
+                            cols = st.columns(3)
+                            for j, emoji in enumerate(emojis[i:i+3]):
+                                with cols[j]:
+                                    if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
+                                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                                        st.session_state[f"show_reactions_{post['id']}"] = False
+                                        st.rerun()
+                    if summary:
+                        st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
+                with col_comments:
+                    st.markdown(f"💬 {post.get('comment_count',0)}")
+                with col_shares:
+                    if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                        share_post(post['id'], st.session_state.user.id, is_public=True)
+                        st.rerun()
+
+                st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
+                st.markdown(f"#### {t('comments')}")
+
+                with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
+                    msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
+                    if st.form_submit_button(t("post")):
+                        if msg:
+                            add_comment(post['id'], st.session_state.user.id, msg)
+                            st.rerun()
+
+                comments = load_comments(post['id'])
+                top_level = [c for c in comments if not c.get('parent_id')]
+                replies = {}
+                for c in comments:
+                    if c.get('parent_id'):
+                        replies.setdefault(c['parent_id'], []).append(c)
+
+                for c in top_level:
+                    col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                    with col1:
+                        clickable_comment = make_clickable(c['content'])
+                        st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
+                        st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                    with col2:
+                        if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
+                            like_comment(c['id'], increment=True)
+                            st.rerun()
+                    with col3:
+                        if st.button(t("reply"), key=f"reply_{c['id']}"):
+                            st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
+                            st.rerun()
+                    with col4:
+                        if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                            if st.button("🗑️", key=f"del_comment_{c['id']}"):
+                                delete_comment(c['id'])
+                                st.rerun()
+
+                    if st.session_state.replying_to.get(c['id'], False):
+                        with st.form(key=f"reply_form_{c['id']}"):
+                            reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
+                            if st.form_submit_button(t("post_reply")):
+                                if reply:
+                                    add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                    st.session_state.replying_to[c['id']] = False
+                                    st.rerun()
+
+                    for r in replies.get(c['id'], []):
+                        st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
+                        colr1, colr2, colr3, colr4 = st.columns([4, 1, 1, 1])
+                        with colr1:
+                            clickable_reply = make_clickable(r['content'])
+                            st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
+                            st.markdown(f"<span class='comment-meta'>{r['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with colr2:
+                            if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
+                                like_comment(r['id'], increment=True)
+                                st.rerun()
+                        with colr3:
+                            pass
+                        with colr4:
+                            if st.session_state.user and r['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_comment_{r['id']}"):
+                                    delete_comment(r['id'])
+                                    st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.divider()
+
+def render_friends_page():
+    st.header(t("friends_chat"))
+
+    with st.expander(t("setup_instructions")):
+        st.markdown("""
+        **If you get "new row violates row-level security policy" when uploading files:**
+
+        1. Go to your Supabase Dashboard → Storage.
+        2. For each bucket (`avatars`, `post_media`, `chat_media`), click on the bucket → "Policies".
+        3. Add a new policy:
+           - Policy name: `Allow authenticated uploads`
+           - Allowed operations: `INSERT`
+           - Target roles: `authenticated`
+           - USING expression: `(auth.role() = 'authenticated')`
+        4. Also add a policy for SELECT (reading) if needed:
+           - Policy name: `Allow public read`
+           - Allowed operations: `SELECT`
+           - USING expression: `true`
+        """)
+
+    st.markdown(f"<div class='friend-count'>{t('your_friends')}: {len(st.session_state.friends)}</div>", unsafe_allow_html=True)
+    st.divider()
+
+    with st.expander(f"🔔 {t('friend_requests')} ({st.session_state.unread_count})", expanded=True):
+        if not st.session_state.notifications:
+            st.info("No notifications")
+        else:
+            for n in st.session_state.notifications:
+                cols = st.columns([5,1])
+                with cols[0]:
+                    st.markdown(f"**{n['message']}**  \n*{n['created_at'][:16]}*")
+                with cols[1]:
+                    if not n['read']:
+                        if st.button("✓", key=f"read_{n['id']}"):
+                            mark_notification_read(n['id'])
+                            st.session_state.notifications = load_notifications(st.session_state.user.id)
+                            st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+                            st.rerun()
+                st.divider()
+
+    st.subheader(t("friend_requests"))
+    if not st.session_state.friend_requests:
+        st.info(t("no_friends"))
+    else:
+        for req in st.session_state.friend_requests:
+            cols = st.columns([2,1,1])
+            with cols[0]:
+                st.markdown(f"**{req['sender']['full_name']}**")
+            with cols[1]:
+                if st.button(t("accept"), key=f"accept_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], True)
+                    if success:
+                        load_friend_data()
+                        st.session_state.notifications = load_notifications(st.session_state.user.id)
+                        st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            with cols[2]:
+                if st.button(t("reject"), key=f"reject_{req['id']}"):
+                    success, msg = respond_friend_request(req['id'], False)
+                    if success:
+                        load_friend_data()
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            st.divider()
+
+    st.subheader(t("find_users"))
+    search_query = st.text_input(t("search_by_name"))
+    if search_query:
+        results = search_users(search_query)
+        if not results:
+            st.info("No users found")
+        else:
+            for user in results:
+                cols = st.columns([3,1,1])
+                with cols[0]:
+                    st.markdown(f"**{user['full_name']}**")
+                with cols[1]:
+                    if st.button(t("add_friend"), key=f"add_{user['id']}"):
+                        success, msg = send_friend_request(st.session_state.user.id, user['id'])
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                with cols[2]:
+                    if st.button(t("view_profile"), key=f"view_{user['id']}"):
+                        st.session_state.viewing_profile = user['id']
+                        st.rerun()
+                st.divider()
+
+    st.divider()
+    st.subheader(t("your_friends"))
+    if not st.session_state.friends:
+        st.info(t("no_friends"))
+    else:
+        for friend in st.session_state.friends:
+            cols = st.columns([1,4,1,1,1])
+            with cols[0]:
+                if friend.get('avatar_url'):
+                    st.image(friend['avatar_url'], width=30)
+                else:
+                    st.markdown("👤")
+            with cols[1]:
+                st.markdown(f"**{friend['full_name']}**")
+            with cols[2]:
+                if st.button(t("chat"), key=f"chat_{friend['id']}"):
+                    st.session_state.selected_chat = friend['id']
+                    st.rerun()
+            with cols[3]:
+                if st.button(t("call"), key=f"call_{friend['id']}"):
+                    room = hashlib.md5(f"{st.session_state.user.id}_{friend['id']}_{time.time()}".encode()).hexdigest()[:10]
+                    send_message(st.session_state.user.id, friend['id'], f"📞 Join my call: room={room}")
+                    start_call(room)
+                    st.rerun()
+            with cols[4]:
+                if st.button(t("profile_btn"), key=f"profile_{friend['id']}"):
+                    st.session_state.viewing_profile = friend['id']
+                    st.rerun()
+            st.divider()
+
+    if st.session_state.selected_chat:
+        st.subheader(t("chat"))
+        other_id = st.session_state.selected_chat
+        other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
+        if other.data:
+            other_name = other.data["full_name"]
+        else:
+            other_name = "User"
+        st.write(f"{t('chat')} with **{other_name}**")
+
+        messages = load_messages(st.session_state.user.id, other_id)
+        for msg in messages:
+            if msg["sender_id"] == st.session_state.user.id:
+                if msg.get("media_url"):
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_own_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+            else:
+                if msg.get("media_url"):
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+
+        with st.form("send_message", clear_on_submit=True):
+            msg_content = st.text_input(t("send_message"))
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
+            col1, col2 = st.columns([1,5])
+            with col1:
+                sent = st.form_submit_button(t("send"))
+            if sent:
+                if msg_content or uploaded_file:
+                    send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
+                    st.rerun()
+        if st.button(t("close_chat")):
+            st.session_state.selected_chat = None
+            st.rerun()
+        st.divider()
+
+    if st.session_state.in_call and st.session_state.call_room:
+        st.subheader(t("active_call"))
+        st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
+        st.markdown(t("share_room"))
+        jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
+        st.components.v1.html(f"""
+            <iframe src="{jitsi_url}" width="100%" height="500" allow="camera; microphone; fullscreen"></iframe>
+        """, height=520)
+        if st.button(t("end_call")):
+            end_call()
+            st.rerun()
+    else:
+        if st.button(t("start_call")):
+            start_call()
+            st.rerun()
+
+def render_map():
+    st.header(t("satellite_map"))
+    sats = {
+        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
+        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
+        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
+        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
+    }
+    df = pd.DataFrame([
+        {"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]}
+        for name, data in sats.items()
+    ])
+    st.dataframe(df, use_container_width=True)
+    st.divider()
+    cols = st.columns(4)
+    for i, (name, data) in enumerate(sats.items()):
+        with cols[i % 4]:
+            st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
+
+def render_profile():
+    st.header(t("profile"))
+    if st.session_state.profile is None:
+        return
+    profile = st.session_state.profile
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
+        else:
+            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
+        uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg"], label_visibility="collapsed")
+        if uploaded:
+            url = upload_avatar(st.session_state.user.id, uploaded)
+            if url:
+                profile["avatar_url"] = url
+                update_profile(profile)
+                st.rerun()
+
+    with col2:
+        with st.form("edit_profile"):
+            st.markdown("#### Account Information")
+            full_name = st.text_input(t("full_name"), value=profile.get("full_name", ""))
+            bio = st.text_area(t("bio"), value=profile.get("bio", ""), height=100)
+            location = st.text_input(t("location"), value=profile.get("location", ""))
+            moncash_phone = st.text_input(t("moncash_phone"), value=profile.get("moncash_phone", ""))
+            if st.form_submit_button(t("save_changes"), use_container_width=True):
+                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
+                if update_profile(profile):
+                    st.success(t("profile"))
+                    st.rerun()
+
+    st.divider()
+    cola, colb, colc, cold = st.columns(4)
+    with cola:
+        st.metric(t("posts_count"), len(st.session_state.posts))
+    with colb:
+        st.metric(t("connections"), profile.get("connections", 0))
+    with colc:
+        st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
+    with cold:
+        st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
+
+def owner_space():
+    st.header(t("owner_space"))
+    
+    if not st.session_state.owner_space_access:
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
+            if st.form_submit_button(t("login_button")):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+
+    last_seen = get_last_seen_signup()
+    new_users = get_new_users(last_seen)
+    if new_users:
+        send_email_notification(new_users)
+        update_last_seen_signup()
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management")])
+
+    with tab1:
+        st.subheader(t("owner_dashboard"))
+        real_balance = None
+        if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
+            try:
+                headers = {"X-API-Key": BACKEND_API_KEY}
+                resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    real_balance = data.get("balance", 0.0)
+                else:
+                    st.warning("Could not fetch real balance from backend.")
+            except Exception as e:
+                st.warning(f"Backend unreachable: {e}")
+        else:
+            st.info("Backend not configured. Showing simulated data for now.")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if real_balance is not None:
+                st.metric(t("balance"), f"${real_balance:,.2f}")
+            else:
+                duration = time.time() - st.session_state.connection_time
+                st.session_state.data_comp = duration * 0.035
+                st.metric(t("compensation"), f"${st.session_state.data_comp:.4f}")
+        with col2:
+            st.metric(t("uptime"), get_uptime())
+        with col3:
+            st.metric(t("connections"), np.random.randint(100, 500))
+
+        st.divider()
+
+        st.subheader(t("transfer_funds"))
+        st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
+        st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
+
+        if real_balance is not None:
+            amount = st.number_input(
+                t("amount_transfer"),
+                min_value=1.0,
+                max_value=float(real_balance),
+                value=min(10.0, float(real_balance)),
+                step=10.0,
+                format="%.2f"
+            )
+            if st.button(t("transfer"), use_container_width=True):
+                if amount <= 0:
+                    st.error("Enter a valid amount.")
+                else:
+                    with st.spinner("Processing transfer..."):
+                        try:
+                            headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+                            payload = {
+                                "amount": amount,
+                                "recipient_phone": MONCASH_NUM
+                            }
+                            resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
+                            else:
+                                st.error(f"Transfer failed: {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        else:
+            st.info("To enable real transfers, set up your backend and configure the secrets.")
+
+    with tab2:
+        st.subheader(t("new_users"))
+        st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
+        
+        try:
+            with st.spinner("Loading user data..."):
+                response = supabase.table("profiles").select(
+                    "id, full_name, avatar_url, join_date, location, bio"
+                ).order("join_date", desc=True).limit(100).execute()
+                recent_users = response.data if response.data else []
+        except Exception as e:
+            st.error(f"Failed to load user data: {e}")
+            recent_users = []
+        
+        if recent_users:
+            display_data = []
+            for u in recent_users:
+                display_data.append({
+                    "Full Name": u.get('full_name', 'N/A'),
+                    "User ID": u['id'],
+                    "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
+                    "Location": u.get('location', 'Not set'),
+                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else '')
+                })
+            df = pd.DataFrame(display_data)
+            st.dataframe(df, use_container_width=True)
+            
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Report as CSV",
+                data=csv,
+                file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("No users found in the database.")
+        
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+
+    with tab3:
+        st.subheader(t("post_moderation"))
+        st.markdown("Review all posts (public & private) and take action if needed.")
+        try:
+            posts = supabase.table("posts").select(
+                "*, profiles!posts_user_id_fkey(full_name, avatar_url, id)"
+            ).order("created_at", desc=True).execute()
+            all_posts = posts.data
+        except Exception as e:
+            st.error(f"Failed to load posts: {e}")
+            all_posts = []
+
+        if not all_posts:
+            st.info("No posts found.")
+        else:
+            if "warn_post_id" not in st.session_state:
+                st.session_state.warn_post_id = None
+            for post in all_posts:
+                with st.container():
+                    cols = st.columns([2, 4, 2, 1, 1])
+                    with cols[0]:
+                        st.markdown(f"**User:** {post['profiles']['full_name']}")
+                    with cols[1]:
+                        content = post.get('content', '')[:100] + "..." if post.get('content') and len(post['content']) > 100 else post.get('content', '')
+                        st.markdown(f"**Content:** {content}")
+                    with cols[2]:
+                        st.markdown(f"**Visibility:** {'Public' if post.get('is_public', True) else 'Private'}")
+                        st.caption(post['created_at'][:16])
+                    with cols[3]:
+                        if st.button(t("delete_post"), key=f"del_{post['id']}"):
+                            if delete_post(post['id']):
+                                st.success("Post deleted.")
+                                st.rerun()
+                            else:
+                                st.error("Delete failed.")
+                    with cols[4]:
+                        if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
+                            st.session_state.warn_post_id = post['id']
+                            st.rerun()
+
+                    if st.session_state.warn_post_id == post['id']:
+                        with st.form(key=f"warn_form_{post['id']}"):
+                            default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
+                            warn_msg = st.text_area("Warning message", value=default_msg, height=100)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("Send Warning"):
+                                    success = send_message(
+                                        st.session_state.user.id,
+                                        post['user_id'],
+                                        f"[MODERATION] {warn_msg}"
+                                    )
+                                    if success:
+                                        st.success("Warning sent to user.")
+                                        if delete_post(post['id']):
+                                            st.info("Post also deleted.")
+                                        st.session_state.warn_post_id = None
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to send message.")
+                            with col2:
+                                if st.form_submit_button("Cancel"):
+                                    st.session_state.warn_post_id = None
+                                    st.rerun()
+                    st.divider()
+
+    with tab4:
+        st.subheader(t("client_payments"))
+        st.markdown("""
+        **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
+        Clients can send money directly to your MonCash personal number:  
+        `+50947385663`  
+        *(They must use the MonCash app or a MonCash agent.)*
+
+        **Option 2 – US Bank Transfer (for any amount)**  
+        For international clients, you can receive USD via bank transfer to your UNIBANK account:  
+        `105-2016-16594727`  
+        *(Provide them with your bank name: UNIBANK, Haiti.)*
+
+        **Option 3 – Request a payment link**  
+        For larger amounts, contact the development team to generate a secure payment link.
+        """)
+
+    with tab5:
+        st.subheader(t("gift_management"))
+        st.markdown("View all completed gifts and process payouts to streamers.")
+
+        if supabase is None:
+            st.warning("Supabase not connected.")
+            return
+
+        try:
+            gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
+            gifts_data = gifts.data if gifts.data else []
+        except Exception as e:
+            st.error(f"Failed to load gifts: {e}")
+            gifts_data = []
+
+        if not gifts_data:
+            st.info(t("no_gifts"))
+        else:
+            df = pd.DataFrame([{
+                "ID": g['id'],
+                "Date": g['created_at'][:16],
+                "Session ID": g['session_id'],
+                "Sender": g.get('sender_name', 'Unknown'),
+                "Recipient ID": g['recipient_id'],
+                "Amount": f"{g['amount']} {g['currency']}",
+                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
+            } for g in gifts_data])
+            st.dataframe(df, use_container_width=True)
+
+            st.markdown(f"### {t('payout_summary')}")
+            total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
+            st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
+
+            if st.button(t("mark_paid")):
+                st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
+
+    st.divider()
+    st.markdown(f"### {t('contact_support')}")
+    st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
+
+    if st.button(t("logout_owner")):
+        st.session_state.owner_space_access = False
+        st.rerun()
+
+def main_app():
+    with st.sidebar:
+        if st.session_state.logged_in:
+            st.success("✅ Logged in")
+            if st.session_state.refresh_token:
+                st.info("🔑 Refresh token present")
+            else:
+                st.warning("⚠️ No refresh token")
+        else:
+            st.info("🔓 Not logged in")
+            try:
+                cookie_token = st.query_params.get("cookie_sb_refresh_token", [None])[0]
+                if cookie_token:
+                    st.info("🍪 Refresh token found in cookie")
+                else:
+                    st.info("🍪 No refresh token cookie")
+            except:
+                pass
+        st.divider()
+
+        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='collaborators'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes<br>
+            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+
+        if st.session_state.unread_count > 0:
+            st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
+
+        if st.session_state.profile and st.session_state.profile.get("is_live"):
+            st.markdown(f"🔴 **{t('you_are_live')}**")
+            if st.button(t("end_live_session")):
+                for ls in st.session_state.live_sessions:
+                    if ls["user_id"] == st.session_state.user.id:
+                        end_live_session(ls["id"])
+                        st.rerun()
+                        break
+        else:
+            with st.expander(t("go_live")):
+                st.markdown(f"**{t('select_platform')}:**")
+                method = st.radio(t("select_platform"), [t("external_platform"), t("in_app_camera")], index=0)
+                platform = None
+                if method == t("external_platform"):
+                    st.markdown(f"**{t('select_platform')}:**")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("📺 YouTube", key="yt"):
+                            platform = "YouTube"
+                    with col2:
+                        if st.button("📘 Facebook", key="fb"):
+                            platform = "Facebook"
+                    with col3:
+                        if st.button("🎮 Twitch", key="tw"):
+                            platform = "Twitch"
+                else:
+                    platform = "inapp"
+
+                if platform:
+                    st.markdown(f"**Selected: {platform if platform != 'inapp' else t('in_app_camera')}**")
+                    with st.form("go_live_form"):
+                        title = st.text_input(t("live_title"))
+                        if st.form_submit_button(t("create_live_session")):
+                            if title:
+                                session_id = create_live_session(
+                                    title, 
+                                    platform, 
+                                    method='external' if platform != 'inapp' else 'inapp'
+                                )
+                                if session_id:
+                                    if platform == 'inapp':
+                                        st.success(t("you_are_live"))
+                                    else:
+                                        st.success(t("you_are_live"))
+                                        st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
+                                        st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a title")
+
+        st.divider()
+
+        lat, sig, qual = get_network_status()
+        st.markdown(f"### {t('system_health')}")
+        st.markdown(f"""
+        <div class='health-text'>
+        {t('signal')}: {sig}<br>
+        {t('latency')}: {lat}ms<br>
+        {t('quality')}: {qual}%<br>
+        {t('uptime')}: {get_uptime()}<br>
+        {t('encrypted')}
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+        st.markdown(f"{t('compensation')}: ${st.session_state.data_comp:.4f}")
+        st.divider()
+        if st.session_state.profile:
+            st.markdown(f"{t('logged_in_as')}: {st.session_state.profile.get('full_name', 'User')}")
+        if st.button(t("logout")):
+            logout()
+        st.divider()
+
+        pages = {
+            t("feed"): render_feed,
+            t("friends_chat"): render_friends_page,
+            t("satellite_map"): render_map,
+            t("profile"): render_profile,
+            t("owner_space"): owner_space
+        }
+        choice = st.selectbox(t("feed"), list(pages.keys()))
+    pages[choice]()
+
+def login_interface():
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("<div style='text-align: center;'><span class='haiti-symbol' style='font-size:6rem;'>🇭🇹</span></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #0a2a44;'>🏠 Home Sweet Home</h1>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name' style='font-size:1.8rem;'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='collaborators' style='font-size:1rem;'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes · Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("---")
+
+        lang_options = {
+            "en": "English",
+            "fr": "Français",
+            "es": "Español",
+            "pt": "Português",
+            "ru": "Русский",
+            "ar": "العربية",
+            "zh": "中文",
+            "hi": "हिन्दी"
+        }
+        selected_lang = st.selectbox("Language / Langue / Idioma", options=list(lang_options.keys()), format_func=lambda x: lang_options[x], index=0)
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+        auth_method = st.radio(t("login_title"), [t("email_method"), t("phone_method")], horizontal=True)
+
+        if auth_method == t("email_method"):
+            tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
+            with tab1:
+                with st.form("login_email"):
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    remember = st.checkbox(t("remember_me"))
+                    if st.form_submit_button(t("login_button"), use_container_width=True):
+                        if email and password:
+                            log_in_email(email, password, remember)
+                        else:
+                            st.warning("Please enter email and password")
+            with tab2:
+                with st.form("signup_email"):
+                    full_name = st.text_input(t("full_name"))
+                    email = st.text_input(t("email"))
+                    password = st.text_input(t("password"), type="password")
+                    if st.form_submit_button(t("signup_button"), use_container_width=True):
+                        if full_name and email and password:
+                            sign_up_email(email, password, full_name)
+                        else:
+                            st.warning("Please fill all fields")
+            with tab3:
+                with st.form("reset_email"):
+                    reset_email = st.text_input(t("email"))
+                    if st.form_submit_button(t("send_reset_link"), use_container_width=True):
+                        if reset_email:
+                            reset_password_email(reset_email)
+                        else:
+                            st.warning("Please enter your email")
+        else:
+            st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
+            if not st.session_state.phone_otp_sent:
+                with st.form("phone_request"):
+                    phone = st.text_input(t("phone_number"))
+                    remember = st.checkbox(t("remember_me"))
+                    if st.form_submit_button(t("send_otp"), use_container_width=True):
+                        if phone:
+                            if send_phone_otp(phone):
+                                st.session_state.phone_otp_sent = True
+                                st.session_state.temp_phone = phone
+                                st.session_state.phone_remember = remember
+                                st.rerun()
+                        else:
+                            st.warning("Please enter a phone number")
+            else:
+                st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
+                with st.form("phone_verify"):
+                    otp = st.text_input(t("enter_otp"))
+                    if st.form_submit_button(t("verify_login"), use_container_width=True):
+                        if otp:
+                            remember = st.session_state.get("phone_remember", False)
+                            verify_phone_otp(st.session_state.temp_phone, otp, remember)
+                        else:
+                            st.warning("Please enter the OTP")
+                if st.button(t("back_resend")):
+                    st.session_state.phone_otp_sent = False
+                    st.session_state.temp_phone = ""
+                    st.rerun()
+
+if __name__ == "__main__":
+    if st.session_state.get("app_authenticated", False) or not APP_PASSWORD:
+        st.markdown("""
+        <div class="home-title">
+            <h1>🏠 Home Sweet Home</h1>
+            <p>Your satellite communication & social platform</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    if not st.session_state.logged_in:
+        login_interface()
+    else:
+        main_app()
