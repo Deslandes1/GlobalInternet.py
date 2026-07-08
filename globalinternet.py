@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - video + image upload) ======
+# ====== FULL app.py (Lakay se Lakay - media fallback to base64) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.18 (Video & image upload support)
+# Version: 77.8.19 (Media upload with fallback to base64)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -331,7 +331,6 @@ LANG = {
         "network_error": "⚠️ Cannot connect to the authentication server. Please check your internet connection and try again. If the problem persists, contact support.",
         "debug_hint": "If you are an administrator, enable 'Show debug info' below to see the raw error.",
         "show_debug": "Show debug info",
-        # Home page translations
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
@@ -1386,12 +1385,16 @@ def upload_avatar(user_id, image_file):
             st.session_state.last_error = f"Avatar upload failed: {e}"
         return None
 
+# ====== FIXED: upload_post_media with fallback to base64 ======
 def upload_post_media(user_id, file):
     if supabase is None:
-        return None
+        # Fallback to base64 if supabase not available
+        return upload_media_base64(file)
+    
     if not ensure_bucket_exists("post_media"):
-        st.error("❌ Cannot upload: 'post_media' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
-        return None
+        # Fallback to base64 if bucket cannot be ensured
+        return upload_media_base64(file)
+    
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
@@ -1408,19 +1411,31 @@ def upload_post_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        error_message = str(e)
-        if "new row violates row-level security policy" in error_message:
-            st.error(t("storage_error").replace("avatars", "post_media"))
-        else:
-            st.session_state.last_error = f"Media upload failed: {e}"
+        # If upload to Supabase fails, fallback to base64
+        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+        return upload_media_base64(file)
+
+# ====== Helper: upload media as base64 data URL ======
+def upload_media_base64(file):
+    try:
+        file_bytes = file.getvalue()
+        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        content_type = file.type
+        data_url = f"data:{content_type};base64,{b64}"
+        media_type = "video" if content_type.startswith("video") else "image"
+        return {"url": data_url, "type": media_type}
+    except Exception as e:
+        st.session_state.last_error = f"Base64 upload failed: {e}"
         return None
 
+# ====== FIXED: upload_chat_media with fallback to base64 ======
 def upload_chat_media(user_id, file):
     if supabase is None:
-        return None
+        return upload_media_base64(file)
+    
     if not ensure_bucket_exists("chat_media"):
-        st.error("❌ Cannot upload: 'chat_media' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
-        return None
+        return upload_media_base64(file)
+    
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
@@ -1437,12 +1452,8 @@ def upload_chat_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        error_message = str(e)
-        if "new row violates row-level security policy" in error_message:
-            st.error(t("storage_error").replace("avatars", "chat_media"))
-        else:
-            st.session_state.last_error = f"Chat media upload failed: {e}"
-        return None
+        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+        return upload_media_base64(file)
 
 def delete_post(post_id):
     if supabase is None:
@@ -2537,15 +2548,15 @@ def login_interface():
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
 def display_media_item(media):
-    """Display a single media item (image or video) with st.image or st.video."""
+    """Display a single media item (image or video) using st.image or st.video."""
     try:
+        url = media["url"]
         if media["type"] == "image":
-            st.image(media["url"], use_column_width=True)
+            st.image(url, use_column_width=True)
         elif media["type"] == "video":
-            # Use st.video for better compatibility
-            st.video(media["url"])
+            st.video(url)
         else:
-            st.markdown(f"[Media file]({media['url']})")
+            st.markdown(f"[Media file]({url})")
     except Exception as e:
         st.error(f"Error displaying media: {e}")
         st.markdown(f"[Click to open media]({media['url']})")
@@ -2594,7 +2605,7 @@ def render_feed():
             )
         media_files = st.file_uploader(
             t("add_media"),
-            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],  # images + videos
+            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
             accept_multiple_files=True
         )
         st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For videos larger than 200MB, use a link (YouTube, etc.).")
