@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.7 (Updated AI explanation with World Cup mention)
+# Version: 77.8.8 (Added "HAITI" in blue/red on home page)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3932,6 +3932,10 @@ if __name__ == "__main__":
         st.markdown("""
         <div class="home-title">
             <h1>🏠 Home Sweet Home</h1>
+            <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
+                 background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); 
+                 -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+                 display: inline-block; padding: 0 20px; margin: 0.2rem 0;">HAITI</div>
             <p>Your Haitian social media platform</p>
         </div>
         """, unsafe_allow_html=True)
