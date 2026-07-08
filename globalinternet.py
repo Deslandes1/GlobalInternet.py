@@ -1,9 +1,9 @@
-# ====== FULL app.py (all foreign-key joins replaced) ======
+# ====== FULL app.py (fixed video playback) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.9 (Home page fully translated for Haitian Creole)
+# Version: 77.8.10 (Video playback fixed with HTML5 player)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2571,6 +2571,29 @@ def login_interface():
 
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
+# ====== NEW: Helper to display media items (image/video) reliably ======
+def display_media_item(media):
+    """Display a single media item (image or video) with fallback."""
+    try:
+        if media["type"] == "image":
+            st.image(media["url"], use_column_width=True)
+        elif media["type"] == "video":
+            # Use HTML5 video player with controls for better compatibility
+            video_html = f"""
+            <video controls style="width:100%; max-height:60vh; border-radius:12px;" preload="metadata">
+                <source src="{media['url']}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            """
+            st.markdown(video_html, unsafe_allow_html=True)
+            # Also provide a direct link fallback
+            st.markdown(f"[📹 Open video directly]({media['url']})", unsafe_allow_html=True)
+        else:
+            st.markdown(f"[Media file]({media['url']})")
+    except Exception as e:
+        st.error(f"Error displaying media: {e}")
+        st.markdown(f"[Click to open media]({media['url']})")
+
 def render_feed():
     """Full feed with posts, reactions, comments, sharing, video embedding."""
     if st.session_state.viewing_profile:
@@ -2736,10 +2759,7 @@ def render_feed():
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
-                        if media["type"] == "image":
-                            st.image(media["url"], use_column_width=True)
-                        elif media["type"] == "video":
-                            st.video(media["url"])
+                        display_media_item(media)
 
                 # Caption with clickable links and video embedding
                 if post['content']:
@@ -3172,10 +3192,7 @@ def render_user_profile(user_id):
                         clickable_content = make_clickable(post['content'])
                         st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     for media in post.get("media_urls", []):
-                        if media["type"] == "image":
-                            st.image(media["url"], use_column_width=True)
-                        elif media["type"] == "video":
-                            st.video(media["url"])
+                        display_media_item(media)
                     st.divider()
 
 def render_map():
