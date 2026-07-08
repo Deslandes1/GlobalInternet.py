@@ -1,9 +1,9 @@
-# ====== FULL app.py (with fixed bucket creation via REST API) ======
+# ====== FULL app.py (No startup bucket checks – errors only on upload) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.12 (Fixed bucket creation via direct API)
+# Version: 77.8.13 (Removed auto bucket check on startup)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -33,7 +33,6 @@ import edge_tts
 st.set_page_config(page_title="Home Sweet Home", page_icon="🏠", layout="wide")
 
 # ====== GLOBAL APP PASSWORD PROTECTION ======
-# Read password from the secret "Login_password"
 APP_PASSWORD = st.secrets.get("Login_password")
 
 if APP_PASSWORD:
@@ -98,13 +97,14 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# ====== ENSURE STORAGE BUCKETS EXIST (using direct REST API) ======
+# ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
 def ensure_bucket_exists(bucket_name, public=True):
-    """Check if bucket exists; if not, create it using Supabase Storage REST API."""
+    """Check if bucket exists; if not, create it using Supabase Storage REST API.
+       This is now only called when uploading files, so errors appear only then.
+    """
     if supabase is None:
         return False
 
-    # Prepare headers for Supabase API calls
     supabase_key = st.secrets.get("SUPABASE_KEY")
     supabase_url = st.secrets.get("SUPABASE_URL")
     if not supabase_key or not supabase_url:
@@ -117,14 +117,13 @@ def ensure_bucket_exists(bucket_name, public=True):
         "Content-Type": "application/json"
     }
 
-    # Check if bucket exists
     check_url = f"{supabase_url}/storage/v1/bucket/{bucket_name}"
     try:
         check_resp = requests.get(check_url, headers=headers)
         if check_resp.status_code == 200:
-            return True  # bucket exists
+            return True
         elif check_resp.status_code == 404:
-            # Bucket does not exist – create it
+            # Try to create
             create_url = f"{supabase_url}/storage/v1/bucket"
             payload = {"name": bucket_name, "public": public}
             create_resp = requests.post(create_url, json=payload, headers=headers)
@@ -132,11 +131,9 @@ def ensure_bucket_exists(bucket_name, public=True):
                 st.success(f"✅ Created storage bucket: {bucket_name}")
                 return True
             else:
-                # If the error says "already exists", treat as success
                 if "already exists" in create_resp.text:
                     return True
-                error_msg = create_resp.text
-                st.error(f"❌ Failed to create bucket '{bucket_name}': {error_msg}\nPlease create it manually in Supabase Dashboard → Storage.")
+                st.error(f"❌ Failed to create bucket '{bucket_name}': {create_resp.text}\nPlease create it manually in Supabase Dashboard → Storage.")
                 return False
         else:
             # Other error (e.g., 403)
@@ -145,11 +142,6 @@ def ensure_bucket_exists(bucket_name, public=True):
     except Exception as e:
         st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
         return False
-
-# Create buckets on startup
-if supabase:
-    for bucket in ["avatars", "post_media", "chat_media"]:
-        ensure_bucket_exists(bucket, public=True)
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -1257,7 +1249,6 @@ def get_tiktok_id(url):
     return None
 
 def get_twitch_url(url):
-    # Accept any twitch.tv URL – we'll handle channel vs video later
     if 'twitch.tv' in url:
         return url
     return None
@@ -1337,13 +1328,10 @@ def embed_video_from_url(url):
             parent = st.request.host if hasattr(st, 'request') else 'localhost'
         except:
             parent = 'localhost'
-        # Detect if it's a video/clip or a channel
         if '/videos/' in twitch_url or '/clip/' in twitch_url:
-            # Video or clip
             video_id = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?video={video_id}&parent={parent}&autoplay=true"
         else:
-            # Channel (live stream)
             channel = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}&autoplay=true"
         embed_html = f"""
@@ -1651,12 +1639,10 @@ def load_posts_cached(user_id=None, author_id=None):
     if supabase is None:
         return []
     try:
-        # Build query
         query = supabase.table("posts").select("*")
         if author_id is not None:
             query = query.eq("user_id", author_id).eq("is_public", True)
         elif user_id is not None:
-            # We'll fetch public all, and private for user_id
             public_resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select("*").eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
             posts = public_resp.data + private_resp.data
@@ -1672,7 +1658,6 @@ def load_posts_cached(user_id=None, author_id=None):
             resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             posts = resp.data
 
-        # Collect user IDs from posts
         user_ids = {p["user_id"] for p in posts}
         profiles = {}
         if user_ids:
@@ -1680,7 +1665,6 @@ def load_posts_cached(user_id=None, author_id=None):
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
 
-        # Inject profile data into each post
         for post in posts:
             p = profiles.get(post["user_id"], {})
             post["profiles"] = {
@@ -1689,7 +1673,6 @@ def load_posts_cached(user_id=None, author_id=None):
                 "is_live": p.get("is_live", False),
             }
             post["media_urls"] = post.get("media_urls", [])
-            # reactions
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
             if reactions_resp.data:
@@ -1697,7 +1680,6 @@ def load_posts_cached(user_id=None, author_id=None):
                     emoji = r["emoji"]
                     counts[emoji] = counts.get(emoji, 0) + 1
             post["reactions"] = counts
-            # comment count
             comments_resp = supabase.table("comments").select("id", count="exact").eq("post_id", post["id"]).execute()
             post["comment_count"] = comments_resp.count if hasattr(comments_resp, 'count') else 0
 
@@ -1826,7 +1808,6 @@ def load_comments(post_id):
         resp = supabase.table("comments").select("*").eq("post_id", post_id).order("created_at").execute()
         comments = resp.data or []
 
-        # Collect user IDs from comments
         user_ids = {c["user_id"] for c in comments}
         profiles = {}
         if user_ids:
@@ -1895,11 +1876,9 @@ def load_live_sessions():
     if supabase is None:
         return []
     try:
-        # Fetch all live sessions (without joining profiles)
         response = supabase.table("live_sessions").select("*").eq("is_live", True).order("started_at", desc=True).execute()
         sessions = response.data or []
 
-        # Collect all user_ids
         user_ids = {s["user_id"] for s in sessions}
         profiles = {}
         if user_ids:
@@ -1907,7 +1886,6 @@ def load_live_sessions():
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
 
-        # Inject profile data into each session
         for s in sessions:
             p = profiles.get(s["user_id"], {})
             s["profiles"] = {
@@ -2000,13 +1978,11 @@ def get_live_session(session_id):
     if supabase is None:
         return None
     try:
-        # Fetch the session without join
         response = supabase.table("live_sessions").select("*").eq("id", session_id).single().execute()
         session = response.data
         if not session:
             return None
 
-        # Fetch the profile for the session's user
         profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").eq("id", session["user_id"]).single().execute()
         profile = profile_resp.data or {}
         session["profiles"] = {
@@ -2085,18 +2061,15 @@ def respond_friend_request(request_id, accept):
 
 # ====== FIXED load_friend_data (without foreign keys) ======
 def load_friend_data():
-    """Fetch friend requests and friends without relying on foreign key joins."""
     if supabase is None or not st.session_state.user:
         return
     user_id = st.session_state.user.id
 
-    # 1. Get all pending requests where user is receiver
     pending_resp = supabase.table("friend_requests").select(
         "id, sender_id, receiver_id, status, created_at"
     ).eq("receiver_id", user_id).eq("status", "pending").execute()
     pending_raw = pending_resp.data or []
 
-    # 2. Get all accepted friend requests (sent and received)
     sent_resp = supabase.table("friend_requests").select(
         "id, sender_id, receiver_id, status, created_at"
     ).eq("sender_id", user_id).eq("status", "accepted").execute()
@@ -2105,24 +2078,20 @@ def load_friend_data():
     ).eq("receiver_id", user_id).eq("status", "accepted").execute()
     accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
 
-    # Collect all unique user IDs from these requests
     user_ids = set()
     for req in pending_raw:
         user_ids.add(req["sender_id"])
     for req in accepted_raw:
         user_ids.add(req["sender_id"])
         user_ids.add(req["receiver_id"])
-    # Remove current user's own ID
     user_ids.discard(user_id)
 
-    # 3. Fetch profiles for all these users
     profiles = {}
     if user_ids:
         profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url").in_("id", list(user_ids)).execute()
         for p in profiles_resp.data or []:
             profiles[p["id"]] = p
 
-    # 4. Build the pending friend_requests list with sender info
     pending_requests = []
     for req in pending_raw:
         sender_id = req["sender_id"]
@@ -2139,7 +2108,6 @@ def load_friend_data():
         })
     st.session_state.friend_requests = pending_requests
 
-    # 5. Build the friends list (accepted)
     friends = []
     seen = set()
     for req in accepted_raw:
@@ -2534,7 +2502,6 @@ def log_in_email(email, password, remember=False, show_debug=False):
 
 # ====== LOGIN INTERFACE ======
 def login_interface():
-    # Show a white dove as a symbol of hope instead of the Citadel image
     st.markdown(
         """
         <div style="text-align: center; padding: 20px 0;">
@@ -2546,7 +2513,6 @@ def login_interface():
         unsafe_allow_html=True
     )
 
-    # Language selection has been moved to the sidebar; no longer shown here.
     st.markdown("---")
 
     show_debug = st.checkbox(t("show_debug"), value=False)
@@ -2617,14 +2583,11 @@ def login_interface():
 
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
-# ====== NEW: Helper to display media items (image/video) reliably ======
 def display_media_item(media):
-    """Display a single media item (image or video) with fallback."""
     try:
         if media["type"] == "image":
             st.image(media["url"], use_column_width=True)
         elif media["type"] == "video":
-            # Use HTML5 video player with controls for better compatibility
             video_html = f"""
             <video controls style="width:100%; max-height:60vh; border-radius:12px;" preload="metadata">
                 <source src="{media['url']}" type="video/mp4">
@@ -2632,7 +2595,6 @@ def display_media_item(media):
             </video>
             """
             st.markdown(video_html, unsafe_allow_html=True)
-            # Also provide a direct link fallback
             st.markdown(f"[📹 Open video directly]({media['url']})", unsafe_allow_html=True)
         else:
             st.markdown(f"[Media file]({media['url']})")
@@ -2641,7 +2603,6 @@ def display_media_item(media):
         st.markdown(f"[Click to open media]({media['url']})")
 
 def render_feed():
-    """Full feed with posts, reactions, comments, sharing, video embedding."""
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
         return
@@ -2654,7 +2615,6 @@ def render_feed():
             st.session_state.last_error = None
             st.rerun()
 
-    # Check for live session in URL
     try:
         params = st.query_params
     except AttributeError:
@@ -2669,7 +2629,6 @@ def render_feed():
         render_live_page(st.session_state.viewing_live)
         return
 
-    # --- Create Post ---
     st.markdown(f"### {t('create_post')}")
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
@@ -2706,7 +2665,6 @@ def render_feed():
                     st.rerun()
     st.divider()
 
-    # --- Live sessions banner ---
     active_lives = st.session_state.live_sessions
     if active_lives:
         st.markdown("### 🔴 Live Now")
@@ -2726,7 +2684,6 @@ def render_feed():
                 st.divider()
     st.divider()
 
-    # --- Delete confirmation ---
     if st.session_state.delete_confirm:
         post_id, _ = st.session_state.delete_confirm
         st.warning("Are you sure you want to delete this post?")
@@ -2744,13 +2701,11 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    # --- Posts feed ---
     if not st.session_state.posts:
         st.info("No posts yet. Be the first to create one!")
     else:
         for post in st.session_state.posts:
             with st.container():
-                # Post header
                 col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
                 with col_a:
                     avatar = post.get("profiles", {}).get("avatar_url")
@@ -2783,7 +2738,6 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # Edit form
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -2801,22 +2755,18 @@ def render_feed():
                                 st.rerun()
                     st.divider()
 
-                # Media
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
                         display_media_item(media)
 
-                # Caption with clickable links and video embedding
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
-                    # Auto-embed video links
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
                         embed_video_from_url(url)
 
-                # Reactions
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
@@ -2844,7 +2794,6 @@ def render_feed():
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
 
-                # Comments section
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
 
@@ -2915,7 +2864,6 @@ def render_feed():
                 st.divider()
 
 def render_friends_page():
-    """Full friends, chat, and calling interface."""
     st.header(t("friends_chat"))
 
     with st.expander(t("setup_instructions")):
@@ -2938,7 +2886,6 @@ def render_friends_page():
     st.markdown(f"<div class='friend-count'>{t('your_friends')}: {len(st.session_state.friends)}</div>", unsafe_allow_html=True)
     st.divider()
 
-    # Notifications
     with st.expander(f"🔔 {t('friend_requests')} ({st.session_state.unread_count})", expanded=True):
         if not st.session_state.notifications:
             st.info("No notifications")
@@ -2956,7 +2903,6 @@ def render_friends_page():
                             st.rerun()
                 st.divider()
 
-    # Friend requests received
     st.subheader(t("friend_requests"))
     if not st.session_state.friend_requests:
         st.info(t("no_friends"))
@@ -2985,7 +2931,6 @@ def render_friends_page():
                         st.error(msg)
             st.divider()
 
-    # Find users
     st.subheader(t("find_users"))
     search_query = st.text_input(t("search_by_name"))
     if search_query:
@@ -3040,7 +2985,6 @@ def render_friends_page():
                     st.rerun()
             st.divider()
 
-    # Chat interface
     if st.session_state.selected_chat:
         st.subheader(t("chat"))
         other_id = st.session_state.selected_chat
@@ -3157,7 +3101,6 @@ def render_friends_page():
             st.rerun()
 
 def render_user_profile(user_id):
-    """Show a user's profile and their posts."""
     if supabase is None:
         st.error("Database not connected.")
         if st.button(t("back_to_feed")):
@@ -3242,7 +3185,6 @@ def render_user_profile(user_id):
                     st.divider()
 
 def render_map():
-    """Satellite map (dummy)"""
     st.header(t("satellite_map"))
     sats = {
         "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
@@ -3261,9 +3203,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# ====== FIXED render_profile – no false error message ======
 def render_profile():
-    """Edit current user profile."""
     st.header(t("profile"))
     if st.session_state.profile is None:
         return
@@ -3283,7 +3223,6 @@ def render_profile():
                 update_profile(profile)
                 st.success("Avatar updated successfully!")
                 st.rerun()
-            # The error message is now handled inside upload_avatar() – no extra error here
     with col2:
         with st.form("edit_profile"):
             st.markdown("#### Account Information")
@@ -3309,7 +3248,6 @@ def render_profile():
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
 def render_live_page(session_id):
-    """Live session view (broadcaster or viewer) with participants, gifts, chat."""
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
         st.error("This live session has ended or does not exist.")
@@ -3321,7 +3259,6 @@ def render_live_page(session_id):
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
 
-    # Background filter handling (for participants)
     if st.session_state.user:
         bg_key = f"bg_{session_id}_{st.session_state.user.id}"
         if st.session_state.get(bg_key) is None:
@@ -3370,7 +3307,6 @@ def render_live_page(session_id):
                             else:
                                 st.warning("Please enter a URL")
             if stream_url:
-                # Embed logic for platforms
                 if "facebook.com" in stream_url:
                     embed_code = f"""
                     <div id="fb-root"></div>
@@ -3400,10 +3336,8 @@ def render_live_page(session_id):
             else:
                 st.info("The streamer has not provided a video URL yet.")
         else:
-            # In-app streaming (simplified version – full implementation would have PeerJS)
             if is_broadcaster:
                 st.success(t("you_are_broadcaster"))
-                # Show participant management
                 st.subheader("🎤 Participant Requests")
                 try:
                     pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
@@ -3474,10 +3408,8 @@ def render_live_page(session_id):
                 else:
                     st.info("No participants yet")
             else:
-                # Viewer
                 st.info(t("you_are_viewer"))
 
-        # Shareable link
         try:
             base_url = st.request.url.split('?')[0]
         except:
@@ -3562,7 +3494,6 @@ def render_live_page(session_id):
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
 def owner_space():
-    """Owner Dashboard – only accessible with proper password."""
     st.header(t("owner_space"))
     
     if not st.session_state.owner_space_access:
@@ -3698,7 +3629,6 @@ def owner_space():
         try:
             posts = supabase.table("posts").select("*").order("created_at", desc=True).execute()
             all_posts = posts.data or []
-            # Fetch profiles for these posts
             user_ids = {p["user_id"] for p in all_posts}
             profiles = {}
             if user_ids:
@@ -3851,7 +3781,6 @@ def main_app():
         """, unsafe_allow_html=True)
         st.divider()
 
-        # ====== LANGUAGE SELECTOR ======
         lang_options = {
             "en": "English",
             "fr": "Français",
@@ -3940,7 +3869,6 @@ def main_app():
             logout()
         st.divider()
 
-        # Audio explanation – disabled for Haitian Creole
         if st.session_state.language == 'ht':
             st.warning("🔊 Voice explanation is not available in Kreyòl Ayisyen. Please select another language for audio.")
         else:
@@ -3949,7 +3877,7 @@ def main_app():
                     "en": "en-US-JennyNeural",
                     "fr": "fr-FR-DeniseNeural",
                     "es": "es-ES-ElviraNeural",
-                    "ht": "ht-HT-FabriceNeural"  # kept but not used
+                    "ht": "ht-HT-FabriceNeural"
                 }
                 voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
                 text = t("app_explanation")
@@ -3961,7 +3889,6 @@ def main_app():
 
         st.divider()
 
-        # ====== NAVIGATION ======
         page_keys = ["feed", "friends_chat", "satellite_map", "profile", "owner_space"]
         page_titles = {key: t(key) for key in page_keys}
         if "current_page" not in st.session_state:
@@ -3977,7 +3904,6 @@ def main_app():
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
         st.session_state.current_page = selected_key
 
-        # ====== OWNER SPACE SIDEBAR SECTION ======
         st.divider()
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
@@ -3995,7 +3921,6 @@ def main_app():
                     else:
                         st.error("Invalid password")
 
-    # ====== RENDER SELECTED PAGE ======
     page_functions = {
         "feed": render_feed,
         "friends_chat": render_friends_page,
