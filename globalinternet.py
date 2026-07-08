@@ -1,9 +1,9 @@
-# ====== FULL app.py (with automatic bucket creation) ======
+# ====== FULL app.py (with fixed bucket creation via REST API) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.11 (Auto-creates storage buckets)
+# Version: 77.8.12 (Fixed bucket creation via direct API)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -97,29 +97,53 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# ====== ENSURE STORAGE BUCKETS EXIST ======
+# ====== ENSURE STORAGE BUCKETS EXIST (using direct REST API) ======
 def ensure_bucket_exists(bucket_name, public=True):
-    """Check if bucket exists; if not, create it using Supabase Storage API."""
+    """Check if bucket exists; if not, create it using Supabase Storage REST API."""
     if supabase is None:
         return False
+
+    # Prepare headers for Supabase API calls
+    supabase_key = st.secrets.get("SUPABASE_KEY")
+    supabase_url = st.secrets.get("SUPABASE_URL")
+    if not supabase_key or not supabase_url:
+        st.error("❌ Supabase credentials missing. Cannot manage buckets.")
+        return False
+
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": "application/json"
+    }
+
+    # Check if bucket exists
+    check_url = f"{supabase_url}/storage/v1/bucket/{bucket_name}"
     try:
-        # Try to get bucket info – if it fails, bucket doesn't exist
-        supabase.storage.get_bucket(bucket_name)
-        return True
-    except Exception as e:
-        if "Bucket not found" in str(e):
-            try:
-                # Create bucket (public by default)
-                supabase.storage.create_bucket(bucket_name, {"public": public})
+        check_resp = requests.get(check_url, headers=headers)
+        if check_resp.status_code == 200:
+            return True  # bucket exists
+        elif check_resp.status_code == 404:
+            # Bucket does not exist – create it
+            create_url = f"{supabase_url}/storage/v1/bucket"
+            payload = {"name": bucket_name, "public": public}
+            create_resp = requests.post(create_url, json=payload, headers=headers)
+            if create_resp.status_code == 200:
                 st.success(f"✅ Created storage bucket: {bucket_name}")
                 return True
-            except Exception as create_error:
-                st.error(f"❌ Failed to create bucket '{bucket_name}': {create_error}\n"
-                         f"Please create it manually in Supabase Dashboard → Storage.")
+            else:
+                # If the error says "already exists", treat as success
+                if "already exists" in create_resp.text:
+                    return True
+                error_msg = create_resp.text
+                st.error(f"❌ Failed to create bucket '{bucket_name}': {error_msg}\nPlease create it manually in Supabase Dashboard → Storage.")
                 return False
         else:
-            st.error(f"❌ Error checking bucket '{bucket_name}': {e}")
+            # Other error (e.g., 403)
+            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease create it manually.")
             return False
+    except Exception as e:
+        st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
+        return False
 
 # Create buckets on startup
 if supabase:
