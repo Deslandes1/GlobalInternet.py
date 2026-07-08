@@ -242,7 +242,6 @@ LANG = {
         "full_name": "Full Name",
         "remember_me": "Remember me",
         "login_button": "🚀 Login",
-        "quick_login": "⚡ Quick Login (Demo)",
         "signup_button": "📝 Sign Up",
         "send_reset_link": "Send Reset Link",
         "phone_method": "Phone (OTP)",
@@ -391,7 +390,6 @@ LANG = {
         "full_name": "Nom complet",
         "remember_me": "Se souvenir de moi",
         "login_button": "🚀 Connexion",
-        "quick_login": "⚡ Connexion rapide (Démo)",
         "signup_button": "📝 Inscription",
         "send_reset_link": "Envoyer le lien de réinitialisation",
         "phone_method": "Téléphone (OTP)",
@@ -540,7 +538,6 @@ LANG = {
         "full_name": "Nombre completo",
         "remember_me": "Recordarme",
         "login_button": "🚀 Iniciar sesión",
-        "quick_login": "⚡ Inicio rápido (Demostración)",
         "signup_button": "📝 Registrarse",
         "send_reset_link": "Enviar enlace de restablecimiento",
         "phone_method": "Teléfono (OTP)",
@@ -689,7 +686,6 @@ LANG = {
         "full_name": "Non konplè",
         "remember_me": "Sonje m",
         "login_button": "🚀 Konekte",
-        "quick_login": "⚡ Koneksyon rapid (Demo)",
         "signup_button": "📝 Enskri",
         "send_reset_link": "Voye lyen reyinisyalizasyon",
         "phone_method": "Telefòn (OTP)",
@@ -2559,30 +2555,17 @@ def login_interface():
     if auth_method == t("email_method"):
         tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
         with tab1:
-            demo_email = st.secrets.get("DEMO_EMAIL", "")
-            demo_password = st.secrets.get("DEMO_PASSWORD", "")
-
             with st.form("login_email"):
-                email = st.text_input(t("email"), value=demo_email)
-                password = st.text_input(t("password"), type="password", value="")
+                email = st.text_input(t("email"))
+                password = st.text_input(t("password"), type="password")
                 remember = st.checkbox(t("remember_me"))
-                col1, col2 = st.columns(2)
-                with col1:
-                    login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
-                with col2:
-                    quick_login_clicked = st.form_submit_button(t("quick_login"), use_container_width=True)
+                login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
 
                 if login_clicked:
                     if email and password:
                         log_in_email(email, password, remember, show_debug)
                     else:
                         st.warning("Please enter email and password")
-
-                if quick_login_clicked:
-                    if demo_email and demo_password:
-                        log_in_email(demo_email, demo_password, remember, show_debug)
-                    else:
-                        st.error("❌ Demo credentials not set in secrets. Please add DEMO_EMAIL and DEMO_PASSWORD.")
         with tab2:
             with st.form("signup_email"):
                 full_name = st.text_input(t("full_name"))
