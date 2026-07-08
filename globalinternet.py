@@ -2989,4 +2989,954 @@ def render_friends_page():
                         if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
                             with st.popover("Create post"):
                                 with st.form(f"share_own_form_{msg['id']}"):
-                                    caption = st.text_area("Add
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+            else:
+                if msg.get("media_url"):
+                    try:
+                        if msg.get("media_type") == "image":
+                            st.image(msg["media_url"], width=300)
+                        elif msg.get("media_type") == "video":
+                            st.video(msg["media_url"])
+                        else:
+                            st.markdown(f"[Media file]({msg['media_url']})")
+                    except Exception as e:
+                        st.error(f"Error displaying media: {e}")
+                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                    
+                    col1, col2, col3 = st.columns([6,1,1])
+                    with col2:
+                        if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
+                            with st.popover("Create post"):
+                                with st.form(f"share_form_{msg['id']}"):
+                                    caption = st.text_area("Add a caption (optional)")
+                                    if st.form_submit_button(t("post")):
+                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                        create_post(
+                                            st.session_state.user.id,
+                                            caption or "",
+                                            existing_media_urls=media_info,
+                                            is_public=True
+                                        )
+                                        st.rerun()
+                    with col3:
+                        st.markdown(f"""
+                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                        """, unsafe_allow_html=True)
+                if msg.get("content"):
+                    clickable_content = make_clickable(msg["content"])
+                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+
+        with st.form("send_message", clear_on_submit=True):
+            msg_content = st.text_input(t("send_message"))
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
+            col1, col2 = st.columns([1,5])
+            with col1:
+                sent = st.form_submit_button(t("send"))
+            if sent:
+                if msg_content or uploaded_file:
+                    send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
+                    st.rerun()
+        if st.button(t("close_chat")):
+            st.session_state.selected_chat = None
+            st.rerun()
+        st.divider()
+
+    if st.session_state.in_call and st.session_state.call_room:
+        st.subheader(t("active_call"))
+        st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
+        st.markdown(t("share_room"))
+        jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
+        st.components.v1.html(f"""
+            <iframe src="{jitsi_url}" width="100%" height="500" allow="camera; microphone; fullscreen"></iframe>
+        """, height=520)
+        if st.button(t("end_call")):
+            end_call()
+            st.rerun()
+    else:
+        if st.button(t("start_call")):
+            start_call()
+            st.rerun()
+
+def render_user_profile(user_id):
+    """Show a user's profile and their posts."""
+    if supabase is None:
+        st.error("Database not connected.")
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
+
+    try:
+        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not profile_resp.data:
+            st.error("User not found.")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+        profile = profile_resp.data[0]
+    except Exception as e:
+        error_str = str(e)
+        if "JWT expired" in error_str:
+            if refresh_supabase_session():
+                try:
+                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+                    if profile_resp.data:
+                        profile = profile_resp.data[0]
+                    else:
+                        st.error("User not found.")
+                        if st.button(t("back_to_feed")):
+                            st.session_state.viewing_profile = None
+                            st.rerun()
+                        return
+                except Exception as retry_e:
+                    st.error(f"Error loading profile after refresh: {retry_e}")
+                    if st.button(t("back_to_feed")):
+                        st.session_state.viewing_profile = None
+                        st.rerun()
+                    return
+            else:
+                st.error("Session expired. Please log in again.")
+                logout()
+                st.rerun()
+                return
+        else:
+            st.error(f"Error loading profile: {error_str}")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+
+    st.header(f"👤 {profile['full_name']}'s Profile")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=150)
+        else:
+            st.markdown("👤", unsafe_allow_html=True)
+        st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
+        st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
+        st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
+        if st.button(t("chat")):
+            st.session_state.selected_chat = user_id
+            st.session_state.viewing_profile = None
+            st.rerun()
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_profile = None
+            st.rerun()
+    with col2:
+        st.subheader(t("feed"))
+        posts = load_user_posts(user_id)
+        if not posts:
+            st.info("This user has no public posts.")
+        else:
+            for post in posts:
+                with st.container():
+                    st.markdown(f"**{post['profiles']['full_name']}**")
+                    st.caption(post['created_at'][:16])
+                    if post['content']:
+                        clickable_content = make_clickable(post['content'])
+                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    for media in post.get("media_urls", []):
+                        if media["type"] == "image":
+                            st.image(media["url"], use_column_width=True)
+                        elif media["type"] == "video":
+                            st.video(media["url"])
+                    st.divider()
+
+def render_map():
+    """Satellite map (dummy)"""
+    st.header(t("satellite_map"))
+    sats = {
+        "Starlink-1": {"lat": 32.77, "lon": -96.79, "status": "Active"},
+        "Starlink-2": {"lat": 35.68, "lon": 139.69, "status": "Active"},
+        "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
+        "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
+    }
+    df = pd.DataFrame([
+        {"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]}
+        for name, data in sats.items()
+    ])
+    st.dataframe(df, use_container_width=True)
+    st.divider()
+    cols = st.columns(4)
+    for i, (name, data) in enumerate(sats.items()):
+        with cols[i % 4]:
+            st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
+
+# ====== FIXED render_profile – no false error message ======
+def render_profile():
+    """Edit current user profile."""
+    st.header(t("profile"))
+    if st.session_state.profile is None:
+        return
+    profile = st.session_state.profile
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if profile.get("avatar_url"):
+            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
+        else:
+            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
+        uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg"], label_visibility="collapsed")
+        if uploaded:
+            url = upload_avatar(st.session_state.user.id, uploaded)
+            if url:
+                profile["avatar_url"] = url
+                update_profile(profile)
+                st.success("Avatar updated successfully!")
+                st.rerun()
+            # The error message is now handled inside upload_avatar() – no extra error here
+    with col2:
+        with st.form("edit_profile"):
+            st.markdown("#### Account Information")
+            full_name = st.text_input(t("full_name"), value=profile.get("full_name", ""))
+            bio = st.text_area(t("bio"), value=profile.get("bio", ""), height=100)
+            location = st.text_input(t("location"), value=profile.get("location", ""))
+            moncash_phone = st.text_input(t("moncash_phone"), value=profile.get("moncash_phone", ""))
+            if st.form_submit_button(t("save_changes"), use_container_width=True):
+                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
+                if update_profile(profile):
+                    st.success(t("profile"))
+                    st.rerun()
+
+    st.divider()
+    cola, colb, colc, cold = st.columns(4)
+    with cola:
+        st.metric(t("posts_count"), len(st.session_state.posts))
+    with colb:
+        st.metric(t("connections"), profile.get("connections", 0))
+    with colc:
+        st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
+    with cold:
+        st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
+
+def render_live_page(session_id):
+    """Live session view (broadcaster or viewer) with participants, gifts, chat."""
+    session = get_live_session(session_id)
+    if not session or not session.get("is_live"):
+        st.error("This live session has ended or does not exist.")
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_live = None
+            st.rerun()
+        return
+
+    is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
+    st.header(f"🔴 LIVE: {session['title']}")
+
+    # Background filter handling (for participants)
+    if st.session_state.user:
+        bg_key = f"bg_{session_id}_{st.session_state.user.id}"
+        if st.session_state.get(bg_key) is None:
+            st.session_state[bg_key] = None
+
+        if not is_broadcaster:
+            participant_status = None
+            try:
+                part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                if part.data:
+                    participant_status = part.data[0]["status"]
+            except Exception as e:
+                st.warning(f"Error checking participant status: {e}")
+
+            if participant_status == "accepted":
+                with st.expander(t("choose_background"), expanded=False):
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_{session_id}")
+                    if uploaded_bg:
+                        bytes_data = uploaded_bg.getvalue()
+                        b64 = base64.b64encode(bytes_data).decode()
+                        mime = uploaded_bg.type
+                        data_url = f"data:{mime};base64,{b64}"
+                        st.session_state[bg_key] = data_url
+                        supabase.table("live_participants").update({"background_url": data_url}).eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                        st.success(t("background_set"))
+                        st.rerun()
+
+    gifts = load_gifts_for_session(session_id)
+    total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        stream_method = session.get("stream_method", "external")
+        if stream_method == "external":
+            stream_url = session.get("stream_url")
+            platform = session.get("platform")
+            if is_broadcaster:
+                with st.expander(t("set_stream_url"), expanded=not stream_url):
+                    with st.form("update_stream_url"):
+                        new_url = st.text_input(f"{t('paste_url')} (YouTube, Facebook, Twitch)", value=stream_url or "")
+                        if st.form_submit_button(t("update_url")):
+                            if new_url:
+                                if update_live_stream_url(session_id, new_url):
+                                    st.success("Stream URL updated! Refreshing...")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a URL")
+            if stream_url:
+                # Embed logic for platforms
+                if "facebook.com" in stream_url:
+                    embed_code = f"""
+                    <div id="fb-root"></div>
+                    <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
+                    <div class="fb-video" data-href="{stream_url}" 
+                         data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
+                    """
+                    st.components.v1.html(embed_code, height=450)
+                elif "youtube.com" in stream_url or "youtu.be" in stream_url:
+                    if "youtu.be" in stream_url:
+                        video_id = stream_url.split("/")[-1].split("?")[0]
+                    elif "watch?v=" in stream_url:
+                        video_id = stream_url.split("v=")[-1].split("&")[0]
+                    else:
+                        video_id = None
+                    if video_id:
+                        embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                    else:
+                        st.video(stream_url)
+                elif "twitch.tv" in stream_url:
+                    channel = stream_url.split("/")[-1].split("?")[0]
+                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}&autoplay=true"
+                    st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
+                else:
+                    st.video(stream_url)
+            else:
+                st.info("The streamer has not provided a video URL yet.")
+        else:
+            # In-app streaming (simplified version – full implementation would have PeerJS)
+            if is_broadcaster:
+                st.success(t("you_are_broadcaster"))
+                # Show participant management
+                st.subheader("🎤 Participant Requests")
+                try:
+                    pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
+                    pending_list = pending.data or []
+                except Exception as e:
+                    st.error(f"Error loading requests: {e}")
+                    pending_list = []
+
+                if pending_list:
+                    for req in pending_list:
+                        cols = st.columns([3,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{req['profiles']['full_name']}** wants to join")
+                        with cols[1]:
+                            if st.button("✅ Accept", key=f"accept_{req['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", req["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": req["user_id"],
+                                    "type": "live_join_accepted",
+                                    "message": f"You have been accepted to join the live stream: {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("❌ Reject", key=f"reject_{req['id']}"):
+                                supabase.table("live_participants").delete().eq("id", req["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No pending requests")
+
+                st.subheader("🎤 Active Participants")
+                try:
+                    accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "accepted").execute()
+                    accepted_list = accepted.data or []
+                except Exception as e:
+                    st.error(f"Error loading participants: {e}")
+                    accepted_list = []
+
+                if accepted_list:
+                    for part in accepted_list:
+                        cols = st.columns([2,1,1,1])
+                        with cols[0]:
+                            st.markdown(f"**{part['profiles']['full_name']}**")
+                        with cols[1]:
+                            if st.button("🔊 Mute", key=f"mute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "muted"}).eq("id", part["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_mute",
+                                    "message": f"The broadcaster has muted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[2]:
+                            if st.button("🔊 Unmute", key=f"unmute_{part['id']}"):
+                                supabase.table("live_participants").update({"status": "accepted"}).eq("id", part["id"]).execute()
+                                supabase.table("notifications").insert({
+                                    "user_id": part["user_id"],
+                                    "type": "live_unmute",
+                                    "message": f"The broadcaster has unmuted your microphone in {session['title']}",
+                                    "read": False
+                                }).execute()
+                                st.rerun()
+                        with cols[3]:
+                            if st.button("❌ Remove", key=f"remove_{part['id']}"):
+                                supabase.table("live_participants").delete().eq("id", part["id"]).execute()
+                                st.rerun()
+                else:
+                    st.info("No participants yet")
+            else:
+                # Viewer
+                st.info(t("you_are_viewer"))
+
+        # Shareable link
+        try:
+            base_url = st.request.url.split('?')[0]
+        except:
+            base_url = "https://home-sweet-home.streamlit.app"
+        share_url = f"{base_url}?live={session_id}"
+        st.text_input(t("shareable_link"), value=share_url)
+
+    with col2:
+        st.subheader(t("live_chat_gifts"))
+        if not is_broadcaster:
+            st.markdown(f"### {t('send_gift')}")
+            if not st.session_state.profile.get("moncash_phone"):
+                st.info(t("add_moncash"))
+            else:
+                gift_options = [
+                    {"label": "❤️ 50 HTG", "amount": 50, "currency": "HTG"},
+                    {"label": "🎉 100 HTG", "amount": 100, "currency": "HTG"},
+                    {"label": "🌟 500 HTG", "amount": 500, "currency": "HTG"},
+                    {"label": "💵 1 USD", "amount": 1, "currency": "USD"},
+                    {"label": "💵 5 USD", "amount": 5, "currency": "USD"},
+                    {"label": "💵 10 USD", "amount": 10, "currency": "USD"},
+                ]
+                cols = st.columns(3)
+                for i, opt in enumerate(gift_options):
+                    with cols[i % 3]:
+                        if st.button(opt["label"], key=f"gift_{i}"):
+                            success, msg = send_gift(
+                                session_id,
+                                st.session_state.user.id,
+                                session["user_id"],
+                                opt["amount"],
+                                opt["currency"]
+                            )
+                            if success:
+                                st.success(msg)
+                                st.session_state.live_gifts = load_gifts_for_session(session_id)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+            st.markdown("### 😊 Reactions")
+            reaction_emojis = ["❤️", "👍", "😂", "😮", "😢", "👏"]
+            cols = st.columns(len(reaction_emojis))
+            for i, emoji in enumerate(reaction_emojis):
+                with cols[i]:
+                    if st.button(emoji, key=f"reaction_{i}"):
+                        add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
+                        st.rerun()
+
+        if is_broadcaster:
+            st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
+            if session["profiles"]["moncash_phone"]:
+                st.info(f"{t('gifts_sent_to')}: {session['profiles']['moncash_phone']}")
+            else:
+                st.warning(t("add_moncash"))
+
+        with st.form(f"live_comment_{session_id}", clear_on_submit=True):
+            msg = st.text_input(t("write_comment"))
+            if st.form_submit_button(t("send")):
+                if msg:
+                    add_comment(session_id, st.session_state.user.id, msg)
+                    st.rerun()
+
+        comments = load_comments(session_id)
+        all_events = []
+        for c in comments:
+            all_events.append({"type": "comment", "data": c, "time": c['created_at']})
+        for g in gifts:
+            all_events.append({"type": "gift", "data": g, "time": g['created_at']})
+        all_events.sort(key=lambda x: x['time'])
+
+        for ev in all_events:
+            if ev['type'] == 'comment':
+                c = ev['data']
+                if c['content'].startswith("🎉"):
+                    st.markdown(f"**{c['profiles']['full_name']}** {c['content']}")
+                else:
+                    st.markdown(f"**{c['profiles']['full_name']}**: {c['content']}")
+            else:
+                g = ev['data']
+                sender = g.get('sender', {}).get('full_name', 'Someone')
+                st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
+
+def owner_space():
+    """Owner Dashboard – only accessible with proper password."""
+    st.header(t("owner_space"))
+    
+    if not st.session_state.owner_space_access:
+        with st.form("owner_space_login"):
+            pwd = st.text_input("Enter Owner Space Password", type="password")
+            if st.form_submit_button(t("login_button")):
+                if pwd == OWNSPACE_PASSWORD:
+                    st.session_state.owner_space_access = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+        return
+
+    last_seen = get_last_seen_signup()
+    new_users = get_new_users(last_seen)
+    if new_users:
+        send_email_notification(new_users)
+        update_last_seen_signup()
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management")])
+
+    with tab1:
+        st.subheader(t("owner_dashboard"))
+        real_balance = None
+        if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
+            try:
+                headers = {"X-API-Key": BACKEND_API_KEY}
+                resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    real_balance = data.get("balance", 0.0)
+                else:
+                    st.warning("Could not fetch real balance from backend.")
+            except Exception as e:
+                st.warning(f"Backend unreachable: {e}")
+        else:
+            st.info("Backend not configured. Showing simulated data for now.")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if real_balance is not None:
+                st.metric(t("balance"), f"${real_balance:,.2f}")
+            else:
+                duration = time.time() - st.session_state.connection_time
+                st.session_state.data_comp = duration * 0.035
+                st.metric(t("compensation"), f"${st.session_state.data_comp:.4f}")
+        with col2:
+            st.metric(t("uptime"), get_uptime())
+        with col3:
+            st.metric(t("connections"), np.random.randint(100, 500))
+
+        st.divider()
+
+        st.subheader(t("transfer_funds"))
+        st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
+        st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
+
+        if real_balance is not None:
+            amount = st.number_input(
+                t("amount_transfer"),
+                min_value=1.0,
+                max_value=float(real_balance),
+                value=min(10.0, float(real_balance)),
+                step=10.0,
+                format="%.2f"
+            )
+            if st.button(t("transfer"), use_container_width=True):
+                if amount <= 0:
+                    st.error("Enter a valid amount.")
+                else:
+                    with st.spinner("Processing transfer..."):
+                        try:
+                            headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+                            payload = {
+                                "amount": amount,
+                                "recipient_phone": MONCASH_NUM
+                            }
+                            resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
+                            else:
+                                st.error(f"Transfer failed: {resp.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        else:
+            st.info("To enable real transfers, set up your backend and configure the secrets.")
+
+    with tab2:
+        st.subheader(t("new_users"))
+        st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
+        
+        try:
+            with st.spinner("Loading user data..."):
+                response = supabase.table("profiles").select(
+                    "id, full_name, avatar_url, join_date, location, bio"
+                ).order("join_date", desc=True).limit(100).execute()
+                recent_users = response.data if response.data else []
+        except Exception as e:
+            st.error(f"Failed to load user data: {e}")
+            recent_users = []
+        
+        if recent_users:
+            display_data = []
+            for u in recent_users:
+                display_data.append({
+                    "Full Name": u.get('full_name', 'N/A'),
+                    "User ID": u['id'],
+                    "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
+                    "Location": u.get('location', 'Not set'),
+                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else '')
+                })
+            df = pd.DataFrame(display_data)
+            st.dataframe(df, use_container_width=True)
+            
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Report as CSV",
+                data=csv,
+                file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("No users found in the database.")
+        
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+
+    with tab3:
+        st.subheader(t("post_moderation"))
+        st.markdown("Review all posts (public & private) and take action if needed.")
+        try:
+            posts = supabase.table("posts").select("*").order("created_at", desc=True).execute()
+            all_posts = posts.data or []
+            # Fetch profiles for these posts
+            user_ids = {p["user_id"] for p in all_posts}
+            profiles = {}
+            if user_ids:
+                profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url").in_("id", list(user_ids)).execute()
+                for p in profiles_resp.data or []:
+                    profiles[p["id"]] = p
+            for p in all_posts:
+                prof = profiles.get(p["user_id"], {})
+                p["profiles"] = {
+                    "full_name": prof.get("full_name", "Unknown"),
+                    "avatar_url": prof.get("avatar_url"),
+                    "id": p["user_id"]
+                }
+        except Exception as e:
+            st.error(f"Failed to load posts: {e}")
+            all_posts = []
+
+        if not all_posts:
+            st.info("No posts found.")
+        else:
+            if "warn_post_id" not in st.session_state:
+                st.session_state.warn_post_id = None
+            for post in all_posts:
+                with st.container():
+                    cols = st.columns([2, 4, 2, 1, 1])
+                    with cols[0]:
+                        st.markdown(f"**User:** {post['profiles']['full_name']}")
+                    with cols[1]:
+                        content = post.get('content', '')[:100] + "..." if post.get('content') and len(post['content']) > 100 else post.get('content', '')
+                        st.markdown(f"**Content:** {content}")
+                    with cols[2]:
+                        st.markdown(f"**Visibility:** {'Public' if post.get('is_public', True) else 'Private'}")
+                        st.caption(post['created_at'][:16])
+                    with cols[3]:
+                        if st.button(t("delete_post"), key=f"del_{post['id']}"):
+                            if delete_post(post['id']):
+                                st.success("Post deleted.")
+                                st.rerun()
+                            else:
+                                st.error("Delete failed.")
+                    with cols[4]:
+                        if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
+                            st.session_state.warn_post_id = post['id']
+                            st.rerun()
+
+                    if st.session_state.warn_post_id == post['id']:
+                        with st.form(key=f"warn_form_{post['id']}"):
+                            default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
+                            warn_msg = st.text_area("Warning message", value=default_msg, height=100)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("Send Warning"):
+                                    success = send_message(
+                                        st.session_state.user.id,
+                                        post['user_id'],
+                                        f"[MODERATION] {warn_msg}"
+                                    )
+                                    if success:
+                                        st.success("Warning sent to user.")
+                                        if delete_post(post['id']):
+                                            st.info("Post also deleted.")
+                                        st.session_state.warn_post_id = None
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to send message.")
+                            with col2:
+                                if st.form_submit_button("Cancel"):
+                                    st.session_state.warn_post_id = None
+                                    st.rerun()
+                    st.divider()
+
+    with tab4:
+        st.subheader(t("client_payments"))
+        st.markdown("""
+        **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
+        Clients can send money directly to your MonCash personal number:  
+        `+50947385663`  
+        *(They must use the MonCash app or a MonCash agent.)*
+
+        **Option 2 – US Bank Transfer (for any amount)**  
+        For international clients, you can receive USD via bank transfer to your UNIBANK account:  
+        `105-2016-16594727`  
+        *(Provide them with your bank name: UNIBANK, Haiti.)*
+
+        **Option 3 – Request a payment link**  
+        For larger amounts, contact the development team to generate a secure payment link.
+        """)
+
+    with tab5:
+        st.subheader(t("gift_management"))
+        st.markdown("View all completed gifts and process payouts to streamers.")
+
+        if supabase is None:
+            st.warning("Supabase not connected.")
+            return
+
+        try:
+            gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
+            gifts_data = gifts.data if gifts.data else []
+        except Exception as e:
+            st.error(f"Failed to load gifts: {e}")
+            gifts_data = []
+
+        if not gifts_data:
+            st.info(t("no_gifts"))
+        else:
+            df = pd.DataFrame([{
+                "ID": g['id'],
+                "Date": g['created_at'][:16],
+                "Session ID": g['session_id'],
+                "Sender": g.get('sender_name', 'Unknown'),
+                "Recipient ID": g['recipient_id'],
+                "Amount": f"{g['amount']} {g['currency']}",
+                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
+            } for g in gifts_data])
+            st.dataframe(df, use_container_width=True)
+
+            st.markdown(f"### {t('payout_summary')}")
+            total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
+            st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
+
+            if st.button(t("mark_paid")):
+                st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
+
+    st.divider()
+    st.markdown(f"### {t('contact_support')}")
+    st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
+
+    if st.button(t("logout_owner")):
+        st.session_state.owner_space_access = False
+        st.rerun()
+
+# ========== MAIN APP ==========
+def main_app():
+    with st.sidebar:
+        if st.session_state.logged_in:
+            st.success("✅ Logged in")
+        else:
+            st.info("🔓 Not logged in")
+        st.divider()
+
+        st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
+        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='collaborators'>
+            <b>Collaborators:</b><br>
+            Gesner Junior Deslandes · Roosevert Deslandes<br>
+            Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+
+        # ====== LANGUAGE SELECTOR ======
+        lang_options = {
+            "en": "English",
+            "fr": "Français",
+            "es": "Español",
+            "ht": "Kreyòl Ayisyen"
+        }
+        selected_lang = st.selectbox(
+            t("voice_lang"),
+            options=list(lang_options.keys()),
+            format_func=lambda x: lang_options[x],
+            index=list(lang_options.keys()).index(st.session_state.language)
+        )
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+        st.divider()
+
+        if st.session_state.unread_count > 0:
+            st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
+
+        if st.session_state.profile and st.session_state.profile.get("is_live"):
+            st.markdown(f"🔴 **{t('you_are_live')}**")
+            if st.button(t("end_live_session")):
+                for ls in st.session_state.live_sessions:
+                    if ls["user_id"] == st.session_state.user.id:
+                        end_live_session(ls["id"])
+                        st.rerun()
+                        break
+        else:
+            with st.expander(t("go_live")):
+                st.markdown(f"**{t('select_platform')}:**")
+                method = st.radio(t("select_platform"), [t("external_platform"), t("in_app_camera")], index=0)
+                platform = None
+                if method == t("external_platform"):
+                    st.markdown(f"**{t('select_platform')}:**")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("📺 YouTube", key="yt"):
+                            platform = "YouTube"
+                    with col2:
+                        if st.button("📘 Facebook", key="fb"):
+                            platform = "Facebook"
+                    with col3:
+                        if st.button("🎮 Twitch", key="tw"):
+                            platform = "Twitch"
+                else:
+                    platform = "inapp"
+
+                if platform:
+                    st.markdown(f"**Selected: {platform if platform != 'inapp' else t('in_app_camera')}**")
+                    with st.form("go_live_form"):
+                        title = st.text_input(t("live_title"))
+                        if st.form_submit_button(t("create_live_session")):
+                            if title:
+                                session_id = create_live_session(title, platform, method='external' if platform != 'inapp' else 'inapp')
+                                if session_id:
+                                    if platform == 'inapp':
+                                        st.success(t("you_are_live"))
+                                    else:
+                                        st.success(t("you_are_live"))
+                                        st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
+                                        st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a title")
+
+        st.divider()
+        lat, sig, qual = get_network_status()
+        st.markdown(f"### {t('system_health')}")
+        st.markdown(f"""
+        <div class='health-text'>
+        {t('signal')}: {sig}<br>
+        {t('latency')}: {lat}ms<br>
+        {t('quality')}: {qual}%<br>
+        {t('uptime')}: {get_uptime()}<br>
+        {t('encrypted')}
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+        st.markdown(f"{t('compensation')}: ${st.session_state.data_comp:.4f}")
+        st.divider()
+        if st.session_state.profile:
+            st.markdown(f"{t('logged_in_as')}: {st.session_state.profile.get('full_name', 'User')}")
+        if st.button(t("logout")):
+            logout()
+        st.divider()
+
+        # Audio explanation – disabled for Haitian Creole
+        if st.session_state.language == 'ht':
+            st.warning("🔊 Voice explanation is not available in Kreyòl Ayisyen. Please select another language for audio.")
+        else:
+            if st.button(t("listen_explanation"), use_container_width=True):
+                voice_map = {
+                    "en": "en-US-JennyNeural",
+                    "fr": "fr-FR-DeniseNeural",
+                    "es": "es-ES-ElviraNeural",
+                    "ht": "ht-HT-FabriceNeural"  # kept but not used
+                }
+                voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
+                text = t("app_explanation")
+                audio_file = generate_audio(text, voice)
+                if audio_file:
+                    play_audio(audio_file)
+                else:
+                    st.error("Failed to generate audio.")
+
+        st.divider()
+
+        # ====== NAVIGATION ======
+        page_keys = ["feed", "friends_chat", "satellite_map", "profile", "owner_space"]
+        page_titles = {key: t(key) for key in page_keys}
+        if "current_page" not in st.session_state:
+            st.session_state.current_page = "feed"
+        if st.session_state.current_page not in page_keys:
+            st.session_state.current_page = "feed"
+
+        selected_title = st.selectbox(
+            "Navigate",
+            options=[page_titles[key] for key in page_keys],
+            index=page_keys.index(st.session_state.current_page),
+        )
+        selected_key = next(key for key, title in page_titles.items() if title == selected_title)
+        st.session_state.current_page = selected_key
+
+        # ====== OWNER SPACE SIDEBAR SECTION ======
+        st.divider()
+        st.markdown("### 🕊️ Owner Space")
+        if st.session_state.owner_space_access:
+            st.success("✅ Access granted")
+            if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
+                st.session_state.current_page = "owner_space"
+                st.rerun()
+        else:
+            with st.form("owner_sidebar_form"):
+                pwd = st.text_input("Password", type="password", placeholder="Enter owner password")
+                if st.form_submit_button("🔓 Unlock Owner Space", use_container_width=True):
+                    if pwd == OWNSPACE_PASSWORD:
+                        st.session_state.owner_space_access = True
+                        st.rerun()
+                    else:
+                        st.error("Invalid password")
+
+    # ====== RENDER SELECTED PAGE ======
+    page_functions = {
+        "feed": render_feed,
+        "friends_chat": render_friends_page,
+        "satellite_map": render_map,
+        "profile": render_profile,
+        "owner_space": owner_space
+    }
+    page_functions.get(st.session_state.current_page, render_feed)()
+
+# ========== ENTRY ==========
+if __name__ == "__main__":
+    if (st.session_state.get("app_authenticated", False) or not APP_PASSWORD) and st.session_state.logged_in:
+        st.markdown("""
+        <div class="home-title">
+            <h1>🏠 Home Sweet Home</h1>
+            <p>Your Haitian social media platform</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    if not st.session_state.logged_in:
+        login_interface()
+    else:
+        main_app()
