@@ -1,9 +1,9 @@
-# ====== FULL app.py (no global password, clean login page) ======
-# Home Sweet Home - Haitian Social Media Platform
+# ====== FULL app.py (Lakay se Lakay - renamed, image-only uploads) ======
+# Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.15 (Removed global password protection)
+# Version: 77.8.17 (Image-only uploads, name changed to Lakay se Lakay)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -30,7 +30,7 @@ import tempfile
 import edge_tts
 
 # ====== PAGE CONFIG ======
-st.set_page_config(page_title="Home Sweet Home", page_icon="🏠", layout="wide")
+st.set_page_config(page_title="Lakay se Lakay", page_icon="🏠", layout="wide")
 
 # ====== KEEP‑ALIVE PING ======
 try:
@@ -242,7 +242,7 @@ LANG = {
         "back_to_feed": "Back to Feed",
         "create_post": "Create a post",
         "caption_placeholder": "Write something... or paste a video link",
-        "add_media": "Add images or videos (optional)",
+        "add_media": "Add images (PNG, JPG, JPEG, GIF)",
         "visibility": "Visibility",
         "public": "Public",
         "private": "Private",
@@ -332,7 +332,7 @@ LANG = {
         "debug_hint": "If you are an administrator, enable 'Show debug info' below to see the raw error.",
         "show_debug": "Show debug info",
         # Home page translations
-        "home_title": "🏠 Home Sweet Home",
+        "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
     },
@@ -390,7 +390,7 @@ LANG = {
         "back_to_feed": "Retour au fil",
         "create_post": "Créer une publication",
         "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo",
-        "add_media": "Ajouter des images ou vidéos (optionnel)",
+        "add_media": "Ajouter des images (PNG, JPG, JPEG, GIF)",
         "visibility": "Visibilité",
         "public": "Public",
         "private": "Privé",
@@ -479,7 +479,7 @@ LANG = {
         "network_error": "⚠️ Impossible de se connecter au serveur d'authentification. Veuillez vérifier votre connexion internet et réessayer. Si le problème persiste, contactez le support.",
         "debug_hint": "Si vous êtes administrateur, activez 'Afficher les infos de débogage' ci-dessous pour voir l'erreur brute.",
         "show_debug": "Afficher les infos de débogage",
-        "home_title": "🏠 Home Sweet Home",
+        "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
     },
@@ -537,7 +537,7 @@ LANG = {
         "back_to_feed": "Volver al feed",
         "create_post": "Crear una publicación",
         "caption_placeholder": "Escribe algo... o pega un enlace de video",
-        "add_media": "Agregar imágenes o videos (opcional)",
+        "add_media": "Agregar imágenes (PNG, JPG, JPEG, GIF)",
         "visibility": "Visibilidad",
         "public": "Público",
         "private": "Privado",
@@ -626,7 +626,7 @@ LANG = {
         "network_error": "⚠️ No se puede conectar al servidor de autenticación. Verifique su conexión a internet e intente de nuevo. Si el problema persiste, contacte al soporte.",
         "debug_hint": "Si es administrador, active 'Mostrar información de depuración' a continuación para ver el error sin procesar.",
         "show_debug": "Mostrar información de depuración",
-        "home_title": "🏠 Home Sweet Home",
+        "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
     },
@@ -684,7 +684,7 @@ LANG = {
         "back_to_feed": "Retounen nan feed",
         "create_post": "Kreye yon pòs",
         "caption_placeholder": "Ekri yon bagay... oswa kole yon lyen videyo",
-        "add_media": "Ajoute imaj oswa videyo (opsyonèl)",
+        "add_media": "Ajoute imaj (PNG, JPG, JPEG, GIF)",
         "visibility": "Vizibilite",
         "public": "Piblik",
         "private": "Prive",
@@ -773,7 +773,7 @@ LANG = {
         "network_error": "⚠️ Pa ka konekte ak sèvè otantifikasyon an. Tanpri tcheke koneksyon entènèt ou epi eseye ankò. Si pwoblèm nan kontinye, kontakte sipò.",
         "debug_hint": "Si w se administratè, aktive 'Montre enfòmasyon debogaj' anba a pou wè erè a.",
         "show_debug": "Montre enfòmasyon debogaj",
-        "home_title": "Lakay Se Lakay",
+        "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "Ayiti",
         "home_subtitle": "Nouvo rezo Sosyal Ayisyen"
     },
@@ -2459,8 +2459,8 @@ def login_interface():
         """
         <div style="text-align: center; padding: 20px 0;">
             <span class="dove-symbol">🕊️</span>
-            <h2 style="color: #0a2a44; margin-top: -5px;">Welcome to Home Sweet Home</h2>
-            <p style="color: #1e2a3a; opacity: 0.8;">A space of hope, connection, and community</p>
+            <h2 style="color: #0a2a44; margin-top: -5px;">Bienvenu sou Lakay se Lakay</h2>
+            <p style="color: #1e2a3a; opacity: 0.8;">Nou kontan wè w isit la. Se yon platfòm sosyal ki fèt pou tout Ayisyen yo – kote ou ka pataje lide ou, foto ou, videyo ou, e konekte ak zanmi ou yo nan yon espas ki sekirize e ki amizan. N ap viv ansanm, n ap grandi ansanm. Pataje kè ou, pataje lavi ou!</p>
         </div>
         """,
         unsafe_allow_html=True
@@ -2599,10 +2599,10 @@ def render_feed():
             )
         media_files = st.file_uploader(
             t("add_media"),
-            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
+            type=["png", "jpg", "jpeg", "gif"],  # IMAGES ONLY
             accept_multiple_files=True
         )
-        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For larger videos, use a link (YouTube, etc.).")
+        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For videos, use a link (YouTube, etc.).")
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
@@ -2694,7 +2694,7 @@ def render_feed():
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
-                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif"], accept_multiple_files=True)
                         col1, col2 = st.columns(2)
                         with col1:
                             if st.form_submit_button("Save"):
@@ -3023,8 +3023,8 @@ def render_friends_page():
 
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input(t("send_message"))
-            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
-            st.caption("⚠️ File size limit: 200MB (configurable). For larger files, consider external hosting.")
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif"])
+            st.caption("⚠️ File size limit: 200MB (configurable). For videos, use external links.")
             col1, col2 = st.columns([1,5])
             with col1:
                 sent = st.form_submit_button(t("send"))
@@ -3366,7 +3366,7 @@ def render_live_page(session_id):
         try:
             base_url = st.request.url.split('?')[0]
         except:
-            base_url = "https://home-sweet-home.streamlit.app"
+            base_url = "https://lakay-se-lakay.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
         st.text_input(t("shareable_link"), value=share_url)
 
@@ -3885,7 +3885,7 @@ def main_app():
 
 # ========== ENTRY ==========
 if __name__ == "__main__":
-    # If the user is logged in, show the home title and the main app
+    # If the user is logged in, show the home title
     if st.session_state.logged_in:
         st.markdown(f"""
         <div class="home-title">
