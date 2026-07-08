@@ -33,7 +33,8 @@ import edge_tts
 st.set_page_config(page_title="Home Sweet Home", page_icon="🏠", layout="wide")
 
 # ====== GLOBAL APP PASSWORD PROTECTION ======
-APP_PASSWORD = st.secrets.get("APP_PASSWORD")
+# Read password from the secret "Login_password"
+APP_PASSWORD = st.secrets.get("Login_password")
 
 if APP_PASSWORD:
     if "app_authenticated" not in st.session_state:
