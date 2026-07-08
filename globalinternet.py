@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - media fallback to base64) ======
+# ====== FULL app.py (Lakay se Lakay - avatar + media fallback to base64) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.19 (Media upload with fallback to base64)
+# Version: 77.8.20 (Avatar + media upload with fallback to base64)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1364,12 +1364,17 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
+# ====== UPDATED: upload_avatar with fallback to base64 ======
 def upload_avatar(user_id, image_file):
+    """Upload avatar with fallback to base64 if Supabase fails."""
     if supabase is None:
-        return None
-    if not ensure_bucket_exists("avatars"):
-        st.error("❌ Cannot upload: 'avatars' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
-        return None
+        return upload_avatar_base64(image_file)
+    
+    # Try to ensure bucket exists, but don't error if it fails
+    bucket_ok = ensure_bucket_exists("avatars")
+    if not bucket_ok:
+        return upload_avatar_base64(image_file)
+    
     try:
         ext = image_file.name.split('.')[-1]
         file_name = f"{user_id}_{int(time.time())}.{ext}"
@@ -1378,21 +1383,32 @@ def upload_avatar(user_id, image_file):
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
     except Exception as e:
-        error_message = str(e)
-        if "new row violates row-level security policy" in error_message:
-            st.error(t("storage_error"))
+        # If Supabase upload fails (permission, etc.), fallback to base64
+        st.warning(f"Supabase avatar upload failed, falling back to base64: {e}")
+        return upload_avatar_base64(image_file)
+
+def upload_avatar_base64(image_file):
+    """Convert image to base64 data URL."""
+    try:
+        file_bytes = image_file.getvalue()
+        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        content_type = image_file.type
+        if content_type.startswith('image'):
+            data_url = f"data:{content_type};base64,{b64}"
+            return data_url
         else:
-            st.session_state.last_error = f"Avatar upload failed: {e}"
+            st.error("Invalid image format.")
+            return None
+    except Exception as e:
+        st.session_state.last_error = f"Avatar base64 conversion failed: {e}"
         return None
 
 # ====== FIXED: upload_post_media with fallback to base64 ======
 def upload_post_media(user_id, file):
     if supabase is None:
-        # Fallback to base64 if supabase not available
         return upload_media_base64(file)
     
     if not ensure_bucket_exists("post_media"):
-        # Fallback to base64 if bucket cannot be ensured
         return upload_media_base64(file)
     
     try:
@@ -1411,7 +1427,6 @@ def upload_post_media(user_id, file):
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception as e:
-        # If upload to Supabase fails, fallback to base64
         st.warning(f"Supabase upload failed, falling back to base64: {e}")
         return upload_media_base64(file)
 
@@ -3174,7 +3189,7 @@ def render_profile():
             st.image(profile["avatar_url"], width=200, caption="Profile Picture")
         else:
             st.image("https://via.placeholder.com/200", width=200, caption="No picture")
-        uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg"], label_visibility="collapsed")
+        uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg","gif"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
             if url:
@@ -3182,6 +3197,8 @@ def render_profile():
                 update_profile(profile)
                 st.success("Avatar updated successfully!")
                 st.rerun()
+            else:
+                st.error("Avatar upload failed. Please try again.")
     with col2:
         with st.form("edit_profile"):
             st.markdown("#### Account Information")
