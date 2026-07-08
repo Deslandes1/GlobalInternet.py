@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.8 (Added "HAITI" in blue/red on home page)
+# Version: 77.8.9 (Home page fully translated for Haitian Creole)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -323,7 +323,11 @@ LANG = {
         "app_explanation": "This application was built by Gesner Deslandes, Engineer-in-Chief at GlobalInternet.py. Phone: (509) 4738-5663. Email: deslandes78@gmail.com. Get in touch with Gesner if you want to build any website or software. This application is a Haitian social media platform that lets you connect with friends, share posts, go live, send gifts, and chat in real time. It uses Supabase for data, supports live streaming with background filters, and includes a satellite map for fun. It is designed to be a modern, secure, and fun space for Haitian users to interact online. All features are built with Python and Streamlit. Plus, when there's a World Cup game, you can watch it live right here on the platform!",
         "network_error": "⚠️ Cannot connect to the authentication server. Please check your internet connection and try again. If the problem persists, contact support.",
         "debug_hint": "If you are an administrator, enable 'Show debug info' below to see the raw error.",
-        "show_debug": "Show debug info"
+        "show_debug": "Show debug info",
+        # Home page translations (English)
+        "home_title": "🏠 Home Sweet Home",
+        "home_haiti": "HAITI",
+        "home_subtitle": "Your Haitian social media platform"
     },
     "fr": {
         "login_title": "Connexion",
@@ -468,7 +472,11 @@ LANG = {
         "app_explanation": "Cette application a été construite par Gesner Deslandes, ingénieur en chef chez GlobalInternet.py. Téléphone : (509) 4738-5663. Email : deslandes78@gmail.com. Contactez Gesner si vous souhaitez créer un site web ou un logiciel. Cette application est une plateforme de médias sociaux haïtienne qui vous permet de vous connecter avec des amis, partager des publications, passer en direct, envoyer des cadeaux et discuter en temps réel. Elle utilise Supabase pour les données, prend en charge la diffusion en direct avec des filtres d'arrière-plan et comprend une carte satellite pour le divertissement. Elle est conçue pour être un espace moderne, sécurisé et amusant pour les utilisateurs haïtiens afin d'interagir en ligne. Toutes les fonctionnalités sont construites avec Python et Streamlit. Et en plus, lorsqu'il y a un match de la Coupe du Monde, vous pouvez le regarder en direct directement sur la plateforme !",
         "network_error": "⚠️ Impossible de se connecter au serveur d'authentification. Veuillez vérifier votre connexion internet et réessayer. Si le problème persiste, contactez le support.",
         "debug_hint": "Si vous êtes administrateur, activez 'Afficher les infos de débogage' ci-dessous pour voir l'erreur brute.",
-        "show_debug": "Afficher les infos de débogage"
+        "show_debug": "Afficher les infos de débogage",
+        # Home page translations (French – keep English for now, or translate if desired)
+        "home_title": "🏠 Home Sweet Home",
+        "home_haiti": "HAITI",
+        "home_subtitle": "Your Haitian social media platform"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -613,7 +621,11 @@ LANG = {
         "app_explanation": "Esta aplicación fue construida por Gesner Deslandes, Ingeniero Jefe en GlobalInternet.py. Teléfono: (509) 4738-5663. Correo: deslandes78@gmail.com. Póngase en contacto con Gesner si desea crear un sitio web o software. Esta aplicación es una plataforma de redes sociales haitiana que le permite conectarse con amigos, compartir publicaciones, transmitir en vivo, enviar regalos y chatear en tiempo real. Utiliza Supabase para los datos, admite transmisión en vivo con filtros de fondo e incluye un mapa satelital para diversión. Está diseñada para ser un espacio moderno, seguro y divertido para que los usuarios haitianos interactúen en línea. Todas las características están construidas con Python y Streamlit. ¡Además, cuando haya un partido del Mundial, podrás verlo en vivo aquí mismo en la plataforma!",
         "network_error": "⚠️ No se puede conectar al servidor de autenticación. Verifique su conexión a internet e intente de nuevo. Si el problema persiste, contacte al soporte.",
         "debug_hint": "Si es administrador, active 'Mostrar información de depuración' a continuación para ver el error sin procesar.",
-        "show_debug": "Mostrar información de depuración"
+        "show_debug": "Mostrar información de depuración",
+        # Home page translations (Spanish – keep English)
+        "home_title": "🏠 Home Sweet Home",
+        "home_haiti": "HAITI",
+        "home_subtitle": "Your Haitian social media platform"
     },
     "ht": {
         "login_title": "Konekte",
@@ -758,7 +770,11 @@ LANG = {
         "app_explanation": "Aplikasyon sa a te bati pa Gesner Deslandes, Enjenyè an Chèf nan GlobalInternet.py. Telefòn: (509) 4738-5663. Imèl: deslandes78@gmail.com. Kontakte Gesner si ou vle bati yon sit wèb oswa lojisyèl. Aplikasyon sa a se yon platfòm medya sosyal ayisyen ki pèmèt ou konekte ak zanmi, pataje pòs, ale an dirèk, voye kado, ak chat an tan reyèl. Li itilize Supabase pou done, sipòte difizyon an dirèk ak filt background, epi li gen yon kat satelit pou amizman. Li fèt pou yon espas modèn, sekirize ak amizan pou itilizatè ayisyen yo ka entèaktif sou entènèt. Tout fonksyonalite yo bati ak Python ak Streamlit. Anplis de sa, lè gen yon match Mondyal la, ou ka gade l an dirèk sou platfòm nan!",
         "network_error": "⚠️ Pa ka konekte ak sèvè otantifikasyon an. Tanpri tcheke koneksyon entènèt ou epi eseye ankò. Si pwoblèm nan kontinye, kontakte sipò.",
         "debug_hint": "Si w se administratè, aktive 'Montre enfòmasyon debogaj' anba a pou wè erè a.",
-        "show_debug": "Montre enfòmasyon debogaj"
+        "show_debug": "Montre enfòmasyon debogaj",
+        # Home page translations (Haitian Creole)
+        "home_title": "Lakay Se Lakay",
+        "home_haiti": "Ayiti",
+        "home_subtitle": "Nouvo rezo Sosyal Ayisyen"
     },
 }
 
@@ -3929,14 +3945,14 @@ def main_app():
 # ========== ENTRY ==========
 if __name__ == "__main__":
     if (st.session_state.get("app_authenticated", False) or not APP_PASSWORD) and st.session_state.logged_in:
-        st.markdown("""
+        st.markdown(f"""
         <div class="home-title">
-            <h1>🏠 Home Sweet Home</h1>
+            <h1>{t('home_title')}</h1>
             <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
                  background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); 
                  -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-                 display: inline-block; padding: 0 20px; margin: 0.2rem 0;">HAITI</div>
-            <p>Your Haitian social media platform</p>
+                 display: inline-block; padding: 0 20px; margin: 0.2rem 0;">{t('home_haiti')}</div>
+            <p>{t('home_subtitle')}</p>
         </div>
         """, unsafe_allow_html=True)
 
