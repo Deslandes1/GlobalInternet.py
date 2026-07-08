@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - renamed, image-only uploads) ======
+# ====== FULL app.py (Lakay se Lakay - video + image upload) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.17 (Image-only uploads, name changed to Lakay se Lakay)
+# Version: 77.8.18 (Video & image upload support)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -242,7 +242,7 @@ LANG = {
         "back_to_feed": "Back to Feed",
         "create_post": "Create a post",
         "caption_placeholder": "Write something... or paste a video link",
-        "add_media": "Add images (PNG, JPG, JPEG, GIF)",
+        "add_media": "Add images or videos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Visibility",
         "public": "Public",
         "private": "Private",
@@ -390,7 +390,7 @@ LANG = {
         "back_to_feed": "Retour au fil",
         "create_post": "Créer une publication",
         "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo",
-        "add_media": "Ajouter des images (PNG, JPG, JPEG, GIF)",
+        "add_media": "Ajouter des images ou vidéos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Visibilité",
         "public": "Public",
         "private": "Privé",
@@ -537,7 +537,7 @@ LANG = {
         "back_to_feed": "Volver al feed",
         "create_post": "Crear una publicación",
         "caption_placeholder": "Escribe algo... o pega un enlace de video",
-        "add_media": "Agregar imágenes (PNG, JPG, JPEG, GIF)",
+        "add_media": "Agregar imágenes o videos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Visibilidad",
         "public": "Público",
         "private": "Privado",
@@ -684,7 +684,7 @@ LANG = {
         "back_to_feed": "Retounen nan feed",
         "create_post": "Kreye yon pòs",
         "caption_placeholder": "Ekri yon bagay... oswa kole yon lyen videyo",
-        "add_media": "Ajoute imaj (PNG, JPG, JPEG, GIF)",
+        "add_media": "Ajoute imaj oswa videyo (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Vizibilite",
         "public": "Piblik",
         "private": "Prive",
@@ -2537,18 +2537,13 @@ def login_interface():
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
 def display_media_item(media):
+    """Display a single media item (image or video) with st.image or st.video."""
     try:
         if media["type"] == "image":
             st.image(media["url"], use_column_width=True)
         elif media["type"] == "video":
-            video_html = f"""
-            <video controls style="width:100%; max-height:60vh; border-radius:12px;" preload="metadata">
-                <source src="{media['url']}" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
-            """
-            st.markdown(video_html, unsafe_allow_html=True)
-            st.markdown(f"[📹 Open video directly]({media['url']})", unsafe_allow_html=True)
+            # Use st.video for better compatibility
+            st.video(media["url"])
         else:
             st.markdown(f"[Media file]({media['url']})")
     except Exception as e:
@@ -2599,10 +2594,10 @@ def render_feed():
             )
         media_files = st.file_uploader(
             t("add_media"),
-            type=["png", "jpg", "jpeg", "gif"],  # IMAGES ONLY
+            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],  # images + videos
             accept_multiple_files=True
         )
-        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For videos, use a link (YouTube, etc.).")
+        st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For videos larger than 200MB, use a link (YouTube, etc.).")
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
@@ -2694,7 +2689,7 @@ def render_feed():
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
-                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif"], accept_multiple_files=True)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
                         col1, col2 = st.columns(2)
                         with col1:
                             if st.form_submit_button("Save"):
@@ -3023,8 +3018,8 @@ def render_friends_page():
 
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input(t("send_message"))
-            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif"])
-            st.caption("⚠️ File size limit: 200MB (configurable). For videos, use external links.")
+            uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
+            st.caption("⚠️ File size limit: 200MB (configurable). For larger videos, use external links.")
             col1, col2 = st.columns([1,5])
             with col1:
                 sent = st.form_submit_button(t("send"))
@@ -3885,7 +3880,6 @@ def main_app():
 
 # ========== ENTRY ==========
 if __name__ == "__main__":
-    # If the user is logged in, show the home title
     if st.session_state.logged_in:
         st.markdown(f"""
         <div class="home-title">
