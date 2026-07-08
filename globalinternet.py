@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - avatar + media fallback to base64) ======
+# ====== FULL app.py (Lakay se Lakay - silent bucket check, base64 fallback) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.20 (Avatar + media upload with fallback to base64)
+# Version: 77.8.21 (Silent bucket check, media fallback to base64)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -66,6 +66,9 @@ supabase = init_supabase()
 
 # ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
 def ensure_bucket_exists(bucket_name, public=True):
+    """Check if bucket exists. Returns True if exists, False otherwise.
+       No error messages are shown for 404 (bucket missing) – caller will handle fallback.
+    """
     if supabase is None:
         return False
 
@@ -87,19 +90,11 @@ def ensure_bucket_exists(bucket_name, public=True):
         if check_resp.status_code == 200:
             return True
         elif check_resp.status_code == 404:
-            create_url = f"{supabase_url}/storage/v1/bucket"
-            payload = {"name": bucket_name, "public": public}
-            create_resp = requests.post(create_url, json=payload, headers=headers)
-            if create_resp.status_code == 200:
-                st.success(f"✅ Created storage bucket: {bucket_name}")
-                return True
-            else:
-                if "already exists" in create_resp.text:
-                    return True
-                st.error(f"❌ Failed to create bucket '{bucket_name}': {create_resp.text}\nPlease create it manually in Supabase Dashboard → Storage.")
-                return False
+            # Bucket missing – return False silently (caller will fallback)
+            return False
         else:
-            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease create it manually.")
+            # Other error (e.g., 403) – show it, as it indicates a permission issue
+            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease check your permissions.")
             return False
     except Exception as e:
         st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
