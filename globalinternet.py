@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.3 (Posts, comments, live sessions & friends now work without foreign keys)
+# Version: 77.8.4 (Fixed avatar upload error message)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3187,6 +3187,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
+# ====== FIXED render_profile – no false error message ======
 def render_profile():
     """Edit current user profile."""
     st.header(t("profile"))
@@ -3206,10 +3207,9 @@ def render_profile():
             if url:
                 profile["avatar_url"] = url
                 update_profile(profile)
-                # Rerun to refresh the display
+                st.success("Avatar updated successfully!")
                 st.rerun()
-            else:
-                st.error("Failed to upload avatar. Check storage permissions.")
+            # The error message is now handled inside upload_avatar() – no extra error here
     with col2:
         with st.form("edit_profile"):
             st.markdown("#### Account Information")
