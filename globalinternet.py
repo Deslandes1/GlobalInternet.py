@@ -1,9 +1,9 @@
-# ====== FULL app.py (fixed video playback) ======
+# ====== FULL app.py (with automatic bucket creation) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.10 (Video playback fixed with HTML5 player)
+# Version: 77.8.11 (Auto-creates storage buckets)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -96,6 +96,35 @@ def init_supabase():
         return None
 
 supabase = init_supabase()
+
+# ====== ENSURE STORAGE BUCKETS EXIST ======
+def ensure_bucket_exists(bucket_name, public=True):
+    """Check if bucket exists; if not, create it using Supabase Storage API."""
+    if supabase is None:
+        return False
+    try:
+        # Try to get bucket info – if it fails, bucket doesn't exist
+        supabase.storage.get_bucket(bucket_name)
+        return True
+    except Exception as e:
+        if "Bucket not found" in str(e):
+            try:
+                # Create bucket (public by default)
+                supabase.storage.create_bucket(bucket_name, {"public": public})
+                st.success(f"✅ Created storage bucket: {bucket_name}")
+                return True
+            except Exception as create_error:
+                st.error(f"❌ Failed to create bucket '{bucket_name}': {create_error}\n"
+                         f"Please create it manually in Supabase Dashboard → Storage.")
+                return False
+        else:
+            st.error(f"❌ Error checking bucket '{bucket_name}': {e}")
+            return False
+
+# Create buckets on startup
+if supabase:
+    for bucket in ["avatars", "post_media", "chat_media"]:
+        ensure_bucket_exists(bucket, public=True)
 
 # --- Secrets for owner only ---
 OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
@@ -1372,6 +1401,9 @@ def update_profile(profile_data):
 def upload_avatar(user_id, image_file):
     if supabase is None:
         return None
+    if not ensure_bucket_exists("avatars"):
+        st.error("❌ Cannot upload: 'avatars' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
+        return None
     try:
         ext = image_file.name.split('.')[-1]
         file_name = f"{user_id}_{int(time.time())}.{ext}"
@@ -1389,6 +1421,9 @@ def upload_avatar(user_id, image_file):
 
 def upload_post_media(user_id, file):
     if supabase is None:
+        return None
+    if not ensure_bucket_exists("post_media"):
+        st.error("❌ Cannot upload: 'post_media' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
         return None
     try:
         content_type = file.type
@@ -1415,6 +1450,9 @@ def upload_post_media(user_id, file):
 
 def upload_chat_media(user_id, file):
     if supabase is None:
+        return None
+    if not ensure_bucket_exists("chat_media"):
+        st.error("❌ Cannot upload: 'chat_media' bucket missing. Please create it manually in Supabase Dashboard → Storage.")
         return None
     try:
         content_type = file.type
