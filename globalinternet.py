@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - silent bucket check, base64 fallback) ======
+# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.21 (Silent bucket check, media fallback to base64)
+# Version: 77.8.22 (Added Live World Cup streams)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -204,6 +204,7 @@ LANG = {
         "feed": "📡 Feed",
         "friends_chat": "👥 Friends & Chat",
         "satellite_map": "🛰️ Satellite Map",
+        "worldcup": "⚽ Live World Cup",
         "profile": "👤 Profile",
         "owner_space": "🕊️ Owner Space",
         "logout": "🚪 Logout",
@@ -351,6 +352,7 @@ LANG = {
         "feed": "📡 Fil d'actualité",
         "friends_chat": "👥 Amis et Chat",
         "satellite_map": "🛰️ Carte satellite",
+        "worldcup": "⚽ Coupe du Monde en direct",
         "profile": "👤 Profil",
         "owner_space": "🕊️ Espace propriétaire",
         "logout": "🚪 Déconnexion",
@@ -498,6 +500,7 @@ LANG = {
         "feed": "📡 Feed",
         "friends_chat": "👥 Amigos y chat",
         "satellite_map": "🛰️ Mapa satelital",
+        "worldcup": "⚽ Copa del Mundo en vivo",
         "profile": "👤 Perfil",
         "owner_space": "🕊️ Espacio del propietario",
         "logout": "🚪 Cerrar sesión",
@@ -645,6 +648,7 @@ LANG = {
         "feed": "📡 Feed",
         "friends_chat": "👥 Zanmi ak chat",
         "satellite_map": "🛰️ Kat satelit",
+        "worldcup": "⚽ Mondyal an dirèk",
         "profile": "👤 Pwofil",
         "owner_space": "🕊️ Espas Pwopriyetè",
         "logout": "🚪 Dekonekte",
@@ -3172,6 +3176,34 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
+# ====== NEW: Live World Cup page ======
+def render_worldcup():
+    st.title("⚽ " + t("worldcup"))
+    
+    # The two streams from the GlobalInternet.py surveillance portal
+    stream1_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPXRlbGVtdW5kb3VzYQ=="
+    stream2_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPWRzcG9ydHM="
+    
+    st.markdown("""
+    <div style="background: rgba(255,255,255,0.1); border: 1px solid #2a1f14; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+        <p style="color: #ffffff; font-size: 1.1rem;">🏆 Watch every match of the <strong>FIFA World Cup 2026</strong> live – completely free!<br>
+        Choose your stream below and enjoy the game.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
+    
+    with tab1:
+        st.components.v1.iframe(stream1_url, height=600, scrolling=True)
+        st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
+    
+    with tab2:
+        st.components.v1.iframe(stream2_url, height=600, scrolling=True)
+        st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
+    
+    st.markdown("---")
+    st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
+
 def render_profile():
     st.header(t("profile"))
     if st.session_state.profile is None:
@@ -3860,7 +3892,7 @@ def main_app():
 
         st.divider()
 
-        page_keys = ["feed", "friends_chat", "satellite_map", "profile", "owner_space"]
+        page_keys = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "owner_space"]
         page_titles = {key: t(key) for key in page_keys}
         if "current_page" not in st.session_state:
             st.session_state.current_page = "feed"
@@ -3896,6 +3928,7 @@ def main_app():
         "feed": render_feed,
         "friends_chat": render_friends_page,
         "satellite_map": render_map,
+        "worldcup": render_worldcup,
         "profile": render_profile,
         "owner_space": owner_space
     }
