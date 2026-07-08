@@ -1,9 +1,9 @@
-# ====== FULL app.py (No startup bucket checks – errors only on upload) ======
+# ====== FULL app.py (with fixed bucket creation via REST API) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.13 (Removed auto bucket check on startup)
+# Version: 77.8.14 (Removed profile picture from global password screen)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -33,6 +33,7 @@ import edge_tts
 st.set_page_config(page_title="Home Sweet Home", page_icon="🏠", layout="wide")
 
 # ====== GLOBAL APP PASSWORD PROTECTION ======
+# Read password from the secret "Login_password"
 APP_PASSWORD = st.secrets.get("Login_password")
 
 if APP_PASSWORD:
@@ -51,7 +52,7 @@ if APP_PASSWORD:
         )
         with st.container():
             st.markdown('<div class="login-box">', unsafe_allow_html=True)
-            st.image("https://github.com/Deslandes1/Let-s-Learn-Mathematics-with-Gesner/blob/main/Gesner%20Deslandes.png?raw=true", width=100)
+            # --- REMOVED the image line ---
             st.markdown("### 🏠 Home Sweet Home")
             st.markdown("Enter the app password to continue.")
             with st.form("app_password_form"):
