@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.4 (Fixed avatar upload error message)
+# Version: 77.8.5 (Language selector moved to sidebar; voice disabled for Haitian Creole)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2461,22 +2461,7 @@ def login_interface():
         unsafe_allow_html=True
     )
 
-    lang_options = {
-        "en": "English",
-        "fr": "Français",
-        "es": "Español",
-        "ht": "Kreyòl Ayisyen"
-    }
-    selected_lang = st.selectbox(
-        t("voice_lang"),
-        options=list(lang_options.keys()),
-        format_func=lambda x: lang_options[x],
-        index=0
-    )
-    if selected_lang != st.session_state.language:
-        st.session_state.language = selected_lang
-        st.rerun()
-
+    # Language selection has been moved to the sidebar; no longer shown here.
     st.markdown("---")
 
     show_debug = st.checkbox(t("show_debug"), value=False)
@@ -3777,6 +3762,25 @@ def main_app():
         """, unsafe_allow_html=True)
         st.divider()
 
+        # ====== LANGUAGE SELECTOR ======
+        lang_options = {
+            "en": "English",
+            "fr": "Français",
+            "es": "Español",
+            "ht": "Kreyòl Ayisyen"
+        }
+        selected_lang = st.selectbox(
+            t("voice_lang"),
+            options=list(lang_options.keys()),
+            format_func=lambda x: lang_options[x],
+            index=list(lang_options.keys()).index(st.session_state.language)
+        )
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+        st.divider()
+
         if st.session_state.unread_count > 0:
             st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
 
@@ -3847,21 +3851,24 @@ def main_app():
             logout()
         st.divider()
 
-        # Audio explanation
-        if st.button(t("listen_explanation"), use_container_width=True):
-            voice_map = {
-                "en": "en-US-JennyNeural",
-                "fr": "fr-FR-DeniseNeural",
-                "es": "es-ES-ElviraNeural",
-                "ht": "ht-HT-FabriceNeural"
-            }
-            voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
-            text = t("app_explanation")
-            audio_file = generate_audio(text, voice)
-            if audio_file:
-                play_audio(audio_file)
-            else:
-                st.error("Failed to generate audio.")
+        # Audio explanation – disabled for Haitian Creole
+        if st.session_state.language == 'ht':
+            st.warning("🔊 Voice explanation is not available in Kreyòl Ayisyen. Please select another language for audio.")
+        else:
+            if st.button(t("listen_explanation"), use_container_width=True):
+                voice_map = {
+                    "en": "en-US-JennyNeural",
+                    "fr": "fr-FR-DeniseNeural",
+                    "es": "es-ES-ElviraNeural",
+                    "ht": "ht-HT-FabriceNeural"  # kept but not used
+                }
+                voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
+                text = t("app_explanation")
+                audio_file = generate_audio(text, voice)
+                if audio_file:
+                    play_audio(audio_file)
+                else:
+                    st.error("Failed to generate audio.")
 
         st.divider()
 
