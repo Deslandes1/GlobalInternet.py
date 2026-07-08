@@ -1,9 +1,9 @@
-# ====== FULL app.py (with fixed bucket creation via REST API) ======
+# ====== FULL app.py (no global password, clean login page) ======
 # Home Sweet Home - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.14 (Removed profile picture from global password screen)
+# Version: 77.8.15 (Removed global password protection)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -31,40 +31,6 @@ import edge_tts
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Home Sweet Home", page_icon="🏠", layout="wide")
-
-# ====== GLOBAL APP PASSWORD PROTECTION ======
-# Read password from the secret "Login_password"
-APP_PASSWORD = st.secrets.get("Login_password")
-
-if APP_PASSWORD:
-    if "app_authenticated" not in st.session_state:
-        st.session_state.app_authenticated = False
-
-    if not st.session_state.app_authenticated:
-        st.markdown(
-            """
-            <style>
-                .stApp { background: linear-gradient(145deg, #E3F2FD, #FFCDD2); }
-                .login-box { max-width: 400px; margin: 100px auto; padding: 30px; background: rgba(255,255,255,0.7); border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); text-align: center; }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-        with st.container():
-            st.markdown('<div class="login-box">', unsafe_allow_html=True)
-            # --- REMOVED the image line ---
-            st.markdown("### 🏠 Home Sweet Home")
-            st.markdown("Enter the app password to continue.")
-            with st.form("app_password_form"):
-                pwd = st.text_input("Password", type="password", placeholder="Enter app password")
-                if st.form_submit_button("🔓 Unlock"):
-                    if pwd == APP_PASSWORD:
-                        st.session_state.app_authenticated = True
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid password")
-            st.markdown('</div>', unsafe_allow_html=True)
-        st.stop()
 
 # ====== KEEP‑ALIVE PING ======
 try:
@@ -100,9 +66,6 @@ supabase = init_supabase()
 
 # ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
 def ensure_bucket_exists(bucket_name, public=True):
-    """Check if bucket exists; if not, create it using Supabase Storage REST API.
-       This is now only called when uploading files, so errors appear only then.
-    """
     if supabase is None:
         return False
 
@@ -124,7 +87,6 @@ def ensure_bucket_exists(bucket_name, public=True):
         if check_resp.status_code == 200:
             return True
         elif check_resp.status_code == 404:
-            # Try to create
             create_url = f"{supabase_url}/storage/v1/bucket"
             payload = {"name": bucket_name, "public": public}
             create_resp = requests.post(create_url, json=payload, headers=headers)
@@ -137,7 +99,6 @@ def ensure_bucket_exists(bucket_name, public=True):
                 st.error(f"❌ Failed to create bucket '{bucket_name}': {create_resp.text}\nPlease create it manually in Supabase Dashboard → Storage.")
                 return False
         else:
-            # Other error (e.g., 403)
             st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease create it manually.")
             return False
     except Exception as e:
@@ -370,7 +331,7 @@ LANG = {
         "network_error": "⚠️ Cannot connect to the authentication server. Please check your internet connection and try again. If the problem persists, contact support.",
         "debug_hint": "If you are an administrator, enable 'Show debug info' below to see the raw error.",
         "show_debug": "Show debug info",
-        # Home page translations (English)
+        # Home page translations
         "home_title": "🏠 Home Sweet Home",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
@@ -518,7 +479,6 @@ LANG = {
         "network_error": "⚠️ Impossible de se connecter au serveur d'authentification. Veuillez vérifier votre connexion internet et réessayer. Si le problème persiste, contactez le support.",
         "debug_hint": "Si vous êtes administrateur, activez 'Afficher les infos de débogage' ci-dessous pour voir l'erreur brute.",
         "show_debug": "Afficher les infos de débogage",
-        # Home page translations (French – keep English for now, or translate if desired)
         "home_title": "🏠 Home Sweet Home",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
@@ -666,7 +626,6 @@ LANG = {
         "network_error": "⚠️ No se puede conectar al servidor de autenticación. Verifique su conexión a internet e intente de nuevo. Si el problema persiste, contacte al soporte.",
         "debug_hint": "Si es administrador, active 'Mostrar información de depuración' a continuación para ver el error sin procesar.",
         "show_debug": "Mostrar información de depuración",
-        # Home page translations (Spanish – keep English)
         "home_title": "🏠 Home Sweet Home",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform"
@@ -814,7 +773,6 @@ LANG = {
         "network_error": "⚠️ Pa ka konekte ak sèvè otantifikasyon an. Tanpri tcheke koneksyon entènèt ou epi eseye ankò. Si pwoblèm nan kontinye, kontakte sipò.",
         "debug_hint": "Si w se administratè, aktive 'Montre enfòmasyon debogaj' anba a pou wè erè a.",
         "show_debug": "Montre enfòmasyon debogaj",
-        # Home page translations (Haitian Creole)
         "home_title": "Lakay Se Lakay",
         "home_haiti": "Ayiti",
         "home_subtitle": "Nouvo rezo Sosyal Ayisyen"
@@ -1197,7 +1155,6 @@ st.markdown("""
         color: #1e2a3a;
         font-size: 1.1rem;
     }
-    /* White Dove symbol on login page */
     .dove-symbol {
         font-size: 4rem;
         color: #ffffff;
@@ -1634,7 +1591,6 @@ def remove_participant(participant_id):
         return False
 
 # ---- Posts ----
-# ====== FIXED load_posts_cached (no foreign keys) ======
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None):
     if supabase is None:
@@ -1801,7 +1757,6 @@ def share_post(original_post_id, user_id, is_public=True):
         return False
 
 # ---- Comments ----
-# ====== FIXED load_comments (no foreign keys) ======
 def load_comments(post_id):
     if supabase is None:
         return []
@@ -1872,7 +1827,6 @@ def like_comment(comment_id, increment=True):
         return False
 
 # ---- Live Sessions ----
-# ====== FIXED load_live_sessions (without foreign keys) ======
 def load_live_sessions():
     if supabase is None:
         return []
@@ -1974,7 +1928,6 @@ def end_live_session(session_id):
         st.session_state.last_error = f"Error ending live session: {e}"
         return False
 
-# ====== FIXED get_live_session (without foreign keys) ======
 def get_live_session(session_id):
     if supabase is None:
         return None
@@ -2060,7 +2013,6 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
-# ====== FIXED load_friend_data (without foreign keys) ======
 def load_friend_data():
     if supabase is None or not st.session_state.user:
         return
@@ -3933,7 +3885,8 @@ def main_app():
 
 # ========== ENTRY ==========
 if __name__ == "__main__":
-    if (st.session_state.get("app_authenticated", False) or not APP_PASSWORD) and st.session_state.logged_in:
+    # If the user is logged in, show the home title and the main app
+    if st.session_state.logged_in:
         st.markdown(f"""
         <div class="home-title">
             <h1>{t('home_title')}</h1>
