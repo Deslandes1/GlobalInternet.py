@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - no seed, fixed indent) ======
+# ====== FULL app.py (Lakay se Lakay - NO AUTO SEEDING) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.25 (Fixed indentation, removed broken video seed)
+# Version: 77.8.26 (Removed all automatic video seeding)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
