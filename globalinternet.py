@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams, feed filtered) ======
+# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams, feed filtered, iframe width fix) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.24 (Filter first 15 embedded-link posts from feed)
+# Version: 77.8.25 (Fixed st.iframe width)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1225,24 +1225,24 @@ def has_embeddable_link(text):
             get_facebook_video_url(text) or get_tiktok_id(text) or get_twitch_url(text) or
             get_instagram_url(text) or get_streamable_id(text) or is_direct_video_url(text))
 
-# ====== UPDATED: Enhanced embed_video_from_url with st.iframe ======
+# ====== UPDATED: Enhanced embed_video_from_url with st.iframe (width fixed) ======
 def embed_video_from_url(url):
     youtube_id = get_youtube_id(url)
     if youtube_id:
         embed_url = f"https://www.youtube.com/embed/{youtube_id}?autoplay=1"
-        st.iframe(embed_url, width="100%", height=400)
+        st.iframe(embed_url, width=None, height=400)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
         embed_url = f"https://player.vimeo.com/video/{vimeo_id}?autoplay=1"
-        st.iframe(embed_url, width="100%", height=400)
+        st.iframe(embed_url, width=None, height=400)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Vimeo {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     dailymotion_id = get_dailymotion_id(url)
     if dailymotion_id:
         embed_url = f"https://www.dailymotion.com/embed/video/{dailymotion_id}?autoplay=1"
-        st.iframe(embed_url, width="100%", height=400)
+        st.iframe(embed_url, width=None, height=400)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Dailymotion {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     fb_url = get_facebook_video_url(url)
@@ -1284,19 +1284,19 @@ def embed_video_from_url(url):
         else:
             channel = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}&autoplay=true"
-        st.iframe(embed_url, width="100%", height=400)
+        st.iframe(embed_url, width=None, height=400)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Twitch {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     insta_url = get_instagram_url(url)
     if insta_url:
         embed_url = f"{url}embed"
-        st.iframe(embed_url, width="100%", height=600)
+        st.iframe(embed_url, width=None, height=600)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Instagram {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     streamable_id = get_streamable_id(url)
     if streamable_id:
         embed_url = f"https://streamable.com/e/{streamable_id}"
-        st.iframe(embed_url, width="100%", height=400)
+        st.iframe(embed_url, width=None, height=400)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Streamable {t('now_watching')}</p>", unsafe_allow_html=True)
         return True
     if is_direct_video_url(url):
@@ -3048,7 +3048,7 @@ def render_friends_page():
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
-        st.iframe(jitsi_url, width="100%", height=500)
+        st.iframe(jitsi_url, width=None, height=500)
         if st.button(t("end_call")):
             end_call()
             st.rerun()
@@ -3178,11 +3178,11 @@ def render_worldcup():
     tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
     
     with tab1:
-        st.iframe(stream1_url, width="100%", height=600)
+        st.iframe(stream1_url, width=None, height=600)
         st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
     
     with tab2:
-        st.iframe(stream2_url, width="100%", height=600)
+        st.iframe(stream2_url, width=None, height=600)
         st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
     
     st.markdown("---")
@@ -3311,13 +3311,13 @@ def render_live_page(session_id):
                         video_id = None
                     if video_id:
                         embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                        st.iframe(embed_url, width="100%", height=400)
+                        st.iframe(embed_url, width=None, height=400)
                     else:
                         st.video(stream_url)
                 elif "twitch.tv" in stream_url:
                     channel = stream_url.split("/")[-1].split("?")[0]
                     embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}&autoplay=true"
-                    st.iframe(embed_url, width="100%", height=400)
+                    st.iframe(embed_url, width=None, height=400)
                 else:
                     st.video(stream_url)
             else:
