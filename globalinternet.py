@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams, feed filtered, iframe width fix) ======
+# ====== FULL app.py (Lakay se Lakay - NO AUTO SEEDING) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.25 (Fixed st.iframe width)
+# Version: 77.8.26 (Removed all automatic video seeding)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -64,7 +64,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
+# ====== ENSURE STORAGE BUCKETS EXIST (silent on 404) ======
 def ensure_bucket_exists(bucket_name, public=True):
     if supabase is None:
         return False
@@ -72,7 +72,6 @@ def ensure_bucket_exists(bucket_name, public=True):
     supabase_key = st.secrets.get("SUPABASE_KEY")
     supabase_url = st.secrets.get("SUPABASE_URL")
     if not supabase_key or not supabase_url:
-        st.error("❌ Supabase credentials missing. Cannot manage buckets.")
         return False
 
     headers = {
@@ -89,10 +88,8 @@ def ensure_bucket_exists(bucket_name, public=True):
         elif check_resp.status_code == 404:
             return False
         else:
-            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease check your permissions.")
             return False
-    except Exception as e:
-        st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
+    except Exception:
         return False
 
 # --- Secrets for owner only ---
@@ -1217,37 +1214,38 @@ def is_direct_video_url(url):
     video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg', '.m4v']
     return any(url.lower().endswith(ext) for ext in video_extensions)
 
-# Helper to detect if a post content contains an embeddable video link
-def has_embeddable_link(text):
-    if not text:
-        return False
-    return (get_youtube_id(text) or get_vimeo_id(text) or get_dailymotion_id(text) or
-            get_facebook_video_url(text) or get_tiktok_id(text) or get_twitch_url(text) or
-            get_instagram_url(text) or get_streamable_id(text) or is_direct_video_url(text))
-
-# ====== UPDATED: Enhanced embed_video_from_url with st.iframe (width fixed) ======
+# ====== UPDATED: Enhanced embed_video_from_url with Twitch live support ======
 def embed_video_from_url(url):
     youtube_id = get_youtube_id(url)
     if youtube_id:
-        embed_url = f"https://www.youtube.com/embed/{youtube_id}?autoplay=1"
-        st.iframe(embed_url, width=None, height=400)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}?autoplay=1" 
+                frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
-        embed_url = f"https://player.vimeo.com/video/{vimeo_id}?autoplay=1"
-        st.iframe(embed_url, width=None, height=400)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Vimeo {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe src="https://player.vimeo.com/video/{vimeo_id}?autoplay=1" width="100%" height="400" 
+                frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Vimeo {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     dailymotion_id = get_dailymotion_id(url)
     if dailymotion_id:
-        embed_url = f"https://www.dailymotion.com/embed/video/{dailymotion_id}?autoplay=1"
-        st.iframe(embed_url, width=None, height=400)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Dailymotion {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe frameborder="0" width="100%" height="400" 
+                src="https://www.dailymotion.com/embed/video/{dailymotion_id}?autoplay=1" 
+                allowfullscreen allow="autoplay"></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Dailymotion {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     fb_url = get_facebook_video_url(url)
     if fb_url:
-        # Facebook video embed requires SDK – keep as st.components.v1.html (JavaScript)
         embed_html = f"""
         <div id="fb-root"></div>
         <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
@@ -1284,20 +1282,29 @@ def embed_video_from_url(url):
         else:
             channel = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}&autoplay=true"
-        st.iframe(embed_url, width=None, height=400)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Twitch {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe src="{embed_url}" 
+                height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Twitch {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     insta_url = get_instagram_url(url)
     if insta_url:
-        embed_url = f"{url}embed"
-        st.iframe(embed_url, width=None, height=600)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Instagram {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Instagram {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=630)
         return True
     streamable_id = get_streamable_id(url)
     if streamable_id:
-        embed_url = f"https://streamable.com/e/{streamable_id}"
-        st.iframe(embed_url, width=None, height=400)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Streamable {t('now_watching')}</p>", unsafe_allow_html=True)
+        embed_html = f"""
+        <iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" 
+                frameborder="0" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Streamable {t('now_watching')}</p>
+        """
+        st.components.v1.html(embed_html, height=430)
         return True
     if is_direct_video_url(url):
         st.video(url)
@@ -1348,7 +1355,7 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
-# ====== UPDATED: upload_avatar with fallback to base64 ======
+# ====== UPDATED: upload_avatar with fallback to base64 (silent) ======
 def upload_avatar(user_id, image_file):
     if supabase is None:
         return upload_avatar_base64(image_file)
@@ -1362,8 +1369,7 @@ def upload_avatar(user_id, image_file):
         supabase.storage.from_("avatars").upload(file_name, image_bytes)
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
-    except Exception as e:
-        st.warning(f"Supabase avatar upload failed, falling back to base64: {e}")
+    except Exception:
         return upload_avatar_base64(image_file)
 
 def upload_avatar_base64(image_file):
@@ -1375,10 +1381,8 @@ def upload_avatar_base64(image_file):
             data_url = f"data:{content_type};base64,{b64}"
             return data_url
         else:
-            st.error("Invalid image format.")
             return None
-    except Exception as e:
-        st.session_state.last_error = f"Avatar base64 conversion failed: {e}"
+    except Exception:
         return None
 
 # ====== FIXED: upload_post_media with fallback to base64 ======
@@ -1395,15 +1399,14 @@ def upload_post_media(user_id, file):
         file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
         supabase.storage.from_("post_media").upload(
-            file_name, 
-            file_bytes, 
+            file_name,
+            file_bytes,
             {"content-type": content_type}
         )
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception as e:
-        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+    except Exception:
         return upload_media_base64(file)
 
 def upload_media_base64(file):
@@ -1414,10 +1417,10 @@ def upload_media_base64(file):
         data_url = f"data:{content_type};base64,{b64}"
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": data_url, "type": media_type}
-    except Exception as e:
-        st.session_state.last_error = f"Base64 upload failed: {e}"
+    except Exception:
         return None
 
+# ====== FIXED: upload_chat_media with fallback to base64 ======
 def upload_chat_media(user_id, file):
     if supabase is None:
         return upload_media_base64(file)
@@ -1431,15 +1434,14 @@ def upload_chat_media(user_id, file):
         file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
         supabase.storage.from_("chat_media").upload(
-            file_name, 
-            file_bytes, 
+            file_name,
+            file_bytes,
             {"content-type": content_type}
         )
         public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception as e:
-        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+    except Exception:
         return upload_media_base64(file)
 
 def delete_post(post_id):
@@ -2646,24 +2648,10 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    # ========== FEED FILTER: skip first 15 posts with embedded links ==========
-    all_posts = st.session_state.posts
-    filtered_posts = []
-    skip_count = 0
-    for post in all_posts:
-        if skip_count < 15 and has_embeddable_link(post.get('content', '')):
-            skip_count += 1
-            continue
-        filtered_posts.append(post)
-
-    # If we skipped some, show a message
-    if skip_count > 0:
-        st.info(f"🔄 {skip_count} posts with embedded video links have been hidden from the feed (first {skip_count} found).")
-
-    if not filtered_posts:
-        st.info("No posts to display after filtering.")
+    if not st.session_state.posts:
+        st.info("No posts yet. Be the first to create one!")
     else:
-        for post in filtered_posts:
+        for post in st.session_state.posts:
             with st.container():
                 col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
                 with col_a:
@@ -2968,7 +2956,7 @@ def render_friends_page():
                     except Exception as e:
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
-                    
+
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
@@ -3003,7 +2991,7 @@ def render_friends_page():
                     except Exception as e:
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
-                    
+
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
@@ -3048,7 +3036,9 @@ def render_friends_page():
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
-        st.iframe(jitsi_url, width=None, height=500)
+        st.components.v1.html(f"""
+            <iframe src="{jitsi_url}" width="100%" height="500" allow="camera; microphone; fullscreen"></iframe>
+        """, height=520)
         if st.button(t("end_call")):
             end_call()
             st.rerun()
@@ -3160,31 +3150,29 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
-# ====== NEW: Live World Cup page (kept as requested) ======
 def render_worldcup():
     st.title("⚽ " + t("worldcup"))
-    
-    # The two streams from the GlobalInternet.py surveillance portal
+
     stream1_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPXRlbGVtdW5kb3VzYQ=="
     stream2_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPWRzcG9ydHM="
-    
+
     st.markdown("""
     <div style="background: rgba(255,255,255,0.1); border: 1px solid #2a1f14; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
         <p style="color: #ffffff; font-size: 1.1rem;">🏆 Watch every match of the <strong>FIFA World Cup 2026</strong> live – completely free!<br>
         Choose your stream below and enjoy the game.</p>
     </div>
     """, unsafe_allow_html=True)
-    
+
     tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
-    
+
     with tab1:
-        st.iframe(stream1_url, width=None, height=600)
+        st.components.v1.iframe(stream1_url, height=600, scrolling=True)
         st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
-    
+
     with tab2:
-        st.iframe(stream2_url, width=None, height=600)
+        st.components.v1.iframe(stream2_url, height=600, scrolling=True)
         st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
-    
+
     st.markdown("---")
     st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
 
@@ -3311,13 +3299,13 @@ def render_live_page(session_id):
                         video_id = None
                     if video_id:
                         embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                        st.iframe(embed_url, width=None, height=400)
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
                     else:
                         st.video(stream_url)
                 elif "twitch.tv" in stream_url:
                     channel = stream_url.split("/")[-1].split("?")[0]
                     embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}&autoplay=true"
-                    st.iframe(embed_url, width=None, height=400)
+                    st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
                 else:
                     st.video(stream_url)
             else:
@@ -3482,7 +3470,7 @@ def render_live_page(session_id):
 
 def owner_space():
     st.header(t("owner_space"))
-    
+
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
@@ -3572,7 +3560,7 @@ def owner_space():
     with tab2:
         st.subheader(t("new_users"))
         st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
-        
+
         try:
             with st.spinner("Loading user data..."):
                 response = supabase.table("profiles").select(
@@ -3582,7 +3570,7 @@ def owner_space():
         except Exception as e:
             st.error(f"Failed to load user data: {e}")
             recent_users = []
-        
+
         if recent_users:
             display_data = []
             for u in recent_users:
@@ -3595,7 +3583,7 @@ def owner_space():
                 })
             df = pd.DataFrame(display_data)
             st.dataframe(df, use_container_width=True)
-            
+
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Report as CSV",
@@ -3606,7 +3594,7 @@ def owner_space():
             )
         else:
             st.info("No users found in the database.")
-        
+
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
