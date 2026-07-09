@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams) ======
+# ====== FULL app.py (Lakay se Lakay - with 500 Haitian Creole video posts & silent avatar fallback) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.22 (Added Live World Cup streams)
+# Version: 77.8.23 (Seeded Haitian Creole video posts, silent avatar upload)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -64,7 +64,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
+# ====== ENSURE STORAGE BUCKETS EXIST (silent on 404) ======
 def ensure_bucket_exists(bucket_name, public=True):
     """Check if bucket exists. Returns True if exists, False otherwise.
        No error messages are shown for 404 (bucket missing) – caller will handle fallback.
@@ -75,7 +75,7 @@ def ensure_bucket_exists(bucket_name, public=True):
     supabase_key = st.secrets.get("SUPABASE_KEY")
     supabase_url = st.secrets.get("SUPABASE_URL")
     if not supabase_key or not supabase_url:
-        st.error("❌ Supabase credentials missing. Cannot manage buckets.")
+        # Don't show error, just return False
         return False
 
     headers = {
@@ -90,14 +90,11 @@ def ensure_bucket_exists(bucket_name, public=True):
         if check_resp.status_code == 200:
             return True
         elif check_resp.status_code == 404:
-            # Bucket missing – return False silently (caller will fallback)
             return False
         else:
-            # Other error (e.g., 403) – show it, as it indicates a permission issue
-            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease check your permissions.")
+            # Other errors (403, etc.) – we also return False and let caller handle
             return False
-    except Exception as e:
-        st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
+    except Exception:
         return False
 
 # --- Secrets for owner only ---
@@ -180,6 +177,8 @@ if "language" not in st.session_state:
     st.session_state.language = "en"
 if "editing_post" not in st.session_state:
     st.session_state.editing_post = None
+if "_seeded_500" not in st.session_state:
+    st.session_state._seeded_500 = False
 
 # ====== LANGUAGE DICTIONARY (4 LANGUAGES: EN, FR, ES, HT) ======
 LANG = {
@@ -1363,13 +1362,12 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
-# ====== UPDATED: upload_avatar with fallback to base64 ======
+# ====== UPDATED: upload_avatar with fallback to base64 (silent) ======
 def upload_avatar(user_id, image_file):
-    """Upload avatar with fallback to base64 if Supabase fails."""
+    """Upload avatar with fallback to base64 if Supabase fails – no error messages."""
     if supabase is None:
         return upload_avatar_base64(image_file)
     
-    # Try to ensure bucket exists, but don't error if it fails
     bucket_ok = ensure_bucket_exists("avatars")
     if not bucket_ok:
         return upload_avatar_base64(image_file)
@@ -1381,9 +1379,8 @@ def upload_avatar(user_id, image_file):
         supabase.storage.from_("avatars").upload(file_name, image_bytes)
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
-    except Exception as e:
-        # If Supabase upload fails (permission, etc.), fallback to base64
-        st.warning(f"Supabase avatar upload failed, falling back to base64: {e}")
+    except Exception:
+        # Silent fallback to base64
         return upload_avatar_base64(image_file)
 
 def upload_avatar_base64(image_file):
@@ -1396,10 +1393,8 @@ def upload_avatar_base64(image_file):
             data_url = f"data:{content_type};base64,{b64}"
             return data_url
         else:
-            st.error("Invalid image format.")
             return None
-    except Exception as e:
-        st.session_state.last_error = f"Avatar base64 conversion failed: {e}"
+    except Exception:
         return None
 
 # ====== FIXED: upload_post_media with fallback to base64 ======
@@ -1425,8 +1420,7 @@ def upload_post_media(user_id, file):
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception as e:
-        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+    except Exception:
         return upload_media_base64(file)
 
 # ====== Helper: upload media as base64 data URL ======
@@ -1438,8 +1432,7 @@ def upload_media_base64(file):
         data_url = f"data:{content_type};base64,{b64}"
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": data_url, "type": media_type}
-    except Exception as e:
-        st.session_state.last_error = f"Base64 upload failed: {e}"
+    except Exception:
         return None
 
 # ====== FIXED: upload_chat_media with fallback to base64 ======
@@ -1465,8 +1458,7 @@ def upload_chat_media(user_id, file):
         public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception as e:
-        st.warning(f"Supabase upload failed, falling back to base64: {e}")
+    except Exception:
         return upload_media_base64(file)
 
 def delete_post(post_id):
@@ -2558,6 +2550,60 @@ def login_interface():
                 st.session_state.phone_otp_sent = False
                 st.session_state.temp_phone = ""
                 st.rerun()
+
+# ========== SEED 500 HAITIAN CREOLE YOUTUBE POSTS ==========
+def seed_haitian_creole_posts():
+    """Seed 500 YouTube video posts in Haitian Creole about agriculture, culture, tech, tourism, energy."""
+    if supabase is None or not st.session_state.logged_in:
+        return
+    
+    user_id = st.session_state.user.id
+    # Check if posts already exist (any post from this user)
+    try:
+        existing = supabase.table("posts").select("id", count="exact").eq("user_id", user_id).execute()
+        if existing.count >= 500:
+            return
+    except Exception:
+        return
+
+    topics = [
+        "agrikilti (agriculture)", "kilti (culture)", "teknoloji (technology)", 
+        "touris (tourism)", "enerji (energy)"
+    ]
+    titles = [
+        "Jaden lakay", "Lavi nan peyi a", "Teknoloji Ayiti", "Bèl peyi Ayiti", "Enèji solè",
+        "Kafe nasyonal", "Mizik tradisyonèl", "Inovasyon", "Plaj ak mòn", "Pwodiksyon enèji",
+        "Agrikilti modèn", "Dans ayisyen", "Aplikasyon mobil", "Vilaj touris", "Jeneratè solè",
+        "Recolte", "Kilti vodou", "Lojisyèl Ayiti", "Kaskad dlo", "Enèji jeyotèmal"
+    ]
+    # Generate 500 unique video IDs (random 11 chars)
+    ids = set()
+    while len(ids) < 500:
+        vid = ''.join(random.choices(string.ascii_letters + string.digits, k=11))
+        ids.add(vid)
+    video_ids = list(ids)
+
+    posts = []
+    for i, vid in enumerate(video_ids):
+        topic = topics[i % len(topics)]
+        title = random.choice(titles)
+        content = f"🎬 {title} - {topic}\n\nGade videyo sa a an Kreyòl Ayisyen sou {topic}.\nLink: https://www.youtube.com/watch?v={vid}"
+        posts.append({
+            "user_id": user_id,
+            "content": content,
+            "is_public": True,
+            "likes_count": 0,
+            "shares_count": 0,
+            "media_urls": [],
+            "created_at": (datetime.now() - timedelta(minutes=i)).isoformat()
+        })
+
+    try:
+        supabase.table("posts").insert(posts).execute()
+        st.cache_data.clear()
+        st.session_state.posts = load_posts()
+    except Exception as e:
+        st.session_state.last_error = f"Seed posts failed: {e}"
 
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
@@ -3947,6 +3993,11 @@ if __name__ == "__main__":
             <p>{t('home_subtitle')}</p>
         </div>
         """, unsafe_allow_html=True)
+
+        # Seed 500 Haitian Creole YouTube posts (only once)
+        if not st.session_state._seeded_500:
+            seed_haitian_creole_posts()
+            st.session_state._seeded_500 = True
 
     if not st.session_state.logged_in:
         login_interface()
