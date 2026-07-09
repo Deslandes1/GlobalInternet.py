@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - no seed, fixed indent) ======
+# ====== FULL app.py (Lakay se Lakay - with Live World Cup streams) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.25 (Fixed indentation, removed broken video seed)
+# Version: 77.8.22 (Added Live World Cup streams)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -64,14 +64,18 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# ====== ENSURE STORAGE BUCKETS EXIST (silent on 404) ======
+# ====== ENSURE STORAGE BUCKETS EXIST (only called on upload) ======
 def ensure_bucket_exists(bucket_name, public=True):
+    """Check if bucket exists. Returns True if exists, False otherwise.
+       No error messages are shown for 404 (bucket missing) – caller will handle fallback.
+    """
     if supabase is None:
         return False
 
     supabase_key = st.secrets.get("SUPABASE_KEY")
     supabase_url = st.secrets.get("SUPABASE_URL")
     if not supabase_key or not supabase_url:
+        st.error("❌ Supabase credentials missing. Cannot manage buckets.")
         return False
 
     headers = {
@@ -86,10 +90,14 @@ def ensure_bucket_exists(bucket_name, public=True):
         if check_resp.status_code == 200:
             return True
         elif check_resp.status_code == 404:
+            # Bucket missing – return False silently (caller will fallback)
             return False
         else:
+            # Other error (e.g., 403) – show it, as it indicates a permission issue
+            st.error(f"❌ Error checking bucket '{bucket_name}': {check_resp.text}\nPlease check your permissions.")
             return False
-    except Exception:
+    except Exception as e:
+        st.error(f"❌ Network error while checking bucket '{bucket_name}': {e}")
         return False
 
 # --- Secrets for owner only ---
@@ -1355,13 +1363,17 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
-# ====== UPDATED: upload_avatar with fallback to base64 (silent) ======
+# ====== UPDATED: upload_avatar with fallback to base64 ======
 def upload_avatar(user_id, image_file):
+    """Upload avatar with fallback to base64 if Supabase fails."""
     if supabase is None:
         return upload_avatar_base64(image_file)
+    
+    # Try to ensure bucket exists, but don't error if it fails
     bucket_ok = ensure_bucket_exists("avatars")
     if not bucket_ok:
         return upload_avatar_base64(image_file)
+    
     try:
         ext = image_file.name.split('.')[-1]
         file_name = f"{user_id}_{int(time.time())}.{ext}"
@@ -1369,10 +1381,13 @@ def upload_avatar(user_id, image_file):
         supabase.storage.from_("avatars").upload(file_name, image_bytes)
         public_url = supabase.storage.from_("avatars").get_public_url(file_name)
         return public_url
-    except Exception:
+    except Exception as e:
+        # If Supabase upload fails (permission, etc.), fallback to base64
+        st.warning(f"Supabase avatar upload failed, falling back to base64: {e}")
         return upload_avatar_base64(image_file)
 
 def upload_avatar_base64(image_file):
+    """Convert image to base64 data URL."""
     try:
         file_bytes = image_file.getvalue()
         b64 = base64.b64encode(file_bytes).decode('utf-8')
@@ -1381,16 +1396,20 @@ def upload_avatar_base64(image_file):
             data_url = f"data:{content_type};base64,{b64}"
             return data_url
         else:
+            st.error("Invalid image format.")
             return None
-    except Exception:
+    except Exception as e:
+        st.session_state.last_error = f"Avatar base64 conversion failed: {e}"
         return None
 
 # ====== FIXED: upload_post_media with fallback to base64 ======
 def upload_post_media(user_id, file):
     if supabase is None:
         return upload_media_base64(file)
+    
     if not ensure_bucket_exists("post_media"):
         return upload_media_base64(file)
+    
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
@@ -1399,16 +1418,18 @@ def upload_post_media(user_id, file):
         file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
         supabase.storage.from_("post_media").upload(
-            file_name,
-            file_bytes,
+            file_name, 
+            file_bytes, 
             {"content-type": content_type}
         )
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception:
+    except Exception as e:
+        st.warning(f"Supabase upload failed, falling back to base64: {e}")
         return upload_media_base64(file)
 
+# ====== Helper: upload media as base64 data URL ======
 def upload_media_base64(file):
     try:
         file_bytes = file.getvalue()
@@ -1417,15 +1438,18 @@ def upload_media_base64(file):
         data_url = f"data:{content_type};base64,{b64}"
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": data_url, "type": media_type}
-    except Exception:
+    except Exception as e:
+        st.session_state.last_error = f"Base64 upload failed: {e}"
         return None
 
 # ====== FIXED: upload_chat_media with fallback to base64 ======
 def upload_chat_media(user_id, file):
     if supabase is None:
         return upload_media_base64(file)
+    
     if not ensure_bucket_exists("chat_media"):
         return upload_media_base64(file)
+    
     try:
         content_type = file.type
         ext = file.name.split('.')[-1]
@@ -1434,14 +1458,15 @@ def upload_chat_media(user_id, file):
         file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
         supabase.storage.from_("chat_media").upload(
-            file_name,
-            file_bytes,
+            file_name, 
+            file_bytes, 
             {"content-type": content_type}
         )
         public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
-    except Exception:
+    except Exception as e:
+        st.warning(f"Supabase upload failed, falling back to base64: {e}")
         return upload_media_base64(file)
 
 def delete_post(post_id):
@@ -2537,6 +2562,7 @@ def login_interface():
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
 def display_media_item(media):
+    """Display a single media item (image or video) using st.image or st.video."""
     try:
         url = media["url"]
         if media["type"] == "image":
@@ -2956,7 +2982,7 @@ def render_friends_page():
                     except Exception as e:
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
-
+                    
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
@@ -2991,7 +3017,7 @@ def render_friends_page():
                     except Exception as e:
                         st.error(f"Error displaying media: {e}")
                         st.markdown(f"[Click to open media]({msg['media_url']})")
-
+                    
                     col1, col2, col3 = st.columns([6,1,1])
                     with col2:
                         if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
@@ -3150,29 +3176,31 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
+# ====== NEW: Live World Cup page ======
 def render_worldcup():
     st.title("⚽ " + t("worldcup"))
-
+    
+    # The two streams from the GlobalInternet.py surveillance portal
     stream1_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPXRlbGVtdW5kb3VzYQ=="
     stream2_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPWRzcG9ydHM="
-
+    
     st.markdown("""
     <div style="background: rgba(255,255,255,0.1); border: 1px solid #2a1f14; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
         <p style="color: #ffffff; font-size: 1.1rem;">🏆 Watch every match of the <strong>FIFA World Cup 2026</strong> live – completely free!<br>
         Choose your stream below and enjoy the game.</p>
     </div>
     """, unsafe_allow_html=True)
-
+    
     tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
-
+    
     with tab1:
         st.components.v1.iframe(stream1_url, height=600, scrolling=True)
         st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
-
+    
     with tab2:
         st.components.v1.iframe(stream2_url, height=600, scrolling=True)
         st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
-
+    
     st.markdown("---")
     st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
 
@@ -3470,7 +3498,7 @@ def render_live_page(session_id):
 
 def owner_space():
     st.header(t("owner_space"))
-
+    
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
@@ -3560,7 +3588,7 @@ def owner_space():
     with tab2:
         st.subheader(t("new_users"))
         st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
-
+        
         try:
             with st.spinner("Loading user data..."):
                 response = supabase.table("profiles").select(
@@ -3570,7 +3598,7 @@ def owner_space():
         except Exception as e:
             st.error(f"Failed to load user data: {e}")
             recent_users = []
-
+        
         if recent_users:
             display_data = []
             for u in recent_users:
@@ -3583,7 +3611,7 @@ def owner_space():
                 })
             df = pd.DataFrame(display_data)
             st.dataframe(df, use_container_width=True)
-
+            
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Report as CSV",
@@ -3594,7 +3622,7 @@ def owner_space():
             )
         else:
             st.info("No users found in the database.")
-
+        
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
