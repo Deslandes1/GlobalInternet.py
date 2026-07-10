@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.29 (Improved private chat UI, RLS error handling, follower counts)
+# Version: 77.8.30 (Fixed profile view on Friends page)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2862,8 +2862,99 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== UPDATED: render_friends_page with prominent private chat ======
+# ====== UPDATED: render_user_profile with show_back_button parameter ======
+def render_user_profile(user_id, show_back_button=True):
+    if supabase is None:
+        st.error("Database not connected.")
+        if st.button(t("back_to_feed")):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
+
+    try:
+        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not profile_resp.data:
+            st.error("User not found.")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+        profile = profile_resp.data[0]
+    except Exception as e:
+        error_str = str(e)
+        if "JWT expired" in error_str:
+            if refresh_supabase_session():
+                try:
+                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+                    if profile_resp.data:
+                        profile = profile_resp.data[0]
+                    else:
+                        st.error("User not found.")
+                        if st.button(t("back_to_feed")):
+                            st.session_state.viewing_profile = None
+                            st.rerun()
+                        return
+                except Exception as retry_e:
+                    st.error(f"Error loading profile after refresh: {retry_e}")
+                    if st.button(t("back_to_feed")):
+                        st.session_state.viewing_profile = None
+                        st.rerun()
+                    return
+            else:
+                st.error("Session expired. Please log in again.")
+                logout()
+                st.rerun()
+                return
+        else:
+            st.error(f"Error loading profile: {error_str}")
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+            return
+
+    st.header(f"👤 {profile['full_name']}'s Profile")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        display_avatar_and_followers(profile.get("avatar_url"), user_id, size=150)
+        st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
+        st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
+        st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
+        st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
+        if st.button(t("chat")):
+            st.session_state.selected_chat = user_id
+            st.session_state.viewing_profile = None
+            st.rerun()
+        if show_back_button:
+            if st.button(t("back_to_feed")):
+                st.session_state.viewing_profile = None
+                st.rerun()
+    with col2:
+        st.subheader(t("feed"))
+        posts = load_user_posts(user_id)
+        if not posts:
+            st.info("This user has no public posts.")
+        else:
+            for post in posts:
+                with st.container():
+                    st.markdown(f"**{post['profiles']['full_name']}**")
+                    st.caption(post['created_at'][:16])
+                    if post['content']:
+                        clickable_content = make_clickable(post['content'])
+                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    for media in post.get("media_urls", []):
+                        display_media_item(media)
+                    st.divider()
+
+# ====== UPDATED: render_friends_page with profile view support ======
 def render_friends_page():
+    # If we are viewing someone's profile, show it here with a custom back button
+    if st.session_state.viewing_profile:
+        render_user_profile(st.session_state.viewing_profile, show_back_button=False)
+        if st.button("← Back to Friends"):
+            st.session_state.viewing_profile = None
+            st.rerun()
+        return
+
     st.header(t("friends_chat"))
 
     with st.expander(t("setup_instructions")):
@@ -3134,87 +3225,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         if st.button(t("start_call")):
             start_call()
             st.rerun()
-
-def render_user_profile(user_id):
-    if supabase is None:
-        st.error("Database not connected.")
-        if st.button(t("back_to_feed")):
-            st.session_state.viewing_profile = None
-            st.rerun()
-        return
-
-    try:
-        profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-        if not profile_resp.data:
-            st.error("User not found.")
-            if st.button(t("back_to_feed")):
-                st.session_state.viewing_profile = None
-                st.rerun()
-            return
-        profile = profile_resp.data[0]
-    except Exception as e:
-        error_str = str(e)
-        if "JWT expired" in error_str:
-            if refresh_supabase_session():
-                try:
-                    profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-                    if profile_resp.data:
-                        profile = profile_resp.data[0]
-                    else:
-                        st.error("User not found.")
-                        if st.button(t("back_to_feed")):
-                            st.session_state.viewing_profile = None
-                            st.rerun()
-                        return
-                except Exception as retry_e:
-                    st.error(f"Error loading profile after refresh: {retry_e}")
-                    if st.button(t("back_to_feed")):
-                        st.session_state.viewing_profile = None
-                        st.rerun()
-                    return
-            else:
-                st.error("Session expired. Please log in again.")
-                logout()
-                st.rerun()
-                return
-        else:
-            st.error(f"Error loading profile: {error_str}")
-            if st.button(t("back_to_feed")):
-                st.session_state.viewing_profile = None
-                st.rerun()
-            return
-
-    st.header(f"👤 {profile['full_name']}'s Profile")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        display_avatar_and_followers(profile.get("avatar_url"), user_id, size=150)
-        st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
-        st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
-        st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
-        st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
-        if st.button(t("chat")):
-            st.session_state.selected_chat = user_id
-            st.session_state.viewing_profile = None
-            st.rerun()
-        if st.button(t("back_to_feed")):
-            st.session_state.viewing_profile = None
-            st.rerun()
-    with col2:
-        st.subheader(t("feed"))
-        posts = load_user_posts(user_id)
-        if not posts:
-            st.info("This user has no public posts.")
-        else:
-            for post in posts:
-                with st.container():
-                    st.markdown(f"**{post['profiles']['full_name']}**")
-                    st.caption(post['created_at'][:16])
-                    if post['content']:
-                        clickable_content = make_clickable(post['content'])
-                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
-                    for media in post.get("media_urls", []):
-                        display_media_item(media)
-                    st.divider()
 
 def render_map():
     st.header(t("satellite_map"))
