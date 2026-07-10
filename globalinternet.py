@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.34 (Virtual background + 8x8 JaaS with JWT refresh note)
+# Version: 77.8.35 (Free Jitsi meet.jit.si with virtual background)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -109,10 +109,8 @@ SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
 EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
-# --- Jitsi domain (legacy) and 8x8 secrets ---
+# --- Jitsi domain (free public server) ---
 JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
-JAAS_APP_ID = st.secrets.get("JAAS_APP_ID", "")
-JAAS_JWT = st.secrets.get("JAAS_JWT", "")
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
@@ -2956,7 +2954,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view and virtual background ======
+# ====== UPDATED: render_friends_page with profile view and free Jitsi call ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3220,7 +3218,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
 
-    # ---------- VIDEO CALL (8x8 JaaS) with Virtual Background ----------
+    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with Virtual Background ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
@@ -3250,46 +3248,41 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 st.session_state.call_background_url = None
                 st.rerun()
 
-        app_id = st.secrets.get("JAAS_APP_ID", "")
-        jwt = st.secrets.get("JAAS_JWT", "")
-        if not app_id or not jwt:
-            st.error("⚠️ JAAS_APP_ID and JAAS_JWT must be set in secrets to use 8x8 calls.")
-        else:
-            room = st.session_state.call_room
-            full_room = f"{app_id}/{room}"
+        # --- Use free Jitsi public server ---
+        domain = JITSI_DOMAIN  # default 'meet.jit.si'
+        room = st.session_state.call_room
 
-            # Build config with optional virtual background
-            config_overwrite = {
-                "startWithAudioMuted": False,
-                "startWithVideoMuted": False,
-                "disableWelcomePage": True,
-                "disableDeepLinking": True
+        # Build config with optional virtual background
+        config_overwrite = {
+            "startWithAudioMuted": False,
+            "startWithVideoMuted": False,
+            "disableWelcomePage": True,
+            "disableDeepLinking": True
+        }
+        if st.session_state.get("call_background_url"):
+            config_overwrite["virtualBackground"] = {
+                "url": st.session_state.call_background_url,
+                "type": "image"
             }
-            if st.session_state.get("call_background_url"):
-                config_overwrite["virtualBackground"] = {
-                    "url": st.session_state.call_background_url,
-                    "type": "image"
-                }
 
-            import json
-            config_json = json.dumps(config_overwrite)
+        import json
+        config_json = json.dumps(config_overwrite)
 
-            jaas_html = f"""
-            <div id="jaas-container" style="height: 500px; width: 100%;"></div>
-            <script src="https://8x8.vc/{app_id}/external_api.js" async></script>
-            <script>
-              window.onload = function() {{
-                const config = {config_json};
-                const api = new JitsiMeetExternalAPI("8x8.vc", {{
-                  roomName: "{full_room}",
-                  parentNode: document.querySelector('#jaas-container'),
-                  jwt: "{jwt}",
-                  configOverwrite: config
-                }});
-              }};
-            </script>
-            """
-            st.components.v1.html(jaas_html, height=520)
+        jitsi_html = f"""
+        <div id="jitsi-container" style="height: 500px; width: 100%;"></div>
+        <script src="https://{domain}/external_api.js" async></script>
+        <script>
+          window.onload = function() {{
+            const config = {config_json};
+            const api = new JitsiMeetExternalAPI("{domain}", {{
+              roomName: "{room}",
+              parentNode: document.querySelector('#jitsi-container'),
+              configOverwrite: config
+            }});
+          }};
+        </script>
+        """
+        st.components.v1.html(jitsi_html, height=520)
 
         if st.button(t("end_call")):
             # Clear background on end call
