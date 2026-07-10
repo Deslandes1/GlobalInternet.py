@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.28 (Fixed syntax error in render_friends_page, graceful RLS handling)
+# Version: 77.8.29 (Improved private chat UI, RLS error handling, follower counts)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2862,6 +2862,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
+# ====== UPDATED: render_friends_page with prominent private chat ======
 def render_friends_page():
     st.header(t("friends_chat"))
 
@@ -2994,66 +2995,77 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                     st.rerun()
             st.divider()
 
+    # ---------- PRIVATE CHAT ----------
     if st.session_state.selected_chat:
-        st.subheader(t("chat"))
+        st.markdown("---")
+        st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
-        other = supabase.table("profiles").select("full_name").eq("id", other_id).single().execute()
+
+        # Fetch other user's profile
+        other = supabase.table("profiles").select("full_name, avatar_url").eq("id", other_id).single().execute()
         if other.data:
             other_name = other.data["full_name"]
+            other_avatar = other.data.get("avatar_url")
         else:
             other_name = "User"
-        st.write(f"{t('chat')} with **{other_name}**")
+            other_avatar = None
 
-        col_avatar_chat, col_name = st.columns([1, 5])
-        with col_avatar_chat:
-            other_profile = supabase.table("profiles").select("avatar_url").eq("id", other_id).single().execute()
-            display_avatar_and_followers(other_profile.data.get('avatar_url') if other_profile.data else None, other_id, size=40)
-        with col_name:
-            st.write(f"Chat with **{other_name}**")
+        # Header with avatar and name
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            display_avatar_and_followers(other_avatar, other_id, size=50)
+        with col2:
+            st.markdown(f"**Chat with {other_name}**")
+            if st.button("✖ Close Chat", key="close_chat_btn"):
+                st.session_state.selected_chat = None
+                st.rerun()
 
+        st.divider()
+
+        # Display messages
         messages = load_messages(st.session_state.user.id, other_id)
-        for msg in messages:
-            if msg["sender_id"] == st.session_state.user.id:
-                if msg.get("media_url"):
-                    try:
-                        if msg.get("media_type") == "image":
-                            st.image(msg["media_url"], width=300)
-                        elif msg.get("media_type") == "video":
-                            st.video(msg["media_url"])
-                        else:
-                            st.markdown(f"[Media file]({msg['media_url']})")
-                    except Exception as e:
-                        st.error(f"Error displaying media: {e}")
-                        st.markdown(f"[Click to open media]({msg['media_url']})")
+        if not messages:
+            st.info("No messages yet. Start the conversation!")
+        else:
+            for msg in messages:
+                if msg["sender_id"] == st.session_state.user.id:
+                    # Own message
+                    if msg.get("media_url"):
+                        try:
+                            if msg.get("media_type") == "image":
+                                st.image(msg["media_url"], width=300)
+                            elif msg.get("media_type") == "video":
+                                st.video(msg["media_url"])
+                            else:
+                                st.markdown(f"[Media file]({msg['media_url']})")
+                        except Exception as e:
+                            st.error(f"Error displaying media: {e}")
+                            st.markdown(f"[Click to open media]({msg['media_url']})")
 
-                    col1, col2, col3 = st.columns([6,1,1])
-                    with col2:
-                        if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
-                            with st.popover("Create post"):
-                                with st.form(f"share_own_form_{msg['id']}"):
-                                    caption = st.text_area("Add a caption (optional)")
-                                    if st.form_submit_button(t("post")):
-                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
-                                        create_post(
-                                            st.session_state.user.id,
-                                            caption or "",
-                                            existing_media_urls=media_info,
-                                            is_public=True
-                                        )
-                                        st.rerun()
-                    with col3:
-                        st.markdown(f"""
-                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
-                        """, unsafe_allow_html=True)
-                if msg.get("content"):
-                    clickable_content = make_clickable(msg["content"])
-                    st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
-            else:
-                col_msg_avatar, col_msg_content = st.columns([1, 8])
-                with col_msg_avatar:
-                    sender_avatar = other_profile.data.get('avatar_url') if other_profile.data else None
-                    display_avatar_and_followers(sender_avatar, other_id, size=30)
-                with col_msg_content:
+                        col1, col2, col3 = st.columns([6,1,1])
+                        with col2:
+                            if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
+                                with st.popover("Create post"):
+                                    with st.form(f"share_own_form_{msg['id']}"):
+                                        caption = st.text_area("Add a caption (optional)")
+                                        if st.form_submit_button(t("post")):
+                                            media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                            create_post(
+                                                st.session_state.user.id,
+                                                caption or "",
+                                                existing_media_urls=media_info,
+                                                is_public=True
+                                            )
+                                            st.rerun()
+                        with col3:
+                            st.markdown(f"""
+                            <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                            """, unsafe_allow_html=True)
+                    if msg.get("content"):
+                        clickable_content = make_clickable(msg["content"])
+                        st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                else:
+                    # Other's message
                     if msg.get("media_url"):
                         try:
                             if msg.get("media_type") == "image":
@@ -3089,8 +3101,9 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                         clickable_content = make_clickable(msg["content"])
                         st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
+        # Message input
         with st.form("send_message", clear_on_submit=True):
-            msg_content = st.text_input(t("send_message"))
+            msg_content = st.text_input(t("send_message"), placeholder="Type your message...")
             uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
             st.caption("⚠️ File size limit: 200MB (configurable). For larger videos, use external links.")
             col1, col2 = st.columns([1,5])
@@ -3100,11 +3113,12 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 if msg_content or uploaded_file:
                     send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
                     st.rerun()
-        if st.button(t("close_chat")):
-            st.session_state.selected_chat = None
-            st.rerun()
-        st.divider()
 
+        st.divider()
+    else:
+        st.info("Select a friend and click 'Chat' to start a private conversation.")
+
+    # ---------- VIDEO CALL ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
