@@ -2453,6 +2453,22 @@ def log_in_email(email, password, remember=False, show_debug=False):
         else:
             st.error(f"❌ Login failed: {error_str}")
 
+# ====== NEW: Helper to display avatar with follower count ======
+def display_avatar_and_followers(avatar_url, user_id, size=50):
+    """
+    Display an avatar image (or a placeholder) with a caption showing follower count.
+    For the current logged-in user: "1miFollowers"
+    For any other user: "1kFollowers"
+    """
+    if avatar_url:
+        st.image(avatar_url, width=size)
+    else:
+        st.markdown("👤", unsafe_allow_html=True)
+    if user_id == st.session_state.user.id:
+        st.caption("1miFollowers")
+    else:
+        st.caption("1kFollowers")
+
 # ====== LOGIN INTERFACE ======
 def login_interface():
     st.markdown(
@@ -2580,10 +2596,11 @@ def render_feed():
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
-            if st.session_state.profile and st.session_state.profile.get("avatar_url"):
-                st.image(st.session_state.profile["avatar_url"], width=50)
-            else:
-                st.markdown("👤", unsafe_allow_html=True)
+            display_avatar_and_followers(
+                st.session_state.profile.get("avatar_url"),
+                st.session_state.user.id,
+                size=50
+            )
         with col_input:
             content = st.text_area(
                 t("caption_placeholder"),
@@ -2619,10 +2636,11 @@ def render_feed():
             with st.container():
                 col_a, col_b = st.columns([1,4])
                 with col_a:
-                    if live["profiles"]["avatar_url"]:
-                        st.image(live["profiles"]["avatar_url"], width=40)
-                    else:
-                        st.markdown("👤")
+                    display_avatar_and_followers(
+                        live["profiles"]["avatar_url"],
+                        live["user_id"],
+                        size=40
+                    )
                 with col_b:
                     st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
                     if st.button(t("join_live"), key=f"join_{live['id']}"):
@@ -2655,11 +2673,11 @@ def render_feed():
             with st.container():
                 col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
                 with col_a:
-                    avatar = post.get("profiles", {}).get("avatar_url")
-                    if avatar:
-                        st.image(avatar, width=40)
-                    else:
-                        st.markdown("👤")
+                    display_avatar_and_followers(
+                        post["profiles"].get("avatar_url"),
+                        post["user_id"],
+                        size=40
+                    )
                 with col_b:
                     name = post['profiles']['full_name']
                     if post['user_id'] != st.session_state.user.id:
@@ -2759,7 +2777,13 @@ def render_feed():
                         replies.setdefault(c['parent_id'], []).append(c)
 
                 for c in top_level:
-                    col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1, 4, 1, 1, 1])
+                    with col_avatar_comment:
+                        display_avatar_and_followers(
+                            c['profiles'].get('avatar_url'),
+                            c['user_id'],
+                            size=30
+                        )
                     with col1:
                         clickable_comment = make_clickable(c['content'])
                         st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
@@ -2789,7 +2813,13 @@ def render_feed():
 
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
-                        colr1, colr2, colr3, colr4 = st.columns([4, 1, 1, 1])
+                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1, 4, 1, 1, 1])
+                        with colr_avatar:
+                            display_avatar_and_followers(
+                                r['profiles'].get('avatar_url'),
+                                r['user_id'],
+                                size=30
+                            )
                         with colr1:
                             clickable_reply = make_clickable(r['content'])
                             st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
@@ -2852,11 +2882,14 @@ def render_friends_page():
 
     st.subheader(t("friend_requests"))
     if not st.session_state.friend_requests:
-        st.info(t("no_friends"))
+        st.info("No pending friend requests")
     else:
         for req in st.session_state.friend_requests:
-            cols = st.columns([2,1,1])
+            cols = st.columns([2, 1, 1])
             with cols[0]:
+                # Show avatar of sender
+                avatar_url = req['sender'].get('avatar_url')
+                display_avatar_and_followers(avatar_url, req['sender']['id'], size=30)
                 st.markdown(f"**{req['sender']['full_name']}**")
             with cols[1]:
                 if st.button(t("accept"), key=f"accept_{req['id']}"):
@@ -2886,8 +2919,9 @@ def render_friends_page():
             st.info("No users found")
         else:
             for user in results:
-                cols = st.columns([3,1,1])
+                cols = st.columns([3, 1, 1])
                 with cols[0]:
+                    display_avatar_and_followers(user.get('avatar_url'), user['id'], size=30)
                     st.markdown(f"**{user['full_name']}**")
                 with cols[1]:
                     if st.button(t("add_friend"), key=f"add_{user['id']}"):
@@ -2908,12 +2942,9 @@ def render_friends_page():
         st.info(t("no_friends"))
     else:
         for friend in st.session_state.friends:
-            cols = st.columns([1,4,1,1,1])
+            cols = st.columns([1, 4, 1, 1, 1])
             with cols[0]:
-                if friend.get('avatar_url'):
-                    st.image(friend['avatar_url'], width=30)
-                else:
-                    st.markdown("👤")
+                display_avatar_and_followers(friend.get('avatar_url'), friend['id'], size=30)
             with cols[1]:
                 st.markdown(f"**{friend['full_name']}**")
             with cols[2]:
@@ -2941,6 +2972,14 @@ def render_friends_page():
         else:
             other_name = "User"
         st.write(f"{t('chat')} with **{other_name}**")
+
+        # Optionally show avatar of the other person in chat header
+        col_avatar_chat, col_name = st.columns([1, 5])
+        with col_avatar_chat:
+            other_profile = supabase.table("profiles").select("avatar_url").eq("id", other_id).single().execute()
+            display_avatar_and_followers(other_profile.data.get('avatar_url') if other_profile.data else None, other_id, size=40)
+        with col_name:
+            st.write(f"Chat with **{other_name}**")
 
         messages = load_messages(st.session_state.user.id, other_id)
         for msg in messages:
@@ -2980,40 +3019,47 @@ def render_friends_page():
                     clickable_content = make_clickable(msg["content"])
                     st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
             else:
-                if msg.get("media_url"):
-                    try:
-                        if msg.get("media_type") == "image":
-                            st.image(msg["media_url"], width=300)
-                        elif msg.get("media_type") == "video":
-                            st.video(msg["media_url"])
-                        else:
-                            st.markdown(f"[Media file]({msg['media_url']})")
-                    except Exception as e:
-                        st.error(f"Error displaying media: {e}")
-                        st.markdown(f"[Click to open media]({msg['media_url']})")
+                # Show avatar for the other person's message
+                col_msg_avatar, col_msg_content = st.columns([1, 8])
+                with col_msg_avatar:
+                    # Get avatar of sender (other person) - we can fetch from message data, but we have other_id
+                    sender_avatar = other_profile.data.get('avatar_url') if other_profile.data else None
+                    display_avatar_and_followers(sender_avatar, other_id, size=30)
+                with col_msg_content:
+                    if msg.get("media_url"):
+                        try:
+                            if msg.get("media_type") == "image":
+                                st.image(msg["media_url"], width=300)
+                            elif msg.get("media_type") == "video":
+                                st.video(msg["media_url"])
+                            else:
+                                st.markdown(f"[Media file]({msg['media_url']})")
+                        except Exception as e:
+                            st.error(f"Error displaying media: {e}")
+                            st.markdown(f"[Click to open media]({msg['media_url']})")
 
-                    col1, col2, col3 = st.columns([6,1,1])
-                    with col2:
-                        if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
-                            with st.popover("Create post"):
-                                with st.form(f"share_form_{msg['id']}"):
-                                    caption = st.text_area("Add a caption (optional)")
-                                    if st.form_submit_button(t("post")):
-                                        media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
-                                        create_post(
-                                            st.session_state.user.id,
-                                            caption or "",
-                                            existing_media_urls=media_info,
-                                            is_public=True
-                                        )
-                                        st.rerun()
-                    with col3:
-                        st.markdown(f"""
-                        <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
-                        """, unsafe_allow_html=True)
-                if msg.get("content"):
-                    clickable_content = make_clickable(msg["content"])
-                    st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
+                        col1, col2, col3 = st.columns([6,1,1])
+                        with col2:
+                            if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
+                                with st.popover("Create post"):
+                                    with st.form(f"share_form_{msg['id']}"):
+                                        caption = st.text_area("Add a caption (optional)")
+                                        if st.form_submit_button(t("post")):
+                                            media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
+                                            create_post(
+                                                st.session_state.user.id,
+                                                caption or "",
+                                                existing_media_urls=media_info,
+                                                is_public=True
+                                            )
+                                            st.rerun()
+                        with col3:
+                            st.markdown(f"""
+                            <button onclick="navigator.clipboard.writeText('{msg['media_url']}')">🔗 Copy Link</button>
+                            """, unsafe_allow_html=True)
+                    if msg.get("content"):
+                        clickable_content = make_clickable(msg["content"])
+                        st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input(t("send_message"))
@@ -3099,10 +3145,7 @@ def render_user_profile(user_id):
     st.header(f"👤 {profile['full_name']}'s Profile")
     col1, col2 = st.columns([1, 2])
     with col1:
-        if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=150)
-        else:
-            st.markdown("👤", unsafe_allow_html=True)
+        display_avatar_and_followers(profile.get("avatar_url"), user_id, size=150)
         st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
         st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
         st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
@@ -3184,10 +3227,7 @@ def render_profile():
 
     col1, col2 = st.columns([1, 2])
     with col1:
-        if profile.get("avatar_url"):
-            st.image(profile["avatar_url"], width=200, caption="Profile Picture")
-        else:
-            st.image("https://via.placeholder.com/200", width=200, caption="No picture")
+        display_avatar_and_followers(profile.get("avatar_url"), st.session_state.user.id, size=200)
         uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg","gif"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
@@ -3266,6 +3306,13 @@ def render_live_page(session_id):
 
     col1, col2 = st.columns([2, 1])
     with col1:
+        # Show broadcaster avatar and name
+        col_avatar_broadcaster, col_name_broadcaster = st.columns([1, 4])
+        with col_avatar_broadcaster:
+            display_avatar_and_followers(session["profiles"]["avatar_url"], session["user_id"], size=60)
+        with col_name_broadcaster:
+            st.markdown(f"**{session['profiles']['full_name']}** is live")
+
         stream_method = session.get("stream_method", "external")
         if stream_method == "external":
             stream_url = session.get("stream_url")
@@ -3325,6 +3372,7 @@ def render_live_page(session_id):
                     for req in pending_list:
                         cols = st.columns([3,1,1])
                         with cols[0]:
+                            display_avatar_and_followers(req['profiles']['avatar_url'], req['user_id'], size=30)
                             st.markdown(f"**{req['profiles']['full_name']}** wants to join")
                         with cols[1]:
                             if st.button("✅ Accept", key=f"accept_{req['id']}"):
@@ -3355,6 +3403,7 @@ def render_live_page(session_id):
                     for part in accepted_list:
                         cols = st.columns([2,1,1,1])
                         with cols[0]:
+                            display_avatar_and_followers(part['profiles']['avatar_url'], part['user_id'], size=30)
                             st.markdown(f"**{part['profiles']['full_name']}**")
                         with cols[1]:
                             if st.button("🔊 Mute", key=f"mute_{part['id']}"):
@@ -3754,6 +3803,17 @@ def main_app():
             Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
         </div>
         """, unsafe_allow_html=True)
+        st.divider()
+
+        # --- Show user avatar in sidebar with follower count ---
+        if st.session_state.profile:
+            with st.container():
+                display_avatar_and_followers(
+                    st.session_state.profile.get("avatar_url"),
+                    st.session_state.user.id,
+                    size=80
+                )
+                st.markdown(f"**{st.session_state.profile.get('full_name', 'User')}**")
         st.divider()
 
         lang_options = {
