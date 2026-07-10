@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.36 (Free Jitsi meet.jit.si with fixed background upload)
+# Version: 77.8.38 (Jitsi iframe with direct link fallback)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -327,7 +327,8 @@ LANG = {
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
-        "call_permission_hint": "📌 Ensure both participants grant camera and microphone access when prompted by the browser. If you don't see each other, refresh the page and try again."
+        "call_permission_hint": "📌 Ensure both participants grant camera and microphone access when prompted by the browser. If you don't see each other, refresh the page and try again.",
+        "join_instructions": "📌 After joining the room, click the **'Join'** button in the video window and allow camera/microphone access."
     },
     "fr": {
         "login_title": "Connexion",
@@ -476,7 +477,8 @@ LANG = {
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
-        "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez."
+        "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez.",
+        "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro."
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -625,7 +627,8 @@ LANG = {
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
-        "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo."
+        "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo.",
+        "join_instructions": "📌 Después de unirse a la sala, haga clic en el botón **'Unirse'** en la ventana de video y permita el acceso a cámara/mic."
     },
     "ht": {
         "login_title": "Konekte",
@@ -774,7 +777,8 @@ LANG = {
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "Ayiti",
         "home_subtitle": "Nouvo rezo Sosyal Ayisyen",
-        "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò."
+        "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò.",
+        "join_instructions": "📌 Apre w fin rantre nan sal la, klike sou bouton **'Join'** nan fenèt videyo a epi pèmèt aksè kamera/mikrofòn."
     },
 }
 
@@ -2954,7 +2958,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view and free Jitsi call ======
+# ====== UPDATED: render_friends_page with profile view and free Jitsi iframe ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3218,14 +3222,14 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
 
-    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with Virtual Background ----------
+    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with iframe ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         st.info(t("call_permission_hint"))
 
-        # --- Virtual Background Upload ---
+        # --- Virtual Background Upload (interface only, not applied to iframe) ---
         st.markdown("#### 🎨 Virtual Background")
         uploaded_bg = st.file_uploader(
             "Upload an image (PNG, JPG, JPEG, GIF)",
@@ -3247,42 +3251,33 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 st.session_state.call_background_url = None
                 st.rerun()
 
-        # --- Use free Jitsi public server ---
-        domain = JITSI_DOMAIN  # default 'meet.jit.si'
+        # --- Jitsi iframe with full permissions ---
+        domain = JITSI_DOMAIN
         room = st.session_state.call_room
 
-        # Build config with optional virtual background
-        config_overwrite = {
-            "startWithAudioMuted": False,
-            "startWithVideoMuted": False,
-            "disableWelcomePage": True,
-            "disableDeepLinking": True
-        }
-        if st.session_state.get("call_background_url"):
-            config_overwrite["virtualBackground"] = {
-                "url": st.session_state.call_background_url,
-                "type": "image"
-            }
+        # Build Jitsi URL with configuration parameters
+        jitsi_url = (
+            f"https://{domain}/{room}"
+            "?config.startWithAudioMuted=false"
+            "&config.startWithVideoMuted=false"
+            "&config.disableWelcomePage=true"
+            "&config.disableDeepLinking=true"
+        )
 
-        import json
-        config_json = json.dumps(config_overwrite)
-
-        # FIXED: no window.onload – execute immediately; load API synchronously
-        jitsi_html = f"""
-        <div id="jitsi-container" style="height: 500px; width: 100%;"></div>
-        <script src="https://{domain}/external_api.js"></script>
-        <script>
-          (function() {{
-            const config = {config_json};
-            const api = new JitsiMeetExternalAPI("{domain}", {{
-              roomName: "{room}",
-              parentNode: document.querySelector('#jitsi-container'),
-              configOverwrite: config
-            }});
-          }})();
-        </script>
+        # Iframe with camera, microphone, and display-capture permissions
+        iframe_html = f"""
+        <div style="margin: 10px 0;">
+            <p style="color: #0a2a44;">{t('join_instructions')}</p>
+            <iframe src="{jitsi_url}" 
+                    allow="camera; microphone; display-capture; autoplay; fullscreen" 
+                    style="height:500px; width:100%; border:0; border-radius:12px;">
+            </iframe>
+        </div>
         """
-        st.components.v1.html(jitsi_html, height=520)
+        st.markdown(iframe_html, unsafe_allow_html=True)
+
+        # Fallback link
+        st.markdown(f"**Or open in a new tab:** [Join Room]({jitsi_url})", unsafe_allow_html=True)
 
         if st.button(t("end_call")):
             st.session_state.call_background_url = None
