@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.38 (Jitsi iframe with direct link fallback)
+# Version: 77.8.39 (Jitsi iframe with p2p disabled + reload button)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -177,6 +177,8 @@ if "editing_post" not in st.session_state:
     st.session_state.editing_post = None
 if "call_background_url" not in st.session_state:
     st.session_state.call_background_url = None
+if "call_reload" not in st.session_state:
+    st.session_state.call_reload = 0
 
 # ====== LANGUAGE DICTIONARY (4 LANGUAGES: EN, FR, ES, HT) ======
 LANG = {
@@ -328,7 +330,8 @@ LANG = {
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Ensure both participants grant camera and microphone access when prompted by the browser. If you don't see each other, refresh the page and try again.",
-        "join_instructions": "📌 After joining the room, click the **'Join'** button in the video window and allow camera/microphone access."
+        "join_instructions": "📌 After joining the room, click the **'Join'** button in the video window and allow camera/microphone access. If you still don't see the other person, ask them to check their camera settings.",
+        "reload_call": "🔄 Reload Call"
     },
     "fr": {
         "login_title": "Connexion",
@@ -478,7 +481,8 @@ LANG = {
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez.",
-        "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro."
+        "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro. Si vous ne voyez toujours pas l'autre personne, demandez-lui de vérifier ses paramètres de caméra.",
+        "reload_call": "🔄 Recharger l'appel"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -628,7 +632,8 @@ LANG = {
         "home_haiti": "HAITI",
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo.",
-        "join_instructions": "📌 Después de unirse a la sala, haga clic en el botón **'Unirse'** en la ventana de video y permita el acceso a cámara/mic."
+        "join_instructions": "📌 Después de unirse a la sala, haga clic en el botón **'Unirse'** en la ventana de video y permita el acceso a cámara/mic. Si aún no ve a la otra persona, pídale que revise su configuración de cámara.",
+        "reload_call": "🔄 Recargar llamada"
     },
     "ht": {
         "login_title": "Konekte",
@@ -778,7 +783,8 @@ LANG = {
         "home_haiti": "Ayiti",
         "home_subtitle": "Nouvo rezo Sosyal Ayisyen",
         "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò.",
-        "join_instructions": "📌 Apre w fin rantre nan sal la, klike sou bouton **'Join'** nan fenèt videyo a epi pèmèt aksè kamera/mikrofòn."
+        "join_instructions": "📌 Apre w fin rantre nan sal la, klike sou bouton **'Join'** nan fenèt videyo a epi pèmèt aksè kamera/mikrofòn. Si w toujou pa wè lòt moun nan, mande l pou l tcheke paramèt kamera li.",
+        "reload_call": "🔄 Reload apèl"
     },
 }
 
@@ -2958,7 +2964,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view and free Jitsi iframe ======
+# ====== UPDATED: render_friends_page with profile view and free Jitsi iframe (p2p disabled) ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3222,7 +3228,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
 
-    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with iframe ----------
+    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with iframe + p2p disabled ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
@@ -3251,17 +3257,24 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 st.session_state.call_background_url = None
                 st.rerun()
 
-        # --- Jitsi iframe with full permissions ---
+        # --- Reload button: increment reload counter to refresh iframe ---
+        if st.button(t("reload_call")):
+            st.session_state.call_reload += 1
+            st.rerun()
+
+        # --- Jitsi iframe with full permissions and p2p disabled ---
         domain = JITSI_DOMAIN
         room = st.session_state.call_room
 
         # Build Jitsi URL with configuration parameters
+        # p2p.enabled=false forces use of the Jitsi Videobridge for better connectivity
         jitsi_url = (
             f"https://{domain}/{room}"
             "?config.startWithAudioMuted=false"
             "&config.startWithVideoMuted=false"
             "&config.disableWelcomePage=true"
             "&config.disableDeepLinking=true"
+            "&config.p2p.enabled=false"
         )
 
         # Iframe with camera, microphone, and display-capture permissions
@@ -3276,7 +3289,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         """
         st.markdown(iframe_html, unsafe_allow_html=True)
 
-        # Fallback link
+        # Fallback link to open in a new tab
         st.markdown(f"**Or open in a new tab:** [Join Room]({jitsi_url})", unsafe_allow_html=True)
 
         if st.button(t("end_call")):
