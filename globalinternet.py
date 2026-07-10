@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.35 (Free Jitsi meet.jit.si with virtual background)
+# Version: 77.8.36 (Free Jitsi meet.jit.si with fixed background upload)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3233,7 +3233,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             key="call_bg_uploader"
         )
         if uploaded_bg:
-            # Convert to data URL
             bytes_data = uploaded_bg.getvalue()
             b64 = base64.b64encode(bytes_data).decode()
             mime = uploaded_bg.type
@@ -3268,24 +3267,24 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         import json
         config_json = json.dumps(config_overwrite)
 
+        # FIXED: no window.onload – execute immediately; load API synchronously
         jitsi_html = f"""
         <div id="jitsi-container" style="height: 500px; width: 100%;"></div>
-        <script src="https://{domain}/external_api.js" async></script>
+        <script src="https://{domain}/external_api.js"></script>
         <script>
-          window.onload = function() {{
+          (function() {{
             const config = {config_json};
             const api = new JitsiMeetExternalAPI("{domain}", {{
               roomName: "{room}",
               parentNode: document.querySelector('#jitsi-container'),
               configOverwrite: config
             }});
-          }};
+          }})();
         </script>
         """
         st.components.v1.html(jitsi_html, height=520)
 
         if st.button(t("end_call")):
-            # Clear background on end call
             st.session_state.call_background_url = None
             end_call()
             st.rerun()
