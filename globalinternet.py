@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.32 (8x8 JaaS integration for video calls)
+# Version: 77.8.33 (Virtual background upload for 8x8 video calls)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -177,6 +177,8 @@ if "language" not in st.session_state:
     st.session_state.language = "en"
 if "editing_post" not in st.session_state:
     st.session_state.editing_post = None
+if "call_background_url" not in st.session_state:
+    st.session_state.call_background_url = None
 
 # ====== LANGUAGE DICTIONARY (4 LANGUAGES: EN, FR, ES, HT) ======
 LANG = {
@@ -2954,7 +2956,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view and 8x8 JaaS call ======
+# ====== UPDATED: render_friends_page with profile view and virtual background ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3218,12 +3220,35 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
 
-    # ---------- VIDEO CALL (8x8 JaaS) ----------
+    # ---------- VIDEO CALL (8x8 JaaS) with Virtual Background ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         st.info(t("call_permission_hint"))
+
+        # --- Virtual Background Upload ---
+        st.markdown("#### 🎨 Virtual Background")
+        uploaded_bg = st.file_uploader(
+            "Upload an image (PNG, JPG, JPEG, GIF)",
+            type=["png", "jpg", "jpeg", "gif"],
+            key="call_bg_uploader"
+        )
+        if uploaded_bg:
+            # Convert to data URL
+            bytes_data = uploaded_bg.getvalue()
+            b64 = base64.b64encode(bytes_data).decode()
+            mime = uploaded_bg.type
+            data_url = f"data:{mime};base64,{b64}"
+            st.session_state.call_background_url = data_url
+            st.success("Background uploaded! Refreshing call...")
+            st.rerun()
+
+        if st.session_state.get("call_background_url"):
+            st.image(st.session_state.call_background_url, width=200, caption="Current background")
+            if st.button("🗑️ Clear Background"):
+                st.session_state.call_background_url = None
+                st.rerun()
 
         app_id = st.secrets.get("JAAS_APP_ID", "")
         jwt = st.secrets.get("JAAS_JWT", "")
@@ -3231,23 +3256,35 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             st.error("⚠️ JAAS_APP_ID and JAAS_JWT must be set in secrets to use 8x8 calls.")
         else:
             room = st.session_state.call_room
-            full_room = f"{app_id}/{room}"   # format required by 8x8
+            full_room = f"{app_id}/{room}"
+
+            # Build config with optional virtual background
+            config_overwrite = {
+                "startWithAudioMuted": False,
+                "startWithVideoMuted": False,
+                "disableWelcomePage": True,
+                "disableDeepLinking": True
+            }
+            if st.session_state.get("call_background_url"):
+                config_overwrite["virtualBackground"] = {
+                    "url": st.session_state.call_background_url,
+                    "type": "image"
+                }
+
+            import json
+            config_json = json.dumps(config_overwrite)
 
             jaas_html = f"""
             <div id="jaas-container" style="height: 500px; width: 100%;"></div>
             <script src="https://8x8.vc/{app_id}/external_api.js" async></script>
             <script>
               window.onload = function() {{
+                const config = {config_json};
                 const api = new JitsiMeetExternalAPI("8x8.vc", {{
                   roomName: "{full_room}",
                   parentNode: document.querySelector('#jaas-container'),
                   jwt: "{jwt}",
-                  configOverwrite: {{
-                    startWithAudioMuted: false,
-                    startWithVideoMuted: false,
-                    disableWelcomePage: true,
-                    disableDeepLinking: true
-                  }}
+                  configOverwrite: config
                 }});
               }};
             </script>
@@ -3255,6 +3292,8 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             st.components.v1.html(jaas_html, height=520)
 
         if st.button(t("end_call")):
+            # Clear background on end call
+            st.session_state.call_background_url = None
             end_call()
             st.rerun()
     else:
