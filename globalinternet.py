@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.30 (Fixed profile view on Friends page)
+# Version: 77.8.31 (Production Jitsi embed + better call guidance)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -108,6 +108,9 @@ SMTP_USERNAME = st.secrets.get("SMTP_USERNAME")
 SMTP_PASSWORD = st.secrets.get("SMTP_PASSWORD")
 EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
+
+# --- Jitsi domain (use custom if set, otherwise fallback to meet.jit.si) ---
+JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
@@ -321,7 +324,8 @@ LANG = {
         "show_debug": "Show debug info",
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
-        "home_subtitle": "Your Haitian social media platform"
+        "home_subtitle": "Your Haitian social media platform",
+        "call_permission_hint": "📌 Ensure both participants grant camera and microphone access when prompted by the browser. If you don't see each other, refresh the page and try again."
     },
     "fr": {
         "login_title": "Connexion",
@@ -469,7 +473,8 @@ LANG = {
         "show_debug": "Afficher les infos de débogage",
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
-        "home_subtitle": "Your Haitian social media platform"
+        "home_subtitle": "Your Haitian social media platform",
+        "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez."
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -617,7 +622,8 @@ LANG = {
         "show_debug": "Mostrar información de depuración",
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "HAITI",
-        "home_subtitle": "Your Haitian social media platform"
+        "home_subtitle": "Your Haitian social media platform",
+        "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo."
     },
     "ht": {
         "login_title": "Konekte",
@@ -765,7 +771,8 @@ LANG = {
         "show_debug": "Montre enfòmasyon debogaj",
         "home_title": "🏠 Lakay se Lakay",
         "home_haiti": "Ayiti",
-        "home_subtitle": "Nouvo rezo Sosyal Ayisyen"
+        "home_subtitle": "Nouvo rezo Sosyal Ayisyen",
+        "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò."
     },
 }
 
@@ -2945,7 +2952,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view support ======
+# ====== UPDATED: render_friends_page with profile view and improved Jitsi embed ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3214,7 +3221,19 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
-        jitsi_url = f"https://meet.jit.si/{st.session_state.call_room}#config.startWithAudioMuted=false&config.startWithVideoMuted=false"
+        st.info(t("call_permission_hint"))
+        # Build Jitsi embed with custom domain and additional config
+        jitsi_domain = JITSI_DOMAIN
+        room = st.session_state.call_room
+        # Configuration parameters to improve call experience
+        config_params = (
+            "config.startWithAudioMuted=false"
+            "&config.startWithVideoMuted=false"
+            "&config.disableWelcomePage=true"
+            "&config.disableDeepLinking=true"
+            "&config.toolbarButtons=[]"
+        )
+        jitsi_url = f"https://{jitsi_domain}/{room}#{config_params}"
         st.components.v1.html(f"""
             <iframe src="{jitsi_url}" width="100%" height="500" allow="camera; microphone; fullscreen"></iframe>
         """, height=520)
