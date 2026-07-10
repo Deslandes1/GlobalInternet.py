@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.33 (Virtual background upload for 8x8 video calls)
+# Version: 77.8.34 (Virtual background + 8x8 JaaS with JWT refresh note)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
