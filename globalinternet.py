@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.39 (Jitsi iframe with p2p disabled + reload button)
+# Version: 77.8.40 (Jitsi External API with reliable video & audio)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2964,7 +2964,7 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-# ====== UPDATED: render_friends_page with profile view and free Jitsi iframe (p2p disabled) ======
+# ====== UPDATED: render_friends_page with Jitsi External API ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3228,14 +3228,14 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
 
-    # ---------- VIDEO CALL (Free Jitsi meet.jit.si) with iframe + p2p disabled ----------
+    # ---------- VIDEO CALL (Jitsi External API) ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         st.info(t("call_permission_hint"))
 
-        # --- Virtual Background Upload (interface only, not applied to iframe) ---
+        # --- Virtual Background Upload (UI only – not supported by the API) ---
         st.markdown("#### 🎨 Virtual Background")
         uploaded_bg = st.file_uploader(
             "Upload an image (PNG, JPG, JPEG, GIF)",
@@ -3257,40 +3257,63 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 st.session_state.call_background_url = None
                 st.rerun()
 
-        # --- Reload button: increment reload counter to refresh iframe ---
+        # --- Reload button: increment reload counter to reinitialize the API ---
         if st.button(t("reload_call")):
             st.session_state.call_reload += 1
             st.rerun()
 
-        # --- Jitsi iframe with full permissions and p2p disabled ---
+        # --- Jitsi External API integration ---
         domain = JITSI_DOMAIN
         room = st.session_state.call_room
+        container_id = f"jitsi-container-{st.session_state.call_reload}"
 
-        # Build Jitsi URL with configuration parameters
-        # p2p.enabled=false forces use of the Jitsi Videobridge for better connectivity
-        jitsi_url = (
-            f"https://{domain}/{room}"
-            "?config.startWithAudioMuted=false"
-            "&config.startWithVideoMuted=false"
-            "&config.disableWelcomePage=true"
-            "&config.disableDeepLinking=true"
-            "&config.p2p.enabled=false"
-        )
+        # Configuration (virtual background not supported via config in free version, but we keep it for possible future)
+        config_overwrite = {
+            "startWithAudioMuted": False,
+            "startWithVideoMuted": False,
+            "disableWelcomePage": True,
+            "disableDeepLinking": True,
+            "p2p": {"enabled": False}   # force use of videobridge
+        }
+        config_json = json.dumps(config_overwrite)
 
-        # Iframe with camera, microphone, and display-capture permissions
-        iframe_html = f"""
-        <div style="margin: 10px 0;">
-            <p style="color: #0a2a44;">{t('join_instructions')}</p>
-            <iframe src="{jitsi_url}" 
-                    allow="camera; microphone; display-capture; autoplay; fullscreen" 
-                    style="height:500px; width:100%; border:0; border-radius:12px;">
-            </iframe>
-        </div>
+        jitsi_html = f"""
+        <div id="{container_id}" style="height: 500px; width: 100%;"></div>
+        <script src="https://{domain}/external_api.js"></script>
+        <script>
+          (function() {{
+            const domain = '{domain}';
+            const room = '{room}';
+            const config = {config_json};
+            const container = document.getElementById('{container_id}');
+            if (!container) return;
+            // Wait for JitsiMeetExternalAPI to be defined
+            if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+                const api = new JitsiMeetExternalAPI(domain, {{
+                    roomName: room,
+                    parentNode: container,
+                    configOverwrite: config
+                }});
+            }} else {{
+                // If script not loaded yet, try again after a short delay
+                setTimeout(function() {{
+                    if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+                        const api = new JitsiMeetExternalAPI(domain, {{
+                            roomName: room,
+                            parentNode: container,
+                            configOverwrite: config
+                        }});
+                    }}
+                }}, 1000);
+            }}
+          }})();
+        </script>
         """
-        st.markdown(iframe_html, unsafe_allow_html=True)
+        st.components.v1.html(jitsi_html, height=520)
 
-        # Fallback link to open in a new tab
-        st.markdown(f"**Or open in a new tab:** [Join Room]({jitsi_url})", unsafe_allow_html=True)
+        # Fallback link
+        fallback_url = f"https://{domain}/{room}"
+        st.markdown(f"**Or open in a new tab:** [Join Room]({fallback_url})", unsafe_allow_html=True)
 
         if st.button(t("end_call")):
             st.session_state.call_background_url = None
