@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.44 (Animated Lakay se Lakay, removed phone login, sidebar updated)
+# Version: 77.8.45 (Go Live with Jitsi + automatic feed post + join requests)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -179,6 +179,8 @@ if "call_background_url" not in st.session_state:
     st.session_state.call_background_url = None
 if "call_reload" not in st.session_state:
     st.session_state.call_reload = 0
+if "live_room_name" not in st.session_state:
+    st.session_state.live_room_name = None
 
 # ====== LANGUAGE DICTIONARY (4 LANGUAGES: EN, FR, ES, HT) ======
 LANG = {
@@ -324,7 +326,11 @@ LANG = {
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Ensure both participants grant camera and microphone access when prompted by the browser. If you don't see each other, refresh the page and try again.",
         "join_instructions": "📌 After joining the room, click the **'Join'** button in the video window and allow camera/microphone access. If you still don't see the other person, ask them to check their camera settings.",
-        "reload_call": "🔄 Reload Call"
+        "reload_call": "🔄 Reload Call",
+        "request_to_join": "📨 Request to Join",
+        "request_pending": "⏳ Request pending... waiting for broadcaster approval.",
+        "broadcaster_controls": "🎛️ Broadcaster Controls",
+        "join_live": "🔴 Join Live"
     },
     "fr": {
         "login_title": "Connexion",
@@ -468,7 +474,11 @@ LANG = {
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez.",
         "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro. Si vous ne voyez toujours pas l'autre personne, demandez-lui de vérifier ses paramètres de caméra.",
-        "reload_call": "🔄 Recharger l'appel"
+        "reload_call": "🔄 Recharger l'appel",
+        "request_to_join": "📨 Demander à rejoindre",
+        "request_pending": "⏳ Demande en attente... en attente de l'approbation du diffuseur.",
+        "broadcaster_controls": "🎛️ Commandes du diffuseur",
+        "join_live": "🔴 Rejoindre le direct"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -612,7 +622,11 @@ LANG = {
         "home_subtitle": "Your Haitian social media platform",
         "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo.",
         "join_instructions": "📌 Después de unirse a la sala, haga clic en el botón **'Unirse'** en la ventana de video y permita el acceso a cámara/mic. Si aún no ve a la otra persona, pídale que revise su configuración de cámara.",
-        "reload_call": "🔄 Recargar llamada"
+        "reload_call": "🔄 Recargar llamada",
+        "request_to_join": "📨 Solicitar unirse",
+        "request_pending": "⏳ Solicitud pendiente... esperando aprobación del transmisor.",
+        "broadcaster_controls": "🎛️ Controles del transmisor",
+        "join_live": "🔴 Unirse al directo"
     },
     "ht": {
         "login_title": "Konekte",
@@ -756,7 +770,11 @@ LANG = {
         "home_subtitle": "Nouvo rezo Sosyal Ayisyen",
         "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò.",
         "join_instructions": "📌 Apre w fin rantre nan sal la, klike sou bouton **'Join'** nan fenèt videyo a epi pèmèt aksè kamera/mikrofòn. Si w toujou pa wè lòt moun nan, mande l pou l tcheke paramèt kamera li.",
-        "reload_call": "🔄 Reload apèl"
+        "reload_call": "🔄 Reload apèl",
+        "request_to_join": "📨 Mandle pou rantre",
+        "request_pending": "⏳ Demann annat... ap tann difizè a apwouve.",
+        "broadcaster_controls": "🎛️ Kontwòl difizè",
+        "join_live": "🔴 Antre nan dirèk"
     },
 }
 
@@ -3465,6 +3483,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
+# ====== UPDATED: render_live_page with Jitsi embed for in-app live ======
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -3561,9 +3580,95 @@ def render_live_page(session_id):
             else:
                 st.info("The streamer has not provided a video URL yet.")
         else:
+            # In-app live: use Jitsi
+            # Determine if current user is allowed to view (broadcaster or accepted participant)
+            can_view = is_broadcaster
+            if not can_view and st.session_state.user:
+                # Check if user is accepted
+                part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                if part.data and part.data[0]["status"] == "accepted":
+                    can_view = True
+
+            if can_view:
+                # Generate Jitsi room name based on session ID
+                room_name = f"lakay-live-{session_id}"
+                container_id = f"jitsi-live-{session_id}"
+
+                # Build Jitsi embed
+                domain = JITSI_DOMAIN
+                config_overwrite = {
+                    "startWithAudioMuted": False,
+                    "startWithVideoMuted": False,
+                    "disableWelcomePage": True,
+                    "disableDeepLinking": True,
+                    "p2p": {"enabled": False}
+                }
+                config_json = json.dumps(config_overwrite)
+
+                jitsi_html = f"""
+                <div id="{container_id}" style="height: 500px; width: 100%;"></div>
+                <script src="https://{domain}/external_api.js"></script>
+                <script>
+                  (function() {{
+                    const domain = '{domain}';
+                    const room = '{room_name}';
+                    const config = {config_json};
+                    const container = document.getElementById('{container_id}');
+                    if (!container) return;
+                    if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+                        const api = new JitsiMeetExternalAPI(domain, {{
+                            roomName: room,
+                            parentNode: container,
+                            configOverwrite: config
+                        }});
+                    }} else {{
+                        setTimeout(function() {{
+                            if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+                                const api = new JitsiMeetExternalAPI(domain, {{
+                                    roomName: room,
+                                    parentNode: container,
+                                    configOverwrite: config
+                                }});
+                            }}
+                        }}, 1000);
+                    }}
+                  }})();
+                </script>
+                """
+                st.components.v1.html(jitsi_html, height=520)
+            else:
+                # Not allowed to view yet: show request button or pending message
+                if st.session_state.user:
+                    # Check if already requested
+                    part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
+                    if part.data:
+                        if part.data[0]["status"] == "pending":
+                            st.info(t("request_pending"))
+                        elif part.data[0]["status"] == "rejected":
+                            st.warning("Your request was rejected by the broadcaster.")
+                        else:
+                            st.info("You are a viewer. The broadcaster has not yet accepted your request.")
+                    else:
+                        # Show request button
+                        if st.button(t("request_to_join"), key=f"request_join_{session_id}"):
+                            # Insert into live_participants with status 'pending'
+                            try:
+                                supabase.table("live_participants").insert({
+                                    "session_id": session_id,
+                                    "user_id": st.session_state.user.id,
+                                    "status": "pending"
+                                }).execute()
+                                st.success("Request sent! Waiting for broadcaster approval.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to send request: {e}")
+                else:
+                    st.info("Please log in to request to join this live stream.")
+
+            # Broadcaster controls for participant management
             if is_broadcaster:
-                st.success(t("you_are_broadcaster"))
-                st.subheader("🎤 Participant Requests")
+                st.subheader(t("broadcaster_controls"))
+                # Show pending requests
                 try:
                     pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
                     pending_list = pending.data or []
@@ -3572,6 +3677,7 @@ def render_live_page(session_id):
                     pending_list = []
 
                 if pending_list:
+                    st.markdown("**Pending join requests**")
                     for req in pending_list:
                         cols = st.columns([3,1,1])
                         with cols[0]:
@@ -3597,7 +3703,7 @@ def render_live_page(session_id):
                 else:
                     st.info("No pending requests")
 
-                st.subheader("🎤 Active Participants")
+                # Show active participants
                 try:
                     accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "accepted").execute()
                     accepted_list = accepted.data or []
@@ -3606,6 +3712,7 @@ def render_live_page(session_id):
                     accepted_list = []
 
                 if accepted_list:
+                    st.markdown("**Active participants**")
                     for part in accepted_list:
                         cols = st.columns([2,1,1,1])
                         with cols[0]:
@@ -3642,9 +3749,7 @@ def render_live_page(session_id):
                                 supabase.table("live_participants").delete().eq("id", part["id"]).execute()
                                 st.rerun()
                 else:
-                    st.info("No participants yet")
-            else:
-                st.info(t("you_are_viewer"))
+                    st.info("No active participants")
 
         try:
             base_url = st.request.url.split('?')[0]
@@ -4086,7 +4191,15 @@ def main_app():
                                 session_id = create_live_session(title, platform, method='external' if platform != 'inapp' else 'inapp')
                                 if session_id:
                                     if platform == 'inapp':
-                                        st.success(t("you_are_live"))
+                                        # Post the live link to feed
+                                        try:
+                                            base_url = st.request.url.split('?')[0]
+                                        except:
+                                            base_url = "https://lakay-se-lakay.streamlit.app"
+                                        share_url = f"{base_url}?live={session_id}"
+                                        post_content = f"🔴 I'm going live! Join me: {share_url}"
+                                        create_post(st.session_state.user.id, post_content, is_public=True)
+                                        st.success(f"{t('you_are_live')} – A post with the join link has been added to your feed.")
                                     else:
                                         st.success(t("you_are_live"))
                                         st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
