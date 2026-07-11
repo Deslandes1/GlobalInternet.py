@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.45 (Go Live with Jitsi + automatic feed post + join requests)
+# Version: 77.8.46 (Added NATCASH as second payment option)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -225,8 +225,10 @@ LANG = {
         "live_chat_gifts": "Live Chat & Gifts",
         "send_gift": "🎁 Send a Gift",
         "add_moncash": "Add your MonCash phone number in your profile to send gifts.",
+        "add_natcash": "Add your NATCASH phone number to receive payments.",
         "total_gifts": "Total Gifts Received",
         "gifts_sent_to": "Gifts will be sent to your MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
         "write_comment": "Write a comment...",
         "send": "Send",
         "back_to_feed": "Back to Feed",
@@ -293,6 +295,7 @@ LANG = {
         "bio": "Bio",
         "location": "Location",
         "moncash_phone": "MonCash Phone Number (for receiving gifts)",
+        "natcash_phone": "NATCASH Phone Number (for receiving payments)",
         "posts_count": "Posts",
         "connections": "Connections",
         "verified": "Verified",
@@ -373,8 +376,10 @@ LANG = {
         "live_chat_gifts": "Chat en direct et cadeaux",
         "send_gift": "🎁 Envoyer un cadeau",
         "add_moncash": "Ajoutez votre numéro MonCash dans votre profil pour envoyer des cadeaux.",
+        "add_natcash": "Ajoutez votre numéro NATCASH pour recevoir des paiements.",
         "total_gifts": "Total des cadeaux reçus",
         "gifts_sent_to": "Les cadeaux seront envoyés à votre MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
         "write_comment": "Écrire un commentaire...",
         "send": "Envoyer",
         "back_to_feed": "Retour au fil",
@@ -441,6 +446,7 @@ LANG = {
         "bio": "Bio",
         "location": "Localisation",
         "moncash_phone": "Numéro MonCash (pour recevoir des cadeaux)",
+        "natcash_phone": "Numéro NATCASH (pour recevoir des paiements)",
         "posts_count": "Publications",
         "connections": "Connexions",
         "verified": "Vérifié",
@@ -521,8 +527,10 @@ LANG = {
         "live_chat_gifts": "Chat en vivo y regalos",
         "send_gift": "🎁 Enviar un regalo",
         "add_moncash": "Agrega tu número de MonCash en tu perfil para enviar regalos.",
+        "add_natcash": "Agrega tu número de NATCASH para recibir pagos.",
         "total_gifts": "Total de regalos recibidos",
         "gifts_sent_to": "Los regalos se enviarán a tu MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
         "write_comment": "Escribe un comentario...",
         "send": "Enviar",
         "back_to_feed": "Volver al feed",
@@ -589,6 +597,7 @@ LANG = {
         "bio": "Biografía",
         "location": "Localización",
         "moncash_phone": "Número MonCash (para recibir regalos)",
+        "natcash_phone": "Número NATCASH (para recibir pagos)",
         "posts_count": "Publicaciones",
         "connections": "Conexiones",
         "verified": "Verificado",
@@ -669,8 +678,10 @@ LANG = {
         "live_chat_gifts": "Chat dirèk ak kado",
         "send_gift": "🎁 Voye yon kado",
         "add_moncash": "Ajoute nimewo MonCash ou nan pwofil ou pou voye kado.",
+        "add_natcash": "Ajoute nimewo NATCASH ou pou resevwa peman.",
         "total_gifts": "Total kado resevwa",
         "gifts_sent_to": "Kado yo pral voye nan MonCash ou",
+        "gifts_sent_to_natcash": "NATCASH",
         "write_comment": "Ekri yon kòmantè...",
         "send": "Voye",
         "back_to_feed": "Retounen nan feed",
@@ -737,6 +748,7 @@ LANG = {
         "bio": "Biwo",
         "location": "Kote",
         "moncash_phone": "Nimewo MonCash (pou resevwa kado)",
+        "natcash_phone": "Nimewo NATCASH (pou resevwa peman)",
         "posts_count": "Pòs",
         "connections": "Koneksyon",
         "verified": "Verifye",
@@ -1445,6 +1457,7 @@ def get_or_create_profile(user_id, identifier):
                 "location": "",
                 "is_live": False,
                 "moncash_phone": None,
+                "natcash_phone": None,
                 "join_date": datetime.now().isoformat()
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
@@ -1959,7 +1972,7 @@ def load_live_sessions():
         user_ids = {s["user_id"] for s in sessions}
         profiles = {}
         if user_ids:
-            profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").in_("id", list(user_ids)).execute()
+            profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").in_("id", list(user_ids)).execute()
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
 
@@ -1969,6 +1982,7 @@ def load_live_sessions():
                 "full_name": p.get("full_name", "Unknown"),
                 "avatar_url": p.get("avatar_url"),
                 "moncash_phone": p.get("moncash_phone"),
+                "natcash_phone": p.get("natcash_phone"),
             }
             if "stream_method" not in s:
                 s["stream_method"] = "external"
@@ -2059,12 +2073,13 @@ def get_live_session(session_id):
         if not session:
             return None
 
-        profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").eq("id", session["user_id"]).single().execute()
+        profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").eq("id", session["user_id"]).single().execute()
         profile = profile_resp.data or {}
         session["profiles"] = {
             "full_name": profile.get("full_name", "Unknown"),
             "avatar_url": profile.get("avatar_url"),
             "moncash_phone": profile.get("moncash_phone"),
+            "natcash_phone": profile.get("natcash_phone"),
         }
         if "stream_method" not in session:
             session["stream_method"] = "external"
@@ -2213,7 +2228,7 @@ def search_users(query):
     if supabase is None or not st.session_state.user:
         return []
     try:
-        result = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50).execute()
+        result = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50).execute()
         return result.data
     except Exception as e:
         st.session_state.last_error = f"Search failed: {e}"
@@ -3009,6 +3024,7 @@ def render_user_profile(user_id, show_back_button=True):
         st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
         st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
         st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
+        st.markdown(f"**{t('natcash_phone')}:** {profile.get('natcash_phone', 'Not set')}")
         st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
         if st.button(t("chat")):
             st.session_state.selected_chat = user_id
@@ -3183,7 +3199,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         other_id = st.session_state.selected_chat
 
         # Fetch other user's profile
-        other = supabase.table("profiles").select("full_name, avatar_url").eq("id", other_id).single().execute()
+        other = supabase.table("profiles").select("full_name, avatar_url, moncash_phone, natcash_phone").eq("id", other_id).single().execute()
         if other.data:
             other_name = other.data["full_name"]
             other_avatar = other.data.get("avatar_url")
@@ -3466,8 +3482,15 @@ def render_profile():
             bio = st.text_area(t("bio"), value=profile.get("bio", ""), height=100)
             location = st.text_input(t("location"), value=profile.get("location", ""))
             moncash_phone = st.text_input(t("moncash_phone"), value=profile.get("moncash_phone", ""))
+            natcash_phone = st.text_input(t("natcash_phone"), value=profile.get("natcash_phone", ""))
             if st.form_submit_button(t("save_changes"), use_container_width=True):
-                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone})
+                profile.update({
+                    "full_name": full_name,
+                    "bio": bio,
+                    "location": location,
+                    "moncash_phone": moncash_phone,
+                    "natcash_phone": natcash_phone
+                })
                 if update_profile(profile):
                     st.success(t("profile"))
                     st.rerun()
@@ -3483,7 +3506,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-# ====== UPDATED: render_live_page with Jitsi embed for in-app live ======
+# ====== UPDATED: render_live_page with Jitsi embed for in-app live and payment numbers ======
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -3581,20 +3604,16 @@ def render_live_page(session_id):
                 st.info("The streamer has not provided a video URL yet.")
         else:
             # In-app live: use Jitsi
-            # Determine if current user is allowed to view (broadcaster or accepted participant)
             can_view = is_broadcaster
             if not can_view and st.session_state.user:
-                # Check if user is accepted
                 part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                 if part.data and part.data[0]["status"] == "accepted":
                     can_view = True
 
             if can_view:
-                # Generate Jitsi room name based on session ID
                 room_name = f"lakay-live-{session_id}"
                 container_id = f"jitsi-live-{session_id}"
 
-                # Build Jitsi embed
                 domain = JITSI_DOMAIN
                 config_overwrite = {
                     "startWithAudioMuted": False,
@@ -3637,9 +3656,7 @@ def render_live_page(session_id):
                 """
                 st.components.v1.html(jitsi_html, height=520)
             else:
-                # Not allowed to view yet: show request button or pending message
                 if st.session_state.user:
-                    # Check if already requested
                     part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                     if part.data:
                         if part.data[0]["status"] == "pending":
@@ -3649,9 +3666,7 @@ def render_live_page(session_id):
                         else:
                             st.info("You are a viewer. The broadcaster has not yet accepted your request.")
                     else:
-                        # Show request button
                         if st.button(t("request_to_join"), key=f"request_join_{session_id}"):
-                            # Insert into live_participants with status 'pending'
                             try:
                                 supabase.table("live_participants").insert({
                                     "session_id": session_id,
@@ -3665,10 +3680,8 @@ def render_live_page(session_id):
                 else:
                     st.info("Please log in to request to join this live stream.")
 
-            # Broadcaster controls for participant management
             if is_broadcaster:
                 st.subheader(t("broadcaster_controls"))
-                # Show pending requests
                 try:
                     pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "pending").execute()
                     pending_list = pending.data or []
@@ -3703,7 +3716,6 @@ def render_live_page(session_id):
                 else:
                     st.info("No pending requests")
 
-                # Show active participants
                 try:
                     accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url)").eq("session_id", session_id).eq("status", "accepted").execute()
                     accepted_list = accepted.data or []
@@ -3802,10 +3814,25 @@ def render_live_page(session_id):
 
         if is_broadcaster:
             st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
-            if session["profiles"]["moncash_phone"]:
-                st.info(f"{t('gifts_sent_to')}: {session['profiles']['moncash_phone']}")
-            else:
-                st.warning(t("add_moncash"))
+            # Show MonCash if present
+            moncash = session["profiles"].get("moncash_phone")
+            natcash = session["profiles"].get("natcash_phone")
+            if moncash:
+                st.info(f"{t('gifts_sent_to')}: {moncash}")
+            if natcash:
+                st.info(f"{t('gifts_sent_to_natcash')}: {natcash}")
+            if not moncash and not natcash:
+                st.warning(t("add_moncash") + " / " + t("add_natcash"))
+        else:
+            # Viewers can see the broadcaster's payment info if they want to donate
+            moncash = session["profiles"].get("moncash_phone")
+            natcash = session["profiles"].get("natcash_phone")
+            if moncash or natcash:
+                st.markdown("**💝 Support the broadcaster:**")
+                if moncash:
+                    st.markdown(f"MonCash: {moncash}")
+                if natcash:
+                    st.markdown(f"NATCASH: {natcash}")
 
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
             msg = st.text_input(t("write_comment"))
@@ -4191,7 +4218,6 @@ def main_app():
                                 session_id = create_live_session(title, platform, method='external' if platform != 'inapp' else 'inapp')
                                 if session_id:
                                     if platform == 'inapp':
-                                        # Post the live link to feed
                                         try:
                                             base_url = st.request.url.split('?')[0]
                                         except:
@@ -4294,7 +4320,6 @@ def main_app():
 # ========== ENTRY ==========
 if __name__ == "__main__":
     if st.session_state.logged_in:
-        # Home title with animated flag text and golden stars
         st.markdown(f"""
         <div class="home-title">
             <h1>
