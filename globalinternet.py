@@ -2618,6 +2618,40 @@ def display_avatar_and_followers(avatar_url, user_id, size=50):
     else:
         st.caption("1kFollowers")
 
+# ====== NEW: Get unread messages count ======
+def get_unread_messages_count(user_id):
+    """Return the number of unread messages for a given user."""
+    if supabase is None:
+        return 0
+    try:
+        resp = supabase.table("messages").select("id", count="exact").eq("receiver_id", user_id).eq("read", False).execute()
+        return resp.count if hasattr(resp, 'count') else 0
+    except Exception as e:
+        st.session_state.last_error = f"Error fetching unread messages: {e}"
+        return 0
+
+# ====== NEW: Render top icons (message & bell) ======
+def render_top_icons():
+    """Display message and notification icons with red badges at the top of profile pages."""
+    if not st.session_state.logged_in:
+        return
+    user_id = st.session_state.user.id
+    unread_msgs = get_unread_messages_count(user_id)
+    unread_notifs = st.session_state.unread_count
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        label = f"💬 {unread_msgs}" if unread_msgs > 0 else "💬"
+        if st.button(label, key="top_msg_icon", use_container_width=True):
+            st.session_state.current_page = "friends_chat"
+            st.rerun()
+    with col2:
+        label = f"🔔 {unread_notifs}" if unread_notifs > 0 else "🔔"
+        if st.button(label, key="top_notif_icon", use_container_width=True):
+            st.session_state.current_page = "friends_chat"
+            st.rerun()
+    st.divider()
+
 # ====== LOGIN INTERFACE (only email, no phone) ======
 def login_interface():
     # Animated "Lakay se Lakay" with golden stars
@@ -2976,6 +3010,8 @@ def render_user_profile(user_id, show_back_button=True):
             st.rerun()
         return
 
+    render_top_icons()   # <-- new line
+
     try:
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not profile_resp.data:
@@ -3050,6 +3086,15 @@ def render_user_profile(user_id, show_back_button=True):
                     for media in post.get("media_urls", []):
                         display_media_item(media)
                     st.divider()
+
+    # Add metrics row for followers
+    st.divider()
+    cola, colb = st.columns(2)
+    with cola:
+        st.metric("Posts", len(posts))
+    with colb:
+        st.metric("Followers", "1KFollowers")   # <-- new
+    st.divider()
 
 # ====== UPDATED: render_friends_page with Jitsi External API ======
 def render_friends_page():
@@ -3458,6 +3503,7 @@ def render_worldcup():
 
 def render_profile():
     st.header(t("profile"))
+    render_top_icons()   # <-- new line
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
@@ -3500,7 +3546,7 @@ def render_profile():
     with cola:
         st.metric(t("posts_count"), len(st.session_state.posts))
     with colb:
-        st.metric(t("connections"), profile.get("connections", 0))
+        st.metric("Followers", "1MFollowers")   # <-- changed from "Connections"
     with colc:
         st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
     with cold:
