@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.50 (Added User Ban/Unban in Owner Space)
+# Version: 77.8.51 (Fixed NameError in delete_post)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -877,7 +877,6 @@ def refresh_supabase_session():
             st.session_state.user = new_session.user
             st.session_state.refresh_token = new_session.session.refresh_token
             profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone)
-            # Check if user is banned
             if profile and profile.get("is_banned"):
                 st.session_state.logged_in = False
                 st.session_state.user = None
@@ -1533,7 +1532,6 @@ def ban_user(user_id, reason=""):
         return False, "Supabase not configured."
     try:
         supabase.table("profiles").update({"is_banned": True, "ban_reason": reason}).eq("id", user_id).execute()
-        # Send notification to the user
         try:
             supabase.table("notifications").insert({
                 "user_id": user_id,
@@ -1552,7 +1550,6 @@ def unban_user(user_id):
         return False, "Supabase not configured."
     try:
         supabase.table("profiles").update({"is_banned": False, "ban_reason": None}).eq("id", user_id).execute()
-        # Send notification to the user
         try:
             supabase.table("notifications").insert({
                 "user_id": user_id,
@@ -1575,6 +1572,250 @@ def get_all_users():
     except Exception as e:
         st.session_state.last_error = f"Error loading users: {e}"
         return []
+
+# ====== UPLOAD FUNCTIONS ======
+def upload_avatar(user_id, image_file):
+    if supabase is None:
+        return upload_avatar_base64(image_file)
+    bucket_ok = ensure_bucket_exists("avatars")
+    if not bucket_ok:
+        return upload_avatar_base64(image_file)
+    try:
+        ext = image_file.name.split('.')[-1]
+        file_name = f"{user_id}_{int(time.time())}.{ext}"
+        image_bytes = image_file.getvalue()
+        supabase.storage.from_("avatars").upload(file_name, image_bytes)
+        public_url = supabase.storage.from_("avatars").get_public_url(file_name)
+        return public_url
+    except Exception:
+        return upload_avatar_base64(image_file)
+
+def upload_avatar_base64(image_file):
+    try:
+        file_bytes = image_file.getvalue()
+        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        content_type = image_file.type
+        if content_type.startswith('image'):
+            data_url = f"data:{content_type};base64,{b64}"
+            return data_url
+        else:
+            return None
+    except Exception:
+        return None
+
+def upload_post_media(user_id, file):
+    if supabase is None:
+        return upload_media_base64(file)
+    if not ensure_bucket_exists("post_media"):
+        return upload_media_base64(file)
+    try:
+        content_type = file.type
+        ext = file.name.split('.')[-1]
+        timestamp = int(time.time())
+        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
+        file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
+        file_bytes = file.getvalue()
+        supabase.storage.from_("post_media").upload(
+            file_name,
+            file_bytes,
+            {"content-type": content_type}
+        )
+        public_url = supabase.storage.from_("post_media").get_public_url(file_name)
+        media_type = "video" if content_type.startswith("video") else "image"
+        return {"url": public_url, "type": media_type}
+    except Exception:
+        return upload_media_base64(file)
+
+def upload_media_base64(file):
+    try:
+        file_bytes = file.getvalue()
+        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        content_type = file.type
+        data_url = f"data:{content_type};base64,{b64}"
+        media_type = "video" if content_type.startswith("video") else "image"
+        return {"url": data_url, "type": media_type}
+    except Exception:
+        return None
+
+def upload_chat_media(user_id, file):
+    if supabase is None:
+        return upload_media_base64(file)
+    if not ensure_bucket_exists("chat_media"):
+        return upload_media_base64(file)
+    try:
+        content_type = file.type
+        ext = file.name.split('.')[-1]
+        timestamp = int(time.time())
+        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
+        file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
+        file_bytes = file.getvalue()
+        supabase.storage.from_("chat_media").upload(
+            file_name,
+            file_bytes,
+            {"content-type": content_type}
+        )
+        public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
+        media_type = "video" if content_type.startswith("video") else "image"
+        return {"url": public_url, "type": media_type}
+    except Exception:
+        return upload_media_base64(file)
+
+# ---- POST CRUD (delete_post is global) ----
+def delete_post(post_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("posts").delete().eq("id", post_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error deleting post: {e}"
+        return False
+
+def fetch_exchange_rate():
+    try:
+        resp = requests.get(EXCHANGE_RATE_API, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'rates' in data and 'HTG' in data['rates']:
+                return float(data['rates']['HTG'])
+        return 100.0
+    except:
+        return 100.0
+
+# ====== UPDATED: send_gift with graceful notification insert ======
+def send_gift(session_id, sender_id, recipient_id, amount, currency):
+    if supabase is None:
+        return False, "Supabase not configured"
+    try:
+        rate = st.session_state.exchange_rate
+        if currency == "USD":
+            amount_htg = amount * rate
+        else:
+            amount_htg = amount
+        sender_name = st.session_state.profile["full_name"]
+        gift_data = {
+            "session_id": session_id,
+            "sender_id": sender_id,
+            "sender_name": sender_name,
+            "recipient_id": recipient_id,
+            "amount": amount,
+            "currency": currency,
+            "converted_amount_htg": amount_htg,
+            "status": "pending",
+            "created_at": datetime.now().isoformat()
+        }
+        result = supabase.table("live_gifts").insert(gift_data).execute()
+        if not result.data:
+            return False, "Failed to record gift"
+        gift_id = result.data[0]["id"]
+        payment_success = True
+        if payment_success:
+            supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
+            try:
+                supabase.table("notifications").insert({
+                    "user_id": recipient_id,
+                    "type": "gift",
+                    "message": f"🎁 You received a gift of {amount} {currency} from {sender_name}!",
+                    "read": False
+                }).execute()
+            except Exception as notif_err:
+                st.warning(f"Gift recorded, but notification could not be sent: {notif_err}")
+            return True, "Gift sent successfully!"
+        else:
+            supabase.table("live_gifts").update({"status": "failed"}).eq("id", gift_id).execute()
+            return False, "Payment failed. Please try again."
+    except Exception as e:
+        st.session_state.last_error = f"Error sending gift: {e}"
+        return False, str(e)
+
+def load_gifts_for_session(session_id):
+    if supabase is None:
+        return []
+    try:
+        resp = supabase.table("live_gifts").select("*").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
+        gifts = resp.data or []
+        for g in gifts:
+            g['sender'] = {'full_name': g.get('sender_name', 'Someone'), 'avatar_url': None}
+        return gifts
+    except Exception as e:
+        error_str = str(e)
+        if "permission denied" in error_str.lower() and "users" in error_str.lower():
+            st.session_state.last_error = (
+                "Permission denied while loading gifts. This is likely due to a Row Level Security (RLS) policy "
+                "that references the `users` table. Please check your Supabase policies on the `live_gifts` table "
+                "and ensure the anon role has the necessary permissions, or modify the policy to avoid using the `users` table."
+            )
+        else:
+            st.session_state.last_error = f"Error loading gifts: {e}"
+        return []
+
+def accept_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error accepting participant: {e}"
+        return False
+
+def reject_participant(participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").delete().eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error rejecting participant: {e}"
+        return False
+
+def mute_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "muted"}).eq("id", participant_id).execute()
+        try:
+            supabase.table("notifications").insert({
+                "user_id": participant_id,
+                "type": "live_mute",
+                "message": "The broadcaster has muted your microphone.",
+                "read": False
+            }).execute()
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error muting participant: {e}"
+        return False
+
+def unmute_participant(session_id, participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
+        try:
+            supabase.table("notifications").insert({
+                "user_id": participant_id,
+                "type": "live_unmute",
+                "message": "The broadcaster has unmuted your microphone.",
+                "read": False
+            }).execute()
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error unmuting participant: {e}"
+        return False
+
+def remove_participant(participant_id):
+    if supabase is None:
+        return False
+    try:
+        supabase.table("live_participants").delete().eq("id", participant_id).execute()
+        return True
+    except Exception as e:
+        st.session_state.last_error = f"Error removing participant: {e}"
+        return False
 
 # ---- Posts ----
 @st.cache_data(ttl=60, show_spinner=False)
@@ -1958,7 +2199,6 @@ def mark_notification_read(notif_id):
     except Exception as e:
         st.session_state.last_error = f"Error marking notification read: {e}"
 
-# ====== UPDATED: send_friend_request with graceful notification ======
 def send_friend_request(sender_id, receiver_id):
     if supabase is None:
         return False, "Not logged in"
@@ -1983,7 +2223,6 @@ def send_friend_request(sender_id, receiver_id):
     except Exception as e:
         return False, str(e)
 
-# ====== UPDATED: respond_friend_request with graceful notification ======
 def respond_friend_request(request_id, accept):
     if supabase is None:
         return False, "Not logged in"
@@ -2085,7 +2324,6 @@ def search_users(query):
         st.session_state.last_error = f"Search failed: {e}"
         return []
 
-# ====== UPDATED: send_message with graceful notification ======
 def send_message(sender_id, receiver_id, content, media_file=None):
     if supabase is None:
         return False
@@ -2955,7 +3193,6 @@ def render_user_profile(user_id, show_back_button=True):
 
 # ====== UPDATED: render_friends_page with Jitsi External API & fixed chat profile fetch ======
 def render_friends_page():
-    # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile, show_back_button=False)
         if st.button("← Back to Friends"):
@@ -3100,7 +3337,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
 
-        # Fetch other user's profile safely
         try:
             other_result = supabase.table("profiles").select("full_name, avatar_url, moncash_phone, natcash_phone").eq("id", other_id).maybe_single().execute()
             other_data = other_result.data if other_result.data else None
@@ -3115,7 +3351,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             other_name = "User"
             other_avatar = None
 
-        # Header with avatar and name
         col1, col2 = st.columns([1, 5])
         with col1:
             display_avatar_and_followers(other_avatar, other_id, size=50)
@@ -3127,14 +3362,12 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
 
         st.divider()
 
-        # Display messages
         messages = load_messages(st.session_state.user.id, other_id)
         if not messages:
             st.info("No messages yet. Start the conversation!")
         else:
             for msg in messages:
                 if msg["sender_id"] == st.session_state.user.id:
-                    # Own message
                     if msg.get("media_url"):
                         try:
                             if msg.get("media_type") == "image":
@@ -3170,7 +3403,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                         clickable_content = make_clickable(msg["content"])
                         st.markdown(f"<div style='text-align:right; background:#e0f7fa; padding:5px; border-radius:10px; margin:5px;'><b>You:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
                 else:
-                    # Other's message
                     if msg.get("media_url"):
                         try:
                             if msg.get("media_type") == "image":
@@ -3206,7 +3438,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                         clickable_content = make_clickable(msg["content"])
                         st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
-        # Message input
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input(t("send_message"), placeholder="Type your message...")
             uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
@@ -3230,7 +3461,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         st.markdown(t("share_room"))
         st.info(t("call_permission_hint"))
 
-        # --- Virtual Background Upload (UI only – not supported by the API) ---
         st.markdown("#### 🎨 Virtual Background")
         uploaded_bg = st.file_uploader(
             "Upload an image (PNG, JPG, JPEG, GIF)",
@@ -3252,23 +3482,20 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 st.session_state.call_background_url = None
                 st.rerun()
 
-        # --- Reload button: increment reload counter to reinitialize the API ---
         if st.button(t("reload_call")):
             st.session_state.call_reload += 1
             st.rerun()
 
-        # --- Jitsi External API integration ---
         domain = JITSI_DOMAIN
         room = st.session_state.call_room
         container_id = f"jitsi-container-{st.session_state.call_reload}"
 
-        # Configuration (virtual background not supported via config in free version, but we keep it for possible future)
         config_overwrite = {
             "startWithAudioMuted": False,
             "startWithVideoMuted": False,
             "disableWelcomePage": True,
             "disableDeepLinking": True,
-            "p2p": {"enabled": False}   # force use of videobridge
+            "p2p": {"enabled": False}
         }
         config_json = json.dumps(config_overwrite)
 
@@ -3282,7 +3509,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             const config = {config_json};
             const container = document.getElementById('{container_id}');
             if (!container) return;
-            // Wait for JitsiMeetExternalAPI to be defined
             if (typeof JitsiMeetExternalAPI !== 'undefined') {{
                 const api = new JitsiMeetExternalAPI(domain, {{
                     roomName: room,
@@ -3290,7 +3516,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                     configOverwrite: config
                 }});
             }} else {{
-                // If script not loaded yet, try again after a short delay
                 setTimeout(function() {{
                     if (typeof JitsiMeetExternalAPI !== 'undefined') {{
                         const api = new JitsiMeetExternalAPI(domain, {{
@@ -3306,7 +3531,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         """
         st.components.v1.html(jitsi_html, height=520)
 
-        # Fallback link
         fallback_url = f"https://{domain}/{room}"
         st.markdown(f"**Or open in a new tab:** [Join Room]({fallback_url})", unsafe_allow_html=True)
 
@@ -3415,7 +3639,6 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-# ====== UPDATED: render_live_page with Jitsi embed for in-app live and payment numbers ======
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -3460,7 +3683,6 @@ def render_live_page(session_id):
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        # Show broadcaster avatar and name
         col_avatar_broadcaster, col_name_broadcaster = st.columns([1, 4])
         with col_avatar_broadcaster:
             display_avatar_and_followers(session["profiles"]["avatar_url"], session["user_id"], size=60)
@@ -3512,7 +3734,6 @@ def render_live_page(session_id):
             else:
                 st.info("The streamer has not provided a video URL yet.")
         else:
-            # In-app live: use Jitsi – same config as video call
             can_view = is_broadcaster
             if not can_view and st.session_state.user:
                 part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
@@ -3768,7 +3989,6 @@ def render_live_page(session_id):
                 sender = g.get('sender', {}).get('full_name', 'Someone')
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
-# ====== UPDATED: owner_space with User Management tab ======
 def owner_space():
     st.header(t("owner_space"))
 
@@ -3789,7 +4009,6 @@ def owner_space():
         send_email_notification(new_users)
         update_last_seen_signup()
 
-    # Added User Management tab (now 6 tabs)
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         t("dashboard"), 
         t("new_users"), 
@@ -4073,7 +4292,6 @@ def owner_space():
                                 st.error(msg)
                     else:
                         if st.button(t("ban_user"), key=f"ban_{user['id']}"):
-                            # Ask for reason in a popover or simple input
                             with st.popover("Enter ban reason"):
                                 reason = st.text_input("Reason (optional)")
                                 if st.button("Confirm Ban"):
@@ -4084,7 +4302,6 @@ def owner_space():
                                     else:
                                         st.error(msg)
                 with cols[4]:
-                    # Show ban reason if banned
                     if user.get('is_banned') and user.get('ban_reason'):
                         st.caption(f"Reason: {user['ban_reason']}")
 
@@ -4114,7 +4331,6 @@ def main_app():
             Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
         </div>
         """, unsafe_allow_html=True)
-        # Add founder line
         st.markdown("""
         <div style='text-align: center; font-size: 0.9rem; color: #0a2a44; margin-top: 5px;'>
             <b>Gesner Deslandes</b><br>
@@ -4122,9 +4338,6 @@ def main_app():
         </div>
         """, unsafe_allow_html=True)
 
-        # Remove avatar display from sidebar – we already show the flag and owner name
-
-        # Rest of sidebar content remains unchanged
         st.divider()
 
         lang_options = {
