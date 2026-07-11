@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.40 (Jitsi External API with reliable video & audio)
+# Version: 77.8.41 (Light blue background with shining stars)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -890,18 +890,72 @@ if st.session_state.logged_in and supabase and st.session_state.refresh_token:
     except Exception:
         pass
 
-# ====== UI STYLING ======
+# ====== STARFIELD (shining stars behind everything) ======
+st.components.v1.html("""
+<canvas id="starfield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; pointer-events:none;"></canvas>
+<script>
+(function() {
+    const canvas = document.getElementById('starfield');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+        initStars();
+    });
+
+    const stars = [];
+    const NUM_STARS = 250;
+
+    function initStars() {
+        stars.length = 0;
+        for (let i = 0; i < NUM_STARS; i++) {
+            stars.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                radius: Math.random() * 1.8 + 0.5,
+                twinkleSpeed: 0.02 + Math.random() * 0.03,
+                phase: Math.random() * Math.PI * 2
+            });
+        }
+    }
+    initStars();
+
+    function drawStars(time) {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        for (const star of stars) {
+            const brightness = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.phase));
+            ctx.globalAlpha = brightness;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.radius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+        requestAnimationFrame(drawStars);
+    }
+    requestAnimationFrame(drawStars);
+})();
+</script>
+""", height=0)
+
+# ====== UI STYLING (light blue background + starfield) ======
 st.markdown("""
     <style>
+    /* Main background – light blue */
     .stApp [data-testid="stAppViewContainer"] {
-        background: linear-gradient(145deg, #E3F2FD 0%, #FFCDD2 100%);
+        background-color: #D6EAF8; /* light blue */
         color: #1e2a3a;
     }
+    /* Sidebar – slightly transparent */
     [data-testid="stSidebar"] {
-        background: rgba(255,255,255,0.75);
+        background: rgba(255,255,255,0.85);
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
+    /* All other existing styles remain unchanged */
     .haiti-symbol {
         font-size: 4rem;
         text-align: center;
@@ -1146,9 +1200,10 @@ st.markdown("""
     .home-title {
         text-align: center;
         padding: 1.5rem;
-        background: linear-gradient(135deg, #BBDEFB, #FFCDD2);
+        background: rgba(255,255,255,0.6);
         border-radius: 20px;
         margin-bottom: 1.5rem;
+        backdrop-filter: blur(4px);
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     }
     .home-title h1 {
