@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.46 (Added NATCASH as second payment option)
+# Version: 77.8.47 (Updated NATCASH label, live uses same Jitsi config as video call)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -225,7 +225,7 @@ LANG = {
         "live_chat_gifts": "Live Chat & Gifts",
         "send_gift": "🎁 Send a Gift",
         "add_moncash": "Add your MonCash phone number in your profile to send gifts.",
-        "add_natcash": "Add your NATCASH phone number to receive payments.",
+        "add_natcash": "Add your NATCASH phone number to receive gifts.",
         "total_gifts": "Total Gifts Received",
         "gifts_sent_to": "Gifts will be sent to your MonCash",
         "gifts_sent_to_natcash": "NATCASH",
@@ -295,7 +295,7 @@ LANG = {
         "bio": "Bio",
         "location": "Location",
         "moncash_phone": "MonCash Phone Number (for receiving gifts)",
-        "natcash_phone": "NATCASH Phone Number (for receiving payments)",
+        "natcash_phone": "NATCASH Phone Number (for receiving gifts)",
         "posts_count": "Posts",
         "connections": "Connections",
         "verified": "Verified",
@@ -376,7 +376,7 @@ LANG = {
         "live_chat_gifts": "Chat en direct et cadeaux",
         "send_gift": "🎁 Envoyer un cadeau",
         "add_moncash": "Ajoutez votre numéro MonCash dans votre profil pour envoyer des cadeaux.",
-        "add_natcash": "Ajoutez votre numéro NATCASH pour recevoir des paiements.",
+        "add_natcash": "Ajoutez votre numéro NATCASH pour recevoir des cadeaux.",
         "total_gifts": "Total des cadeaux reçus",
         "gifts_sent_to": "Les cadeaux seront envoyés à votre MonCash",
         "gifts_sent_to_natcash": "NATCASH",
@@ -446,7 +446,7 @@ LANG = {
         "bio": "Bio",
         "location": "Localisation",
         "moncash_phone": "Numéro MonCash (pour recevoir des cadeaux)",
-        "natcash_phone": "Numéro NATCASH (pour recevoir des paiements)",
+        "natcash_phone": "Numéro NATCASH (pour recevoir des cadeaux)",
         "posts_count": "Publications",
         "connections": "Connexions",
         "verified": "Vérifié",
@@ -527,7 +527,7 @@ LANG = {
         "live_chat_gifts": "Chat en vivo y regalos",
         "send_gift": "🎁 Enviar un regalo",
         "add_moncash": "Agrega tu número de MonCash en tu perfil para enviar regalos.",
-        "add_natcash": "Agrega tu número de NATCASH para recibir pagos.",
+        "add_natcash": "Agrega tu número de NATCASH para recibir regalos.",
         "total_gifts": "Total de regalos recibidos",
         "gifts_sent_to": "Los regalos se enviarán a tu MonCash",
         "gifts_sent_to_natcash": "NATCASH",
@@ -597,7 +597,7 @@ LANG = {
         "bio": "Biografía",
         "location": "Localización",
         "moncash_phone": "Número MonCash (para recibir regalos)",
-        "natcash_phone": "Número NATCASH (para recibir pagos)",
+        "natcash_phone": "Número NATCASH (para recibir regalos)",
         "posts_count": "Publicaciones",
         "connections": "Conexiones",
         "verified": "Verificado",
@@ -678,7 +678,7 @@ LANG = {
         "live_chat_gifts": "Chat dirèk ak kado",
         "send_gift": "🎁 Voye yon kado",
         "add_moncash": "Ajoute nimewo MonCash ou nan pwofil ou pou voye kado.",
-        "add_natcash": "Ajoute nimewo NATCASH ou pou resevwa peman.",
+        "add_natcash": "Ajoute nimewo NATCASH ou pou resevwa kado.",
         "total_gifts": "Total kado resevwa",
         "gifts_sent_to": "Kado yo pral voye nan MonCash ou",
         "gifts_sent_to_natcash": "NATCASH",
@@ -748,7 +748,7 @@ LANG = {
         "bio": "Biwo",
         "location": "Kote",
         "moncash_phone": "Nimewo MonCash (pou resevwa kado)",
-        "natcash_phone": "Nimewo NATCASH (pou resevwa peman)",
+        "natcash_phone": "Nimewo NATCASH (pou resevwa kado)",
         "posts_count": "Pòs",
         "connections": "Koneksyon",
         "verified": "Verifye",
@@ -3603,7 +3603,7 @@ def render_live_page(session_id):
             else:
                 st.info("The streamer has not provided a video URL yet.")
         else:
-            # In-app live: use Jitsi
+            # In-app live: use Jitsi – same config as video call
             can_view = is_broadcaster
             if not can_view and st.session_state.user:
                 part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
@@ -3615,6 +3615,7 @@ def render_live_page(session_id):
                 container_id = f"jitsi-live-{session_id}"
 
                 domain = JITSI_DOMAIN
+                # Same configuration as video call – no demo limitations
                 config_overwrite = {
                     "startWithAudioMuted": False,
                     "startWithVideoMuted": False,
@@ -3814,7 +3815,6 @@ def render_live_page(session_id):
 
         if is_broadcaster:
             st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
-            # Show MonCash if present
             moncash = session["profiles"].get("moncash_phone")
             natcash = session["profiles"].get("natcash_phone")
             if moncash:
@@ -3824,7 +3824,6 @@ def render_live_page(session_id):
             if not moncash and not natcash:
                 st.warning(t("add_moncash") + " / " + t("add_natcash"))
         else:
-            # Viewers can see the broadcaster's payment info if they want to donate
             moncash = session["profiles"].get("moncash_phone")
             natcash = session["profiles"].get("natcash_phone")
             if moncash or natcash:
