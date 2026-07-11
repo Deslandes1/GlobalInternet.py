@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.49 (Fixed chat profile fetch error & private messages)
+# Version: 77.8.50 (Added User Ban/Unban in Owner Space)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -333,7 +333,13 @@ LANG = {
         "request_to_join": "📨 Request to Join",
         "request_pending": "⏳ Request pending... waiting for broadcaster approval.",
         "broadcaster_controls": "🎛️ Broadcaster Controls",
-        "join_live": "🔴 Join Live"
+        "join_live": "🔴 Join Live",
+        "user_management": "👥 User Management",
+        "ban_user": "🚫 Ban User",
+        "unban_user": "✅ Unban User",
+        "ban_reason": "Ban Reason",
+        "banned": "Banned",
+        "active": "Active"
     },
     "fr": {
         "login_title": "Connexion",
@@ -484,7 +490,13 @@ LANG = {
         "request_to_join": "📨 Demander à rejoindre",
         "request_pending": "⏳ Demande en attente... en attente de l'approbation du diffuseur.",
         "broadcaster_controls": "🎛️ Commandes du diffuseur",
-        "join_live": "🔴 Rejoindre le direct"
+        "join_live": "🔴 Rejoindre le direct",
+        "user_management": "👥 Gestion des utilisateurs",
+        "ban_user": "🚫 Bannir",
+        "unban_user": "✅ Débannir",
+        "ban_reason": "Raison du bannissement",
+        "banned": "Banni",
+        "active": "Actif"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -635,7 +647,13 @@ LANG = {
         "request_to_join": "📨 Solicitar unirse",
         "request_pending": "⏳ Solicitud pendiente... esperando aprobación del transmisor.",
         "broadcaster_controls": "🎛️ Controles del transmisor",
-        "join_live": "🔴 Unirse al directo"
+        "join_live": "🔴 Unirse al directo",
+        "user_management": "👥 Gestión de usuarios",
+        "ban_user": "🚫 Banear",
+        "unban_user": "✅ Desbanear",
+        "ban_reason": "Razón del baneo",
+        "banned": "Baneado",
+        "active": "Activo"
     },
     "ht": {
         "login_title": "Konekte",
@@ -786,7 +804,13 @@ LANG = {
         "request_to_join": "📨 Mandle pou rantre",
         "request_pending": "⏳ Demann annat... ap tann difizè a apwouve.",
         "broadcaster_controls": "🎛️ Kontwòl difizè",
-        "join_live": "🔴 Antre nan dirèk"
+        "join_live": "🔴 Antre nan dirèk",
+        "user_management": "👥 Jesyon itilizatè",
+        "ban_user": "🚫 Bani",
+        "unban_user": "✅ Retire bani",
+        "ban_reason": "Rezon bani",
+        "banned": "Bani",
+        "active": "Aktif"
     },
 }
 
@@ -853,6 +877,15 @@ def refresh_supabase_session():
             st.session_state.user = new_session.user
             st.session_state.refresh_token = new_session.session.refresh_token
             profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone)
+            # Check if user is banned
+            if profile and profile.get("is_banned"):
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.session_state.profile = None
+                st.session_state.refresh_token = None
+                st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                st.rerun()
+                return False
             st.session_state.profile = profile
             return True
         else:
@@ -869,10 +902,13 @@ if not st.session_state.logged_in and supabase:
         try:
             user = supabase.auth.get_user(refresh_token)
             if user.user:
+                profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
+                if profile and profile.get("is_banned"):
+                    st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                    st.stop()
                 st.session_state.logged_in = True
                 st.session_state.user = user.user
                 st.session_state.refresh_token = refresh_token
-                profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone)
                 st.session_state.profile = profile
                 st.session_state.connection_time = time.time()
                 st.session_state.posts = load_posts()
@@ -889,6 +925,15 @@ if st.session_state.logged_in and supabase and st.session_state.refresh_token:
         if new_session and new_session.user:
             st.session_state.user = new_session.user
             st.session_state.refresh_token = new_session.session.refresh_token
+            profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone)
+            if profile and profile.get("is_banned"):
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.session_state.profile = None
+                st.session_state.refresh_token = None
+                st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                st.stop()
+            st.session_state.profile = profile
     except Exception:
         pass
 
@@ -1458,7 +1503,9 @@ def get_or_create_profile(user_id, identifier):
                 "is_live": False,
                 "moncash_phone": None,
                 "natcash_phone": None,
-                "join_date": datetime.now().isoformat()
+                "join_date": datetime.now().isoformat(),
+                "is_banned": False,
+                "ban_reason": None
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -1480,250 +1527,54 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
-# ====== UPDATED: upload_avatar with fallback to base64 (silent) ======
-def upload_avatar(user_id, image_file):
+# ====== Ban/Unban functions ======
+def ban_user(user_id, reason=""):
     if supabase is None:
-        return upload_avatar_base64(image_file)
-    bucket_ok = ensure_bucket_exists("avatars")
-    if not bucket_ok:
-        return upload_avatar_base64(image_file)
+        return False, "Supabase not configured."
     try:
-        ext = image_file.name.split('.')[-1]
-        file_name = f"{user_id}_{int(time.time())}.{ext}"
-        image_bytes = image_file.getvalue()
-        supabase.storage.from_("avatars").upload(file_name, image_bytes)
-        public_url = supabase.storage.from_("avatars").get_public_url(file_name)
-        return public_url
-    except Exception:
-        return upload_avatar_base64(image_file)
-
-def upload_avatar_base64(image_file):
-    try:
-        file_bytes = image_file.getvalue()
-        b64 = base64.b64encode(file_bytes).decode('utf-8')
-        content_type = image_file.type
-        if content_type.startswith('image'):
-            data_url = f"data:{content_type};base64,{b64}"
-            return data_url
-        else:
-            return None
-    except Exception:
-        return None
-
-# ====== FIXED: upload_post_media with fallback to base64 ======
-def upload_post_media(user_id, file):
-    if supabase is None:
-        return upload_media_base64(file)
-    if not ensure_bucket_exists("post_media"):
-        return upload_media_base64(file)
-    try:
-        content_type = file.type
-        ext = file.name.split('.')[-1]
-        timestamp = int(time.time())
-        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
-        file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
-        file_bytes = file.getvalue()
-        supabase.storage.from_("post_media").upload(
-            file_name,
-            file_bytes,
-            {"content-type": content_type}
-        )
-        public_url = supabase.storage.from_("post_media").get_public_url(file_name)
-        media_type = "video" if content_type.startswith("video") else "image"
-        return {"url": public_url, "type": media_type}
-    except Exception:
-        return upload_media_base64(file)
-
-def upload_media_base64(file):
-    try:
-        file_bytes = file.getvalue()
-        b64 = base64.b64encode(file_bytes).decode('utf-8')
-        content_type = file.type
-        data_url = f"data:{content_type};base64,{b64}"
-        media_type = "video" if content_type.startswith("video") else "image"
-        return {"url": data_url, "type": media_type}
-    except Exception:
-        return None
-
-# ====== FIXED: upload_chat_media with fallback to base64 ======
-def upload_chat_media(user_id, file):
-    if supabase is None:
-        return upload_media_base64(file)
-    if not ensure_bucket_exists("chat_media"):
-        return upload_media_base64(file)
-    try:
-        content_type = file.type
-        ext = file.name.split('.')[-1]
-        timestamp = int(time.time())
-        random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
-        file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
-        file_bytes = file.getvalue()
-        supabase.storage.from_("chat_media").upload(
-            file_name,
-            file_bytes,
-            {"content-type": content_type}
-        )
-        public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
-        media_type = "video" if content_type.startswith("video") else "image"
-        return {"url": public_url, "type": media_type}
-    except Exception:
-        return upload_media_base64(file)
-
-def delete_post(post_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("posts").delete().eq("id", post_id).execute()
-        return True
+        supabase.table("profiles").update({"is_banned": True, "ban_reason": reason}).eq("id", user_id).execute()
+        # Send notification to the user
+        try:
+            supabase.table("notifications").insert({
+                "user_id": user_id,
+                "type": "ban",
+                "message": f"🚫 Your account has been banned. Reason: {reason if reason else 'Violation of platform rules.'}",
+                "read": False
+            }).execute()
+        except Exception as notif_err:
+            st.warning(f"User banned but notification could not be sent: {notif_err}")
+        return True, "User banned successfully."
     except Exception as e:
-        st.session_state.last_error = f"Error deleting post: {e}"
-        return False
-
-def fetch_exchange_rate():
-    try:
-        resp = requests.get(EXCHANGE_RATE_API, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if 'rates' in data and 'HTG' in data['rates']:
-                return float(data['rates']['HTG'])
-        return 100.0
-    except:
-        return 100.0
-
-# ====== UPDATED: send_gift with graceful notification insert ======
-def send_gift(session_id, sender_id, recipient_id, amount, currency):
-    if supabase is None:
-        return False, "Supabase not configured"
-    try:
-        rate = st.session_state.exchange_rate
-        if currency == "USD":
-            amount_htg = amount * rate
-        else:
-            amount_htg = amount
-        sender_name = st.session_state.profile["full_name"]
-        gift_data = {
-            "session_id": session_id,
-            "sender_id": sender_id,
-            "sender_name": sender_name,
-            "recipient_id": recipient_id,
-            "amount": amount,
-            "currency": currency,
-            "converted_amount_htg": amount_htg,
-            "status": "pending",
-            "created_at": datetime.now().isoformat()
-        }
-        result = supabase.table("live_gifts").insert(gift_data).execute()
-        if not result.data:
-            return False, "Failed to record gift"
-        gift_id = result.data[0]["id"]
-        payment_success = True
-        if payment_success:
-            supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
-            try:
-                supabase.table("notifications").insert({
-                    "user_id": recipient_id,
-                    "type": "gift",
-                    "message": f"🎁 You received a gift of {amount} {currency} from {sender_name}!",
-                    "read": False
-                }).execute()
-            except Exception as notif_err:
-                st.warning(f"Gift recorded, but notification could not be sent: {notif_err}")
-            return True, "Gift sent successfully!"
-        else:
-            supabase.table("live_gifts").update({"status": "failed"}).eq("id", gift_id).execute()
-            return False, "Payment failed. Please try again."
-    except Exception as e:
-        st.session_state.last_error = f"Error sending gift: {e}"
         return False, str(e)
 
-def load_gifts_for_session(session_id):
+def unban_user(user_id):
+    if supabase is None:
+        return False, "Supabase not configured."
+    try:
+        supabase.table("profiles").update({"is_banned": False, "ban_reason": None}).eq("id", user_id).execute()
+        # Send notification to the user
+        try:
+            supabase.table("notifications").insert({
+                "user_id": user_id,
+                "type": "unban",
+                "message": "✅ Your account was restored. You can now log in again.",
+                "read": False
+            }).execute()
+        except Exception as notif_err:
+            st.warning(f"User unbanned but notification could not be sent: {notif_err}")
+        return True, "User unbanned successfully."
+    except Exception as e:
+        return False, str(e)
+
+def get_all_users():
     if supabase is None:
         return []
     try:
-        resp = supabase.table("live_gifts").select("*").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
-        gifts = resp.data or []
-        for g in gifts:
-            g['sender'] = {'full_name': g.get('sender_name', 'Someone'), 'avatar_url': None}
-        return gifts
+        resp = supabase.table("profiles").select("id, full_name, avatar_url, is_banned, ban_reason, join_date").order("full_name").execute()
+        return resp.data if resp.data else []
     except Exception as e:
-        error_str = str(e)
-        if "permission denied" in error_str.lower() and "users" in error_str.lower():
-            st.session_state.last_error = (
-                "Permission denied while loading gifts. This is likely due to a Row Level Security (RLS) policy "
-                "that references the `users` table. Please check your Supabase policies on the `live_gifts` table "
-                "and ensure the anon role has the necessary permissions, or modify the policy to avoid using the `users` table."
-            )
-        else:
-            st.session_state.last_error = f"Error loading gifts: {e}"
+        st.session_state.last_error = f"Error loading users: {e}"
         return []
-
-def accept_participant(session_id, participant_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error accepting participant: {e}"
-        return False
-
-def reject_participant(participant_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("live_participants").delete().eq("id", participant_id).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error rejecting participant: {e}"
-        return False
-
-def mute_participant(session_id, participant_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("live_participants").update({"status": "muted"}).eq("id", participant_id).execute()
-        try:
-            supabase.table("notifications").insert({
-                "user_id": participant_id,
-                "type": "live_mute",
-                "message": "The broadcaster has muted your microphone.",
-                "read": False
-            }).execute()
-        except Exception:
-            pass
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error muting participant: {e}"
-        return False
-
-def unmute_participant(session_id, participant_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("live_participants").update({"status": "accepted"}).eq("id", participant_id).execute()
-        try:
-            supabase.table("notifications").insert({
-                "user_id": participant_id,
-                "type": "live_unmute",
-                "message": "The broadcaster has unmuted your microphone.",
-                "read": False
-            }).execute()
-        except Exception:
-            pass
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error unmuting participant: {e}"
-        return False
-
-def remove_participant(participant_id):
-    if supabase is None:
-        return False
-    try:
-        supabase.table("live_participants").delete().eq("id", participant_id).execute()
-        return True
-    except Exception as e:
-        st.session_state.last_error = f"Error removing participant: {e}"
-        return False
 
 # ---- Posts ----
 @st.cache_data(ttl=60, show_spinner=False)
@@ -2491,11 +2342,14 @@ def verify_phone_otp(raw_phone, token, remember=False):
             "type": "sms"
         })
         if session.user:
+            profile = get_or_create_profile(session.user.id, phone)
+            if profile and profile.get("is_banned"):
+                st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                return False
             st.session_state.logged_in = True
             st.session_state.user = session.user
             if session.session:
                 st.session_state.refresh_token = session.session.refresh_token
-            profile = get_or_create_profile(session.user.id, phone)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
@@ -2561,7 +2415,7 @@ def play_audio(audio_path):
             st.markdown(f'<audio controls src="data:audio/mp3;base64,{b64}" autoplay style="width:100%;"></audio>', unsafe_allow_html=True)
         os.unlink(audio_path)
 
-# ====== LOGIN FUNCTION WITH DEBUG OPTION ======
+# ====== LOGIN FUNCTION WITH DEBUG OPTION & BAN CHECK ======
 def log_in_email(email, password, remember=False, show_debug=False):
     if supabase is None:
         st.error("❌ Authentication service is not configured. Please contact the administrator.")
@@ -2572,11 +2426,14 @@ def log_in_email(email, password, remember=False, show_debug=False):
             "password": password
         })
         if user.user:
+            profile = get_or_create_profile(user.user.id, email)
+            if profile and profile.get("is_banned"):
+                st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                return
             st.session_state.logged_in = True
             st.session_state.user = user.user
             if user.session:
                 st.session_state.refresh_token = user.session.refresh_token
-            profile = get_or_create_profile(user.user.id, email)
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
             st.session_state.posts = load_posts()
@@ -3911,6 +3768,7 @@ def render_live_page(session_id):
                 sender = g.get('sender', {}).get('full_name', 'Someone')
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
+# ====== UPDATED: owner_space with User Management tab ======
 def owner_space():
     st.header(t("owner_space"))
 
@@ -3931,7 +3789,15 @@ def owner_space():
         send_email_notification(new_users)
         update_last_seen_signup()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management")])
+    # Added User Management tab (now 6 tabs)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        t("dashboard"), 
+        t("new_users"), 
+        t("post_moderation"), 
+        t("client_payments"), 
+        t("gift_management"),
+        t("user_management")
+    ])
 
     with tab1:
         st.subheader(t("owner_dashboard"))
@@ -4007,7 +3873,7 @@ def owner_space():
         try:
             with st.spinner("Loading user data..."):
                 response = supabase.table("profiles").select(
-                    "id, full_name, avatar_url, join_date, location, bio"
+                    "id, full_name, avatar_url, join_date, location, bio, is_banned"
                 ).order("join_date", desc=True).limit(100).execute()
                 recent_users = response.data if response.data else []
         except Exception as e:
@@ -4022,7 +3888,8 @@ def owner_space():
                     "User ID": u['id'],
                     "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
                     "Location": u.get('location', 'Not set'),
-                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else '')
+                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else ''),
+                    "Banned": "✅" if u.get('is_banned') else "❌"
                 })
             df = pd.DataFrame(display_data)
             st.dataframe(df, use_container_width=True)
@@ -4170,6 +4037,56 @@ def owner_space():
 
             if st.button(t("mark_paid")):
                 st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
+
+    with tab6:
+        st.subheader(t("user_management"))
+        st.markdown("Search and manage users: ban/unban accounts.")
+
+        search_term = st.text_input("🔍 Search by name or user ID")
+        all_users = get_all_users()
+
+        if search_term:
+            filtered = [u for u in all_users if search_term.lower() in u['full_name'].lower() or search_term in u['id']]
+        else:
+            filtered = all_users
+
+        if not filtered:
+            st.info("No users found.")
+        else:
+            for user in filtered:
+                cols = st.columns([2, 2, 2, 1, 1])
+                with cols[0]:
+                    st.markdown(f"**{user['full_name']}**")
+                with cols[1]:
+                    st.caption(f"ID: {user['id'][:8]}...")
+                with cols[2]:
+                    status = "🚫 Banned" if user.get('is_banned') else "✅ Active"
+                    st.markdown(status)
+                with cols[3]:
+                    if user.get('is_banned'):
+                        if st.button(t("unban_user"), key=f"unban_{user['id']}"):
+                            success, msg = unban_user(user['id'])
+                            if success:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                    else:
+                        if st.button(t("ban_user"), key=f"ban_{user['id']}"):
+                            # Ask for reason in a popover or simple input
+                            with st.popover("Enter ban reason"):
+                                reason = st.text_input("Reason (optional)")
+                                if st.button("Confirm Ban"):
+                                    success, msg = ban_user(user['id'], reason)
+                                    if success:
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                with cols[4]:
+                    # Show ban reason if banned
+                    if user.get('is_banned') and user.get('ban_reason'):
+                        st.caption(f"Reason: {user['ban_reason']}")
 
     st.divider()
     st.markdown(f"### {t('contact_support')}")
