@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.42 (Light blue background with shining stars – sidebar fixed)
+# Version: 77.8.43 (Red & blue flag style for Lakay se Lakay)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -907,7 +907,7 @@ st.components.v1.html("""
     });
 
     const stars = [];
-    const NUM_STARS = 300; // a bit more stars
+    const NUM_STARS = 300;
 
     function initStars() {
         stars.length = 0;
@@ -925,7 +925,6 @@ st.components.v1.html("""
 
     function drawStars(time) {
         ctx.clearRect(0, 0, width, height);
-        // Use a soft white with slight variation
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         for (const star of stars) {
             const brightness = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.phase));
@@ -942,7 +941,7 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ====== UI STYLING (light blue background + sidebar also blue) ======
+# ====== UI STYLING (light blue background + sidebar) ======
 st.markdown("""
     <style>
     /* Main background – light blue */
@@ -950,16 +949,23 @@ st.markdown("""
         background-color: #D6EAF8;
     }
     .stApp [data-testid="stAppViewContainer"] {
-        background-color: transparent; /* let starfield show */
+        background-color: transparent;
         color: #1e2a3a;
     }
-    /* Sidebar – light blue background with some transparency */
+    /* Sidebar – light blue */
     [data-testid="stSidebar"] {
-        background: rgba(214, 234, 248, 0.9); /* light blue with slight opacity */
+        background: rgba(214, 234, 248, 0.9);
         backdrop-filter: blur(8px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
-    /* All other existing styles remain unchanged */
+    /* Haiti flag style text (blue/red) */
+    .lakay-flag-text {
+        background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        display: inline-block;
+    }
     .haiti-symbol {
         font-size: 4rem;
         text-align: center;
@@ -2569,13 +2575,13 @@ def display_avatar_and_followers(avatar_url, user_id, size=50):
     else:
         st.caption("1kFollowers")
 
-# ====== LOGIN INTERFACE ======
+# ====== LOGIN INTERFACE (with flag-text class) ======
 def login_interface():
     st.markdown(
         """
         <div style="text-align: center; padding: 20px 0;">
             <span class="dove-symbol">🕊️</span>
-            <h2 style="color: #0a2a44; margin-top: -5px;">Bienvenu sou Lakay se Lakay</h2>
+            <h2 style="color: #0a2a44; margin-top: -5px;">Bienvenu sou <span class="lakay-flag-text">Lakay se Lakay</span></h2>
             <p style="color: #1e2a3a; opacity: 0.8;">Nou kontan wè w isit la. Se yon platfòm sosyal ki fèt pou tout Ayisyen yo – kote ou ka pataje lide ou, foto ou, videyo ou, e konekte ak zanmi ou yo nan yon espas ki sekirize e ki amizan. N ap viv ansanm, n ap grandi ansanm. Pataje kè ou, pataje lavi ou!</p>
         </div>
         """,
@@ -4187,9 +4193,10 @@ def main_app():
 # ========== ENTRY ==========
 if __name__ == "__main__":
     if st.session_state.logged_in:
+        # Home title with flag-style text for "Lakay se Lakay"
         st.markdown(f"""
         <div class="home-title">
-            <h1>{t('home_title')}</h1>
+            <h1>🏠 <span class="lakay-flag-text">Lakay se Lakay</span></h1>
             <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
                  background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); 
                  -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
