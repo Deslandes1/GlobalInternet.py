@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.48 (Fixed video autoplay: videos no longer play automatically on feed)
+# Version: 77.8.49 (Fixed chat profile fetch error & private messages)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1342,7 +1342,6 @@ def is_direct_video_url(url):
 def embed_video_from_url(url):
     youtube_id = get_youtube_id(url)
     if youtube_id:
-        # Removed autoplay=1
         embed_html = f"""
         <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
                 frameborder="0" allow="encrypted-media" allowfullscreen></iframe>
@@ -1352,7 +1351,6 @@ def embed_video_from_url(url):
         return True
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
-        # Removed autoplay=1
         embed_html = f"""
         <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
                 frameborder="0" allow="fullscreen" allowfullscreen></iframe>
@@ -1362,7 +1360,6 @@ def embed_video_from_url(url):
         return True
     dailymotion_id = get_dailymotion_id(url)
     if dailymotion_id:
-        # Removed autoplay=1
         embed_html = f"""
         <iframe frameborder="0" width="100%" height="400" 
                 src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
@@ -1373,7 +1370,6 @@ def embed_video_from_url(url):
         return True
     fb_url = get_facebook_video_url(url)
     if fb_url:
-        # Removed data-autoplay="true"
         embed_html = f"""
         <div id="fb-root"></div>
         <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
@@ -1406,11 +1402,9 @@ def embed_video_from_url(url):
             parent = 'localhost'
         if '/videos/' in twitch_url or '/clip/' in twitch_url:
             video_id = twitch_url.split('/')[-1].split('?')[0]
-            # Removed &autoplay=true
             embed_url = f"https://player.twitch.tv/?video={video_id}&parent={parent}"
         else:
             channel = twitch_url.split('/')[-1].split('?')[0]
-            # Removed &autoplay=true
             embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}"
         embed_html = f"""
         <iframe src="{embed_url}" 
@@ -1437,7 +1431,6 @@ def embed_video_from_url(url):
         st.components.v1.html(embed_html, height=430)
         return True
     if is_direct_video_url(url):
-        # Explicitly disable autoplay
         st.video(url, autoplay=False)
         st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Click play to watch</p>", unsafe_allow_html=True)
         return True
@@ -2726,7 +2719,7 @@ def display_media_item(media):
         if media["type"] == "image":
             st.image(url, use_column_width=True)
         elif media["type"] == "video":
-            st.video(url, autoplay=False)  # no autoplay
+            st.video(url, autoplay=False)
         else:
             st.markdown(f"[Media file]({url})")
     except Exception as e:
@@ -3017,7 +3010,7 @@ def render_user_profile(user_id, show_back_button=True):
             st.rerun()
         return
 
-    render_top_icons()   # <-- new line
+    render_top_icons()
 
     try:
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
@@ -3100,10 +3093,10 @@ def render_user_profile(user_id, show_back_button=True):
     with cola:
         st.metric("Posts", len(posts))
     with colb:
-        st.metric("Followers", "1KFollowers")   # <-- new
+        st.metric("Followers", "1KFollowers")
     st.divider()
 
-# ====== UPDATED: render_friends_page with Jitsi External API ======
+# ====== UPDATED: render_friends_page with Jitsi External API & fixed chat profile fetch ======
 def render_friends_page():
     # If we are viewing someone's profile, show it here with a custom back button
     if st.session_state.viewing_profile:
@@ -3250,11 +3243,17 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
 
-        # Fetch other user's profile
-        other = supabase.table("profiles").select("full_name, avatar_url, moncash_phone, natcash_phone").eq("id", other_id).single().execute()
-        if other.data:
-            other_name = other.data["full_name"]
-            other_avatar = other.data.get("avatar_url")
+        # Fetch other user's profile safely
+        try:
+            other_result = supabase.table("profiles").select("full_name, avatar_url, moncash_phone, natcash_phone").eq("id", other_id).maybe_single().execute()
+            other_data = other_result.data if other_result.data else None
+        except Exception as e:
+            st.warning(f"Could not load other user's profile: {e}")
+            other_data = None
+
+        if other_data:
+            other_name = other_data.get("full_name", "User")
+            other_avatar = other_data.get("avatar_url")
         else:
             other_name = "User"
             other_avatar = None
@@ -3510,7 +3509,7 @@ def render_worldcup():
 
 def render_profile():
     st.header(t("profile"))
-    render_top_icons()   # <-- new line
+    render_top_icons()
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
@@ -3553,7 +3552,7 @@ def render_profile():
     with cola:
         st.metric(t("posts_count"), len(st.session_state.posts))
     with colb:
-        st.metric("Followers", "1MFollowers")   # <-- changed from "Connections"
+        st.metric("Followers", "1MFollowers")
     with colc:
         st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
     with cold:
@@ -3628,7 +3627,6 @@ def render_live_page(session_id):
                                 st.warning("Please enter a URL")
             if stream_url:
                 if "facebook.com" in stream_url:
-                    # no autoplay
                     embed_code = f"""
                     <div id="fb-root"></div>
                     <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
@@ -3644,14 +3642,12 @@ def render_live_page(session_id):
                     else:
                         video_id = None
                     if video_id:
-                        # no autoplay
                         embed_url = f"https://www.youtube.com/embed/{video_id}"
                         st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="encrypted-media" allowfullscreen></iframe>', height=410)
                     else:
                         st.video(stream_url, autoplay=False)
                 elif "twitch.tv" in stream_url:
                     channel = stream_url.split("/")[-1].split("?")[0]
-                    # no autoplay
                     embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
                     st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
                 else:
@@ -3671,7 +3667,6 @@ def render_live_page(session_id):
                 container_id = f"jitsi-live-{session_id}"
 
                 domain = JITSI_DOMAIN
-                # Same configuration as video call – no demo limitations
                 config_overwrite = {
                     "startWithAudioMuted": False,
                     "startWithVideoMuted": False,
