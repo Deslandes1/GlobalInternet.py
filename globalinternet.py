@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.51 (Fixed NameError in delete_post)
+# Version: 77.8.52 (Added Wall to own profile)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -339,7 +339,8 @@ LANG = {
         "unban_user": "✅ Unban User",
         "ban_reason": "Ban Reason",
         "banned": "Banned",
-        "active": "Active"
+        "active": "Active",
+        "my_wall": "📝 My Wall"
     },
     "fr": {
         "login_title": "Connexion",
@@ -496,7 +497,8 @@ LANG = {
         "unban_user": "✅ Débannir",
         "ban_reason": "Raison du bannissement",
         "banned": "Banni",
-        "active": "Actif"
+        "active": "Actif",
+        "my_wall": "📝 Mon Mur"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -653,7 +655,8 @@ LANG = {
         "unban_user": "✅ Desbanear",
         "ban_reason": "Razón del baneo",
         "banned": "Baneado",
-        "active": "Activo"
+        "active": "Activo",
+        "my_wall": "📝 Mi Muro"
     },
     "ht": {
         "login_title": "Konekte",
@@ -810,7 +813,8 @@ LANG = {
         "unban_user": "✅ Retire bani",
         "ban_reason": "Rezon bani",
         "banned": "Bani",
-        "active": "Aktif"
+        "active": "Aktif",
+        "my_wall": "📝 Mi Miray"
     },
 }
 
@@ -2697,13 +2701,8 @@ def log_in_email(email, password, remember=False, show_debug=False):
         else:
             st.error(f"❌ Login failed: {error_str}")
 
-# ====== NEW: Helper to display avatar with follower count ======
+# ====== Helper to display avatar with follower count ======
 def display_avatar_and_followers(avatar_url, user_id, size=50):
-    """
-    Display an avatar image (or a placeholder) with a caption showing follower count.
-    For the current logged-in user: "1miFollowers"
-    For any other user: "1kFollowers"
-    """
     if avatar_url:
         st.image(avatar_url, width=size)
     else:
@@ -2713,9 +2712,8 @@ def display_avatar_and_followers(avatar_url, user_id, size=50):
     else:
         st.caption("1kFollowers")
 
-# ====== NEW: Get unread messages count ======
+# ====== Get unread messages count ======
 def get_unread_messages_count(user_id):
-    """Return the number of unread messages for a given user."""
     if supabase is None:
         return 0
     try:
@@ -2725,9 +2723,8 @@ def get_unread_messages_count(user_id):
         st.session_state.last_error = f"Error fetching unread messages: {e}"
         return 0
 
-# ====== NEW: Render top icons (message & bell) ======
+# ====== Render top icons (message & bell) ======
 def render_top_icons():
-    """Display message and notification icons with red badges at the top of profile pages."""
     if not st.session_state.logged_in:
         return
     user_id = st.session_state.user.id
@@ -2749,7 +2746,6 @@ def render_top_icons():
 
 # ====== LOGIN INTERFACE (only email, no phone) ======
 def login_interface():
-    # Animated "Lakay se Lakay" with golden stars
     st.markdown(
         f"""
         <div style="text-align: center; padding: 20px 0;">
@@ -2773,7 +2769,6 @@ def login_interface():
 
     show_debug = st.checkbox(t("show_debug"), value=False)
 
-    # Only email login – no phone option
     tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
     with tab1:
         with st.form("login_email"):
@@ -3096,7 +3091,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== UPDATED: render_user_profile with show_back_button parameter ======
+# ====== render_user_profile (already shows public wall) ======
 def render_user_profile(user_id, show_back_button=True):
     if supabase is None:
         st.error("Database not connected.")
@@ -3182,7 +3177,6 @@ def render_user_profile(user_id, show_back_button=True):
                         display_media_item(media)
                     st.divider()
 
-    # Add metrics row for followers
     st.divider()
     cola, colb = st.columns(2)
     with cola:
@@ -3191,7 +3185,7 @@ def render_user_profile(user_id, show_back_button=True):
         st.metric("Followers", "1KFollowers")
     st.divider()
 
-# ====== UPDATED: render_friends_page with Jitsi External API & fixed chat profile fetch ======
+# ====== render_friends_page ======
 def render_friends_page():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile, show_back_button=False)
@@ -3588,6 +3582,7 @@ def render_worldcup():
     st.markdown("---")
     st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
 
+# ====== OWN PROFILE WITH WALL ======
 def render_profile():
     st.header(t("profile"))
     render_top_icons()
@@ -3639,6 +3634,176 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
+    # ---- NEW: My Wall ----
+    st.divider()
+    st.subheader(t("my_wall"))
+    user_posts = [p for p in st.session_state.posts if p['user_id'] == st.session_state.user.id]
+    if not user_posts:
+        st.info("You haven't posted anything yet.")
+    else:
+        for post in user_posts:
+            with st.container():
+                # Reuse similar layout as in feed (without the avatar column since it's your own)
+                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
+                with col_a:
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40)
+                with col_b:
+                    st.markdown(f"**{post['profiles']['full_name']}**")
+                    if post.get("profiles", {}).get("is_live"):
+                        st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
+                    if not post.get("is_public", True):
+                        st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
+                with col_c:
+                    st.caption(post['created_at'][:16])
+                with col_d:
+                    if st.button("✏️", key=f"edit_{post['id']}"):
+                        st.session_state.editing_post = post['id']
+                        st.rerun()
+                with col_e:
+                    if st.button("🗑️", key=f"del_{post['id']}"):
+                        st.session_state.delete_confirm = (post['id'], post['content'][:30])
+                        st.rerun()
+
+                if st.session_state.editing_post == post['id']:
+                    with st.form(key=f"edit_form_{post['id']}"):
+                        new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Save"):
+                                existing = post.get('media_urls', [])
+                                if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
+                                    st.session_state.editing_post = None
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("Cancel"):
+                                st.session_state.editing_post = None
+                                st.rerun()
+                    st.divider()
+
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        display_media_item(media)
+
+                if post['content']:
+                    clickable_content = make_clickable(post['content'])
+                    st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    urls = re.findall(r'(https?://[^\s]+)', post['content'])
+                    for url in urls:
+                        embed_video_from_url(url)
+
+                # Reactions and comments – similar to feed but simplified or you can keep full
+                # We'll keep the same as feed for consistency
+                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                reaction_counts = post.get("reactions", {})
+                summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
+                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                with col_react:
+                    if st.button("👍 React", key=f"react_btn_{post['id']}"):
+                        st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
+                        st.rerun()
+                    if st.session_state.get(f"show_reactions_{post['id']}", False):
+                        st.markdown("**Choose reaction**")
+                        for i in range(0, len(emojis), 3):
+                            cols = st.columns(3)
+                            for j, emoji in enumerate(emojis[i:i+3]):
+                                with cols[j]:
+                                    if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
+                                        toggle_reaction(post['id'], st.session_state.user.id, emoji)
+                                        st.session_state[f"show_reactions_{post['id']}"] = False
+                                        st.rerun()
+                    if summary:
+                        st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
+                with col_comments:
+                    st.markdown(f"💬 {post.get('comment_count',0)}")
+                with col_shares:
+                    if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
+                        share_post(post['id'], st.session_state.user.id, is_public=True)
+                        st.rerun()
+
+                st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
+                st.markdown(f"#### {t('comments')}")
+
+                with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
+                    msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
+                    if st.form_submit_button(t("post")):
+                        if msg:
+                            add_comment(post['id'], st.session_state.user.id, msg)
+                            st.rerun()
+
+                comments = load_comments(post['id'])
+                top_level = [c for c in comments if not c.get('parent_id')]
+                replies = {}
+                for c in comments:
+                    if c.get('parent_id'):
+                        replies.setdefault(c['parent_id'], []).append(c)
+
+                for c in top_level:
+                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1, 4, 1, 1, 1])
+                    with col_avatar_comment:
+                        display_avatar_and_followers(
+                            c['profiles'].get('avatar_url'),
+                            c['user_id'],
+                            size=30
+                        )
+                    with col1:
+                        clickable_comment = make_clickable(c['content'])
+                        st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
+                        st.markdown(f"<span class='comment-meta'>{c['created_at'][:16]}</span>", unsafe_allow_html=True)
+                    with col2:
+                        if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
+                            like_comment(c['id'], increment=True)
+                            st.rerun()
+                    with col3:
+                        if st.button(t("reply"), key=f"reply_{c['id']}"):
+                            st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
+                            st.rerun()
+                    with col4:
+                        if st.session_state.user and c['user_id'] == st.session_state.user.id:
+                            if st.button("🗑️", key=f"del_comment_{c['id']}"):
+                                delete_comment(c['id'])
+                                st.rerun()
+
+                    if st.session_state.replying_to.get(c['id'], False):
+                        with st.form(key=f"reply_form_{c['id']}"):
+                            reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
+                            if st.form_submit_button(t("post_reply")):
+                                if reply:
+                                    add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
+                                    st.session_state.replying_to[c['id']] = False
+                                    st.rerun()
+
+                    for r in replies.get(c['id'], []):
+                        st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
+                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1, 4, 1, 1, 1])
+                        with colr_avatar:
+                            display_avatar_and_followers(
+                                r['profiles'].get('avatar_url'),
+                                r['user_id'],
+                                size=30
+                            )
+                        with colr1:
+                            clickable_reply = make_clickable(r['content'])
+                            st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
+                            st.markdown(f"<span class='comment-meta'>{r['created_at'][:16]}</span>", unsafe_allow_html=True)
+                        with colr2:
+                            if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
+                                like_comment(r['id'], increment=True)
+                                st.rerun()
+                        with colr3:
+                            pass
+                        with colr4:
+                            if st.session_state.user and r['user_id'] == st.session_state.user.id:
+                                if st.button("🗑️", key=f"del_comment_{r['id']}"):
+                                    delete_comment(r['id'])
+                                    st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.divider()
+
+# ====== render_live_page ======
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -3989,6 +4154,7 @@ def render_live_page(session_id):
                 sender = g.get('sender', {}).get('full_name', 'Someone')
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
+# ====== owner_space (with User Management) ======
 def owner_space():
     st.header(t("owner_space"))
 
