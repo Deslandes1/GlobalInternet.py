@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.41 (Light blue background with shining stars)
+# Version: 77.8.42 (Light blue background with shining stars – sidebar fixed)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -892,7 +892,7 @@ if st.session_state.logged_in and supabase and st.session_state.refresh_token:
 
 # ====== STARFIELD (shining stars behind everything) ======
 st.components.v1.html("""
-<canvas id="starfield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; pointer-events:none;"></canvas>
+<canvas id="starfield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-2; pointer-events:none;"></canvas>
 <script>
 (function() {
     const canvas = document.getElementById('starfield');
@@ -907,7 +907,7 @@ st.components.v1.html("""
     });
 
     const stars = [];
-    const NUM_STARS = 250;
+    const NUM_STARS = 300; // a bit more stars
 
     function initStars() {
         stars.length = 0;
@@ -915,8 +915,8 @@ st.components.v1.html("""
             stars.push({
                 x: Math.random() * width,
                 y: Math.random() * height,
-                radius: Math.random() * 1.8 + 0.5,
-                twinkleSpeed: 0.02 + Math.random() * 0.03,
+                radius: Math.random() * 2.0 + 0.5,
+                twinkleSpeed: 0.02 + Math.random() * 0.04,
                 phase: Math.random() * Math.PI * 2
             });
         }
@@ -925,9 +925,10 @@ st.components.v1.html("""
 
     function drawStars(time) {
         ctx.clearRect(0, 0, width, height);
+        // Use a soft white with slight variation
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         for (const star of stars) {
-            const brightness = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.phase));
+            const brightness = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.phase));
             ctx.globalAlpha = brightness;
             ctx.beginPath();
             ctx.arc(star.x, star.y, star.radius, 0, 2 * Math.PI);
@@ -941,18 +942,21 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ====== UI STYLING (light blue background + starfield) ======
+# ====== UI STYLING (light blue background + sidebar also blue) ======
 st.markdown("""
     <style>
     /* Main background – light blue */
+    .stApp {
+        background-color: #D6EAF8;
+    }
     .stApp [data-testid="stAppViewContainer"] {
-        background-color: #D6EAF8; /* light blue */
+        background-color: transparent; /* let starfield show */
         color: #1e2a3a;
     }
-    /* Sidebar – slightly transparent */
+    /* Sidebar – light blue background with some transparency */
     [data-testid="stSidebar"] {
-        background: rgba(255,255,255,0.85);
-        backdrop-filter: blur(10px);
+        background: rgba(214, 234, 248, 0.9); /* light blue with slight opacity */
+        backdrop-filter: blur(8px);
         border-right: 1px solid rgba(0,168,255,0.3);
     }
     /* All other existing styles remain unchanged */
