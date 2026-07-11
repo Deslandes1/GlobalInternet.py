@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.43 (Red & blue flag style for Lakay se Lakay)
+# Version: 77.8.44 (Animated Lakay se Lakay, removed phone login, sidebar updated)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -193,13 +193,6 @@ LANG = {
         "login_button": "🚀 Login",
         "signup_button": "📝 Sign Up",
         "send_reset_link": "Send Reset Link",
-        "phone_method": "Phone (OTP)",
-        "email_method": "Email",
-        "phone_number": "Phone number (digits only, e.g., 50947385663)",
-        "send_otp": "📲 Send OTP",
-        "enter_otp": "Enter 6-digit OTP code",
-        "verify_login": "✅ Verify & Login",
-        "back_resend": "← Back / Resend OTP",
         "feed": "📡 Feed",
         "friends_chat": "👥 Friends & Chat",
         "satellite_map": "🛰️ Satellite Map",
@@ -344,13 +337,6 @@ LANG = {
         "login_button": "🚀 Connexion",
         "signup_button": "📝 Inscription",
         "send_reset_link": "Envoyer le lien de réinitialisation",
-        "phone_method": "Téléphone (OTP)",
-        "email_method": "Email",
-        "phone_number": "Numéro de téléphone (chiffres uniquement, ex: 50947385663)",
-        "send_otp": "📲 Envoyer OTP",
-        "enter_otp": "Entrez le code OTP à 6 chiffres",
-        "verify_login": "✅ Vérifier et se connecter",
-        "back_resend": "← Retour / Renvoyer OTP",
         "feed": "📡 Fil d'actualité",
         "friends_chat": "👥 Amis et Chat",
         "satellite_map": "🛰️ Carte satellite",
@@ -495,13 +481,6 @@ LANG = {
         "login_button": "🚀 Iniciar sesión",
         "signup_button": "📝 Registrarse",
         "send_reset_link": "Enviar enlace de restablecimiento",
-        "phone_method": "Teléfono (OTP)",
-        "email_method": "Correo",
-        "phone_number": "Número de teléfono (solo dígitos, ej: 50947385663)",
-        "send_otp": "📲 Enviar OTP",
-        "enter_otp": "Ingrese el código OTP de 6 dígitos",
-        "verify_login": "✅ Verificar e iniciar sesión",
-        "back_resend": "← Atrás / Reenviar OTP",
         "feed": "📡 Feed",
         "friends_chat": "👥 Amigos y chat",
         "satellite_map": "🛰️ Mapa satelital",
@@ -646,13 +625,6 @@ LANG = {
         "login_button": "🚀 Konekte",
         "signup_button": "📝 Enskri",
         "send_reset_link": "Voye lyen reyinisyalizasyon",
-        "phone_method": "Telefòn (OTP)",
-        "email_method": "Imèl",
-        "phone_number": "Nimewo telefòn (chif sèlman, egzanp: 50947385663)",
-        "send_otp": "📲 Voye OTP",
-        "enter_otp": "Antre kòd OTP 6 chif",
-        "verify_login": "✅ Verifye epi konekte",
-        "back_resend": "← Retounen / Reseye OTP",
         "feed": "📡 Feed",
         "friends_chat": "👥 Zanmi ak chat",
         "satellite_map": "🛰️ Kat satelit",
@@ -941,7 +913,7 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ====== UI STYLING (light blue background + sidebar) ======
+# ====== UI STYLING (light blue background + sidebar + animated rope text) ======
 st.markdown("""
     <style>
     /* Main background – light blue */
@@ -965,6 +937,44 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         background-clip: text;
         display: inline-block;
+    }
+    /* Animated rope text with golden stars */
+    .rope-text {
+        display: inline-block;
+        animation: sway 3s ease-in-out infinite;
+        position: relative;
+    }
+    .rope-text .stars {
+        position: absolute;
+        top: -20px;
+        left: -20px;
+        right: -20px;
+        bottom: -20px;
+        pointer-events: none;
+        z-index: 1;
+    }
+    .rope-text .stars span {
+        position: absolute;
+        font-size: 1.2rem;
+        color: gold;
+        text-shadow: 0 0 10px #ffd700, 0 0 20px #ff8c00;
+        animation: twinkle 2s ease-in-out infinite alternate;
+    }
+    .rope-text .stars span:nth-child(1) { top: -10px; left: -15px; animation-delay: 0s; }
+    .rope-text .stars span:nth-child(2) { top: -5px; right: -20px; animation-delay: 0.7s; }
+    .rope-text .stars span:nth-child(3) { bottom: -10px; left: 10px; animation-delay: 1.4s; }
+    .rope-text .stars span:nth-child(4) { bottom: -5px; right: 5px; animation-delay: 0.3s; }
+    .rope-text .stars span:nth-child(5) { top: 50%; left: -30px; animation-delay: 1.1s; }
+    .rope-text .stars span:nth-child(6) { top: 30%; right: -30px; animation-delay: 0.9s; }
+
+    @keyframes sway {
+        0% { transform: rotate(-2deg) scale(1); }
+        50% { transform: rotate(2deg) scale(1.02); }
+        100% { transform: rotate(-2deg) scale(1); }
+    }
+    @keyframes twinkle {
+        0% { opacity: 0.3; transform: scale(0.8); }
+        100% { opacity: 1; transform: scale(1.2); }
     }
     .haiti-symbol {
         font-size: 4rem;
@@ -2575,13 +2585,22 @@ def display_avatar_and_followers(avatar_url, user_id, size=50):
     else:
         st.caption("1kFollowers")
 
-# ====== LOGIN INTERFACE (with flag-text class) ======
+# ====== LOGIN INTERFACE (only email, no phone) ======
 def login_interface():
+    # Animated "Lakay se Lakay" with golden stars
     st.markdown(
-        """
+        f"""
         <div style="text-align: center; padding: 20px 0;">
             <span class="dove-symbol">🕊️</span>
-            <h2 style="color: #0a2a44; margin-top: -5px;">Bienvenu sou <span class="lakay-flag-text">Lakay se Lakay</span></h2>
+            <h2 style="color: #0a2a44; margin-top: -5px;">
+                Bienvenu sou 
+                <span class="rope-text">
+                    <span class="lakay-flag-text">Lakay se Lakay</span>
+                    <span class="stars">
+                        <span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span>
+                    </span>
+                </span>
+            </h2>
             <p style="color: #1e2a3a; opacity: 0.8;">Nou kontan wè w isit la. Se yon platfòm sosyal ki fèt pou tout Ayisyen yo – kote ou ka pataje lide ou, foto ou, videyo ou, e konekte ak zanmi ou yo nan yon espas ki sekirize e ki amizan. N ap viv ansanm, n ap grandi ansanm. Pataje kè ou, pataje lavi ou!</p>
         </div>
         """,
@@ -2592,69 +2611,38 @@ def login_interface():
 
     show_debug = st.checkbox(t("show_debug"), value=False)
 
-    auth_method = st.radio(t("login_title"), [t("email_method"), t("phone_method")], horizontal=True)
+    # Only email login – no phone option
+    tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
+    with tab1:
+        with st.form("login_email"):
+            email = st.text_input(t("email"))
+            password = st.text_input(t("password"), type="password")
+            remember = st.checkbox(t("remember_me"))
+            login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
 
-    if auth_method == t("email_method"):
-        tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
-        with tab1:
-            with st.form("login_email"):
-                email = st.text_input(t("email"))
-                password = st.text_input(t("password"), type="password")
-                remember = st.checkbox(t("remember_me"))
-                login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
-
-                if login_clicked:
-                    if email and password:
-                        log_in_email(email, password, remember, show_debug)
-                    else:
-                        st.warning("Please enter email and password")
-        with tab2:
-            with st.form("signup_email"):
-                full_name = st.text_input(t("full_name"))
-                email = st.text_input(t("email"))
-                password = st.text_input(t("password"), type="password")
-                if st.form_submit_button(t("signup_button"), use_container_width=True):
-                    if full_name and email and password:
-                        sign_up_email(email, password, full_name)
-                    else:
-                        st.warning("Please fill all fields")
-        with tab3:
-            with st.form("reset_email"):
-                reset_email = st.text_input(t("email"))
-                if st.form_submit_button(t("send_reset_link"), use_container_width=True):
-                    if reset_email:
-                        reset_password_email(reset_email)
-                    else:
-                        st.warning("Please enter your email")
-    else:
-        st.info("Phone users: You will receive a 6‑digit OTP each time you log in.")
-        if not st.session_state.phone_otp_sent:
-            with st.form("phone_request"):
-                phone = st.text_input(t("phone_number"))
-                remember = st.checkbox(t("remember_me"))
-                if st.form_submit_button(t("send_otp"), use_container_width=True):
-                    if phone:
-                        if send_phone_otp(phone):
-                            st.session_state.phone_otp_sent = True
-                            st.session_state.temp_phone = phone
-                            st.session_state.phone_remember = remember
-                            st.rerun()
-                    else:
-                        st.warning("Please enter a phone number")
-        else:
-            st.write(f"OTP sent to **+{st.session_state.temp_phone}**")
-            with st.form("phone_verify"):
-                otp = st.text_input(t("enter_otp"))
-                if st.form_submit_button(t("verify_login"), use_container_width=True):
-                    if otp:
-                        remember = st.session_state.get("phone_remember", False)
-                        verify_phone_otp(st.session_state.temp_phone, otp, remember)
-                    else:
-                        st.warning("Please enter the OTP")
-            if st.button(t("back_resend")):
-                st.session_state.phone_otp_sent = False
-                st.session_state.temp_phone = ""
-                st.rerun()
+            if login_clicked:
+                if email and password:
+                    log_in_email(email, password, remember, show_debug)
+                else:
+                    st.warning("Please enter email and password")
+    with tab2:
+        with st.form("signup_email"):
+            full_name = st.text_input(t("full_name"))
+            email = st.text_input(t("email"))
+            password = st.text_input(t("password"), type="password")
+            if st.form_submit_button(t("signup_button"), use_container_width=True):
+                if full_name and email and password:
+                    sign_up_email(email, password, full_name)
+                else:
+                    st.warning("Please fill all fields")
+    with tab3:
+        with st.form("reset_email"):
+            reset_email = st.text_input(t("email"))
+            if st.form_submit_button(t("send_reset_link"), use_container_width=True):
+                if reset_email:
+                    reset_password_email(reset_email)
+                else:
+                    st.warning("Please enter your email")
 
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
 
@@ -4027,17 +4015,17 @@ def main_app():
             Sebastien Stephane Deslandes · Zendaya Christelle Deslandes
         </div>
         """, unsafe_allow_html=True)
-        st.divider()
+        # Add founder line
+        st.markdown("""
+        <div style='text-align: center; font-size: 0.9rem; color: #0a2a44; margin-top: 5px;'>
+            <b>Gesner Deslandes</b><br>
+            <span style='font-size: 0.8rem; color: #2c3e50;'>Software Engineer Founder</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # --- Show user avatar in sidebar with follower count ---
-        if st.session_state.profile:
-            with st.container():
-                display_avatar_and_followers(
-                    st.session_state.profile.get("avatar_url"),
-                    st.session_state.user.id,
-                    size=80
-                )
-                st.markdown(f"**{st.session_state.profile.get('full_name', 'User')}**")
+        # Remove avatar display from sidebar – we already show the flag and owner name
+
+        # Rest of sidebar content remains unchanged
         st.divider()
 
         lang_options = {
@@ -4193,10 +4181,18 @@ def main_app():
 # ========== ENTRY ==========
 if __name__ == "__main__":
     if st.session_state.logged_in:
-        # Home title with flag-style text for "Lakay se Lakay"
+        # Home title with animated flag text and golden stars
         st.markdown(f"""
         <div class="home-title">
-            <h1>🏠 <span class="lakay-flag-text">Lakay se Lakay</span></h1>
+            <h1>
+                🏠 
+                <span class="rope-text">
+                    <span class="lakay-flag-text">Lakay se Lakay</span>
+                    <span class="stars">
+                        <span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span>
+                    </span>
+                </span>
+            </h1>
             <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
                  background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); 
                  -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
