@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.53 (Video call in sidebar, live on wall, no auto feed post)
+# Version: 77.8.54 (Fixed end live button, added "was live" private post, video call page)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2197,15 +2197,29 @@ def end_live_session(session_id):
     if supabase is None:
         return False
     try:
+        # Mark the session as ended
         supabase.table("live_sessions").update({
             "is_live": False,
             "ended_at": datetime.now().isoformat()
         }).eq("id", session_id).execute()
+        
+        # Update user's live status
         supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
         st.session_state.profile["is_live"] = False
+        
+        # Reload live sessions and clear streaming state
         st.session_state.live_sessions = load_live_sessions()
         st.session_state.stream_key = None
         st.session_state.selected_platform = None
+
+        # --- NEW: Create a private "was live" post on the user's wall ---
+        if st.session_state.profile:
+            full_name = st.session_state.profile.get("full_name", "User")
+            post_content = f"{full_name} was live"
+            # Create a private post (only visible on the author's own profile)
+            create_post(st.session_state.user.id, post_content, is_public=False)
+        # -------------------------------------------------------------
+
         return True
     except Exception as e:
         st.session_state.last_error = f"Error ending live session: {e}"
@@ -3685,7 +3699,7 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-    # ---- My Live Sessions (NEW) ----
+    # ---- My Live Sessions ----
     st.divider()
     st.subheader(t("my_live_sessions"))
     user_live_sessions = get_user_live_sessions(st.session_state.user.id)
@@ -3719,7 +3733,6 @@ def render_profile():
     else:
         for post in user_posts:
             with st.container():
-                # Reuse similar layout as in feed (without the avatar column since it's your own)
                 col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
                 with col_a:
                     display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40)
@@ -3769,7 +3782,6 @@ def render_profile():
                     for url in urls:
                         embed_video_from_url(url)
 
-                # Reactions and comments – same as feed
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
@@ -4717,7 +4729,6 @@ def main_app():
                                     if platform != 'inapp':
                                         st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
                                         st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
-                                    # No automatic post creation; link will be on user's wall
                                     st.rerun()
                             else:
                                 st.warning("Please enter a title")
