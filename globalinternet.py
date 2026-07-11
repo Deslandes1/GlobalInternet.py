@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.52 (Added Wall to own profile)
+# Version: 77.8.53 (Video call in sidebar, live on wall, no auto feed post)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -340,7 +340,17 @@ LANG = {
         "ban_reason": "Ban Reason",
         "banned": "Banned",
         "active": "Active",
-        "my_wall": "📝 My Wall"
+        "my_wall": "📝 My Wall",
+        "my_live_sessions": "📺 My Live Sessions",
+        "live_status_live": "🔴 LIVE",
+        "live_status_ended": "Ended",
+        "video_call": "📞 Video Call (Jitsi Demo)",
+        "demo_note": "ℹ️ This is a demo using Jitsi Meet – free and open-source. You can start a call and share the room link with anyone.",
+        "copy_link": "📋 Copy Room Link",
+        "room_link_copied": "✅ Room link copied to clipboard!",
+        "start_video_call": "Start a Video Call",
+        "your_personal_room": "Your Personal Room",
+        "join_room": "Join Room"
     },
     "fr": {
         "login_title": "Connexion",
@@ -498,7 +508,17 @@ LANG = {
         "ban_reason": "Raison du bannissement",
         "banned": "Banni",
         "active": "Actif",
-        "my_wall": "📝 Mon Mur"
+        "my_wall": "📝 Mon Mur",
+        "my_live_sessions": "📺 Mes sessions en direct",
+        "live_status_live": "🔴 EN DIRECT",
+        "live_status_ended": "Terminé",
+        "video_call": "📞 Appel vidéo (Jitsi Demo)",
+        "demo_note": "ℹ️ Ceci est une démo utilisant Jitsi Meet – gratuit et open-source. Vous pouvez démarrer un appel et partager le lien de la salle avec n'importe qui.",
+        "copy_link": "📋 Copier le lien de la salle",
+        "room_link_copied": "✅ Lien de la salle copié dans le presse-papiers !",
+        "start_video_call": "Démarrer un appel vidéo",
+        "your_personal_room": "Votre salle personnelle",
+        "join_room": "Rejoindre la salle"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -656,7 +676,17 @@ LANG = {
         "ban_reason": "Razón del baneo",
         "banned": "Baneado",
         "active": "Activo",
-        "my_wall": "📝 Mi Muro"
+        "my_wall": "📝 Mi Muro",
+        "my_live_sessions": "📺 Mis sesiones en vivo",
+        "live_status_live": "🔴 EN VIVO",
+        "live_status_ended": "Terminado",
+        "video_call": "📞 Videollamada (Jitsi Demo)",
+        "demo_note": "ℹ️ Esto es una demo usando Jitsi Meet – gratuito y de código abierto. Puedes iniciar una llamada y compartir el enlace de la sala con cualquiera.",
+        "copy_link": "📋 Copiar enlace de la sala",
+        "room_link_copied": "✅ ¡Enlace de la sala copiado al portapapeles!",
+        "start_video_call": "Iniciar una videollamada",
+        "your_personal_room": "Tu sala personal",
+        "join_room": "Unirse a la sala"
     },
     "ht": {
         "login_title": "Konekte",
@@ -814,7 +844,17 @@ LANG = {
         "ban_reason": "Rezon bani",
         "banned": "Bani",
         "active": "Aktif",
-        "my_wall": "📝 Mi Miray"
+        "my_wall": "📝 Mi Miray",
+        "my_live_sessions": "📺 Sesyondirèk mwen yo",
+        "live_status_live": "🔴 AN DIRÈK",
+        "live_status_ended": "Fini",
+        "video_call": "📞 Apèl videyo (Jitsi Demo)",
+        "demo_note": "ℹ️ Sa a se yon demo lè l sèvi avèk Jitsi Meet – gratis ak sous louvri. Ou ka kòmanse yon apèl epi pataje lyen sal la ak nenpòt moun.",
+        "copy_link": "📋 Kopye lyen sal la",
+        "room_link_copied": "✅ Lyen sal la kopye nan clipboard!",
+        "start_video_call": "Kòmanse yon apèl videyo",
+        "your_personal_room": "Sal pèsonèl ou",
+        "join_room": "Antre nan sal"
     },
 }
 
@@ -2085,6 +2125,17 @@ def load_live_sessions():
         return sessions
     except Exception as e:
         st.session_state.last_error = f"Error loading live sessions: {e}"
+        return []
+
+def get_user_live_sessions(user_id):
+    """Fetch all live sessions (active and ended) for a given user."""
+    if supabase is None:
+        return []
+    try:
+        response = supabase.table("live_sessions").select("*").eq("user_id", user_id).order("started_at", desc=True).execute()
+        return response.data or []
+    except Exception as e:
+        st.session_state.last_error = f"Error loading user live sessions: {e}"
         return []
 
 def create_live_session(title, platform, method='external'):
@@ -3634,7 +3685,32 @@ def render_profile():
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
 
-    # ---- NEW: My Wall ----
+    # ---- My Live Sessions (NEW) ----
+    st.divider()
+    st.subheader(t("my_live_sessions"))
+    user_live_sessions = get_user_live_sessions(st.session_state.user.id)
+    if not user_live_sessions:
+        st.info("You haven't started any live sessions yet.")
+    else:
+        for sess in user_live_sessions:
+            with st.container():
+                col_a, col_b, col_c = st.columns([3, 3, 1])
+                with col_a:
+                    st.markdown(f"**{sess['title']}**")
+                    st.caption(f"Started: {sess['started_at'][:16]}")
+                with col_b:
+                    if sess.get('is_live'):
+                        st.markdown(f"<span class='live-badge'>{t('live_status_live')}</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<span style='color:gray;'>{t('live_status_ended')}</span>", unsafe_allow_html=True)
+                with col_c:
+                    if sess.get('is_live'):
+                        if st.button(t("join_live"), key=f"join_live_{sess['id']}"):
+                            st.session_state.viewing_live = sess['id']
+                            st.rerun()
+                st.divider()
+
+    # ---- My Wall ----
     st.divider()
     st.subheader(t("my_wall"))
     user_posts = [p for p in st.session_state.posts if p['user_id'] == st.session_state.user.id]
@@ -3693,8 +3769,7 @@ def render_profile():
                     for url in urls:
                         embed_video_from_url(url)
 
-                # Reactions and comments – similar to feed but simplified or you can keep full
-                # We'll keep the same as feed for consistency
+                # Reactions and comments – same as feed
                 emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
@@ -3802,6 +3877,81 @@ def render_profile():
 
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
+
+# ====== VIDEO CALL PAGE (Jitsi Demo) ======
+def render_video_call():
+    st.header(t("video_call"))
+    st.info(t("demo_note"))
+
+    user_id = st.session_state.user.id
+    room = f"lakay-call-{user_id}"  # personal room based on user ID
+    st.markdown(f"### {t('your_personal_room')}: `{room}`")
+
+    # Show shareable link
+    try:
+        base_url = st.request.url.split('?')[0]
+    except:
+        base_url = "https://lakay-se-lakay.streamlit.app"
+    room_url = f"{base_url}?call={room}"
+    st.text_input("🔗 Shareable Link", value=room_url, key="call_room_link")
+
+    # Copy link button
+    if st.button(t("copy_link")):
+        st.markdown(f"""
+        <script>
+        navigator.clipboard.writeText('{room_url}');
+        </script>
+        """, unsafe_allow_html=True)
+        st.success(t("room_link_copied"))
+
+    # Display Jitsi iframe
+    st.markdown(f"### {t('join_room')}")
+    domain = JITSI_DOMAIN
+    container_id = f"jitsi-call-{user_id}"
+
+    config_overwrite = {
+        "startWithAudioMuted": False,
+        "startWithVideoMuted": False,
+        "disableWelcomePage": True,
+        "disableDeepLinking": True,
+        "p2p": {"enabled": False}
+    }
+    config_json = json.dumps(config_overwrite)
+
+    jitsi_html = f"""
+    <div id="{container_id}" style="height: 500px; width: 100%;"></div>
+    <script src="https://{domain}/external_api.js"></script>
+    <script>
+      (function() {{
+        const domain = '{domain}';
+        const room = '{room}';
+        const config = {config_json};
+        const container = document.getElementById('{container_id}');
+        if (!container) return;
+        if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+            const api = new JitsiMeetExternalAPI(domain, {{
+                roomName: room,
+                parentNode: container,
+                configOverwrite: config
+            }});
+        }} else {{
+            setTimeout(function() {{
+                if (typeof JitsiMeetExternalAPI !== 'undefined') {{
+                    const api = new JitsiMeetExternalAPI(domain, {{
+                        roomName: room,
+                        parentNode: container,
+                        configOverwrite: config
+                    }});
+                }}
+            }}, 1000);
+        }}
+      }})();
+    </script>
+    """
+    st.components.v1.html(jitsi_html, height=520)
+
+    st.markdown(f"**Or open in a new tab:** [Join Room](https://{domain}/{room})", unsafe_allow_html=True)
+    st.caption(t("call_permission_hint"))
 
 # ====== render_live_page ======
 def render_live_page(session_id):
@@ -4563,19 +4713,11 @@ def main_app():
                             if title:
                                 session_id = create_live_session(title, platform, method='external' if platform != 'inapp' else 'inapp')
                                 if session_id:
-                                    if platform == 'inapp':
-                                        try:
-                                            base_url = st.request.url.split('?')[0]
-                                        except:
-                                            base_url = "https://lakay-se-lakay.streamlit.app"
-                                        share_url = f"{base_url}?live={session_id}"
-                                        post_content = f"🔴 I'm going live! Join me: {share_url}"
-                                        create_post(st.session_state.user.id, post_content, is_public=True)
-                                        st.success(f"{t('you_are_live')} – A post with the join link has been added to your feed.")
-                                    else:
-                                        st.success(t("you_are_live"))
+                                    st.success(t("you_are_live"))
+                                    if platform != 'inapp':
                                         st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
                                         st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
+                                    # No automatic post creation; link will be on user's wall
                                     st.rerun()
                             else:
                                 st.warning("Please enter a title")
@@ -4621,7 +4763,8 @@ def main_app():
 
         st.divider()
 
-        page_keys = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "owner_space"]
+        # Navigation
+        page_keys = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
         page_titles = {key: t(key) for key in page_keys}
         if "current_page" not in st.session_state:
             st.session_state.current_page = "feed"
@@ -4659,6 +4802,7 @@ def main_app():
         "satellite_map": render_map,
         "worldcup": render_worldcup,
         "profile": render_profile,
+        "video_call": render_video_call,
         "owner_space": owner_space
     }
     page_functions.get(st.session_state.current_page, render_feed)()
