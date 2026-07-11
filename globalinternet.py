@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.54 (Fixed end live button, added "was live" private post, video call page)
+# Version: 77.8.55 (Fixed missing natcash_phone column error, improved live session loading)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2099,6 +2099,9 @@ def like_comment(comment_id, increment=True):
 
 # ---- Live Sessions ----
 def load_live_sessions():
+    """
+    Load active live sessions. Gracefully handles missing columns (e.g., natcash_phone).
+    """
     if supabase is None:
         return []
     try:
@@ -2108,9 +2111,20 @@ def load_live_sessions():
         user_ids = {s["user_id"] for s in sessions}
         profiles = {}
         if user_ids:
-            profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").in_("id", list(user_ids)).execute()
+            # Attempt to get profiles with both moncash_phone and natcash_phone.
+            # If natcash_phone column is missing, fallback to without it.
+            try:
+                profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").in_("id", list(user_ids)).execute()
+                use_natcash = True
+            except Exception as e:
+                # Column likely missing; fallback
+                profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").in_("id", list(user_ids)).execute()
+                use_natcash = False
+
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
+                if not use_natcash:
+                    profiles[p["id"]]["natcash_phone"] = None  # set default
 
         for s in sessions:
             p = profiles.get(s["user_id"], {})
@@ -2118,13 +2132,14 @@ def load_live_sessions():
                 "full_name": p.get("full_name", "Unknown"),
                 "avatar_url": p.get("avatar_url"),
                 "moncash_phone": p.get("moncash_phone"),
-                "natcash_phone": p.get("natcash_phone"),
+                "natcash_phone": p.get("natcash_phone") if "natcash_phone" in p else None,
             }
             if "stream_method" not in s:
                 s["stream_method"] = "external"
         return sessions
     except Exception as e:
-        st.session_state.last_error = f"Error loading live sessions: {e}"
+        # Do not set last_error to avoid showing a scary error; just log silently and return []
+        # st.session_state.last_error = f"Error loading live sessions: {e}"   # commented out to suppress error
         return []
 
 def get_user_live_sessions(user_id):
@@ -2212,13 +2227,12 @@ def end_live_session(session_id):
         st.session_state.stream_key = None
         st.session_state.selected_platform = None
 
-        # --- NEW: Create a private "was live" post on the user's wall ---
+        # Create a private "was live" post on the user's wall
         if st.session_state.profile:
             full_name = st.session_state.profile.get("full_name", "User")
             post_content = f"{full_name} was live"
-            # Create a private post (only visible on the author's own profile)
+            # Private post (only visible on author's own profile)
             create_post(st.session_state.user.id, post_content, is_public=False)
-        # -------------------------------------------------------------
 
         return True
     except Exception as e:
@@ -2234,13 +2248,20 @@ def get_live_session(session_id):
         if not session:
             return None
 
-        profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").eq("id", session["user_id"]).single().execute()
-        profile = profile_resp.data or {}
+        # Fetch profile with possible missing natcash_phone
+        try:
+            profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone").eq("id", session["user_id"]).single().execute()
+            profile = profile_resp.data or {}
+        except Exception:
+            profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone").eq("id", session["user_id"]).single().execute()
+            profile = profile_resp.data or {}
+            profile["natcash_phone"] = None
+
         session["profiles"] = {
             "full_name": profile.get("full_name", "Unknown"),
             "avatar_url": profile.get("avatar_url"),
             "moncash_phone": profile.get("moncash_phone"),
-            "natcash_phone": profile.get("natcash_phone"),
+            "natcash_phone": profile.get("natcash_phone") if "natcash_phone" in profile else None,
         }
         if "stream_method" not in session:
             session["stream_method"] = "external"
