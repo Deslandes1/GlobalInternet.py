@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 77.8.47 (Updated NATCASH label, live uses same Jitsi config as video call)
+# Version: 77.8.48 (Fixed video autoplay: videos no longer play automatically on feed)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1338,43 +1338,47 @@ def is_direct_video_url(url):
     video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg', '.m4v']
     return any(url.lower().endswith(ext) for ext in video_extensions)
 
-# ====== UPDATED: Enhanced embed_video_from_url with Twitch live support ======
+# ====== FIXED: embed_video_from_url - NO AUTOPLAY ======
 def embed_video_from_url(url):
     youtube_id = get_youtube_id(url)
     if youtube_id:
+        # Removed autoplay=1
         embed_html = f"""
-        <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}?autoplay=1" 
-                frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 {t('now_watching')}</p>
+        <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
+                frameborder="0" allow="encrypted-media" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
+        # Removed autoplay=1
         embed_html = f"""
-        <iframe src="https://player.vimeo.com/video/{vimeo_id}?autoplay=1" width="100%" height="400" 
-                frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Vimeo {t('now_watching')}</p>
+        <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
+                frameborder="0" allow="fullscreen" allowfullscreen></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
     dailymotion_id = get_dailymotion_id(url)
     if dailymotion_id:
+        # Removed autoplay=1
         embed_html = f"""
         <iframe frameborder="0" width="100%" height="400" 
-                src="https://www.dailymotion.com/embed/video/{dailymotion_id}?autoplay=1" 
-                allowfullscreen allow="autoplay"></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Dailymotion {t('now_watching')}</p>
+                src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
+                allowfullscreen allow=""></iframe>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
     fb_url = get_facebook_video_url(url)
     if fb_url:
+        # Removed data-autoplay="true"
         embed_html = f"""
         <div id="fb-root"></div>
         <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-        <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
-        <p style="font-size:0.8rem; color:green;">🎥 Facebook {t('now_watching')}</p>
+        <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=470)
         return True
@@ -1385,12 +1389,12 @@ def embed_video_from_url(url):
             <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@username/video/{tiktok_id}" data-video-id="{tiktok_id}" style="max-width: 605px;min-width: 325px;" > 
             <section> <a target="_blank" title="TikTok" href="https://www.tiktok.com/@username/video/{tiktok_id}">View on TikTok</a> </section> </blockquote> 
             <script async src="https://www.tiktok.com/embed.js"></script>
-            <p style="font-size:0.8rem; color:green;">🎥 TikTok {t('now_watching')}</p>
+            <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
             """
         else:
             embed_html = f"""
             <iframe width="100%" height="600" src="{url}" frameborder="0" allowfullscreen></iframe>
-            <p style="font-size:0.8rem; color:green;">🎥 TikTok {t('now_watching')}</p>
+            <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
             """
         st.components.v1.html(embed_html, height=650)
         return True
@@ -1402,14 +1406,16 @@ def embed_video_from_url(url):
             parent = 'localhost'
         if '/videos/' in twitch_url or '/clip/' in twitch_url:
             video_id = twitch_url.split('/')[-1].split('?')[0]
-            embed_url = f"https://player.twitch.tv/?video={video_id}&parent={parent}&autoplay=true"
+            # Removed &autoplay=true
+            embed_url = f"https://player.twitch.tv/?video={video_id}&parent={parent}"
         else:
             channel = twitch_url.split('/')[-1].split('?')[0]
-            embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}&autoplay=true"
+            # Removed &autoplay=true
+            embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}"
         embed_html = f"""
         <iframe src="{embed_url}" 
                 height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Twitch {t('now_watching')}</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
@@ -1417,7 +1423,7 @@ def embed_video_from_url(url):
     if insta_url:
         embed_html = f"""
         <iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Instagram {t('now_watching')}</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=630)
         return True
@@ -1426,13 +1432,14 @@ def embed_video_from_url(url):
         embed_html = f"""
         <iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" 
                 frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Streamable {t('now_watching')}</p>
+        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
         """
         st.components.v1.html(embed_html, height=430)
         return True
     if is_direct_video_url(url):
-        st.video(url)
-        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 {t('now_watching')}</p>", unsafe_allow_html=True)
+        # Explicitly disable autoplay
+        st.video(url, autoplay=False)
+        st.markdown(f"<p style='font-size:0.8rem; color:green;'>🎥 Click play to watch</p>", unsafe_allow_html=True)
         return True
     return False
 
@@ -2719,7 +2726,7 @@ def display_media_item(media):
         if media["type"] == "image":
             st.image(url, use_column_width=True)
         elif media["type"] == "video":
-            st.video(url)
+            st.video(url, autoplay=False)  # no autoplay
         else:
             st.markdown(f"[Media file]({url})")
     except Exception as e:
@@ -3277,7 +3284,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                             if msg.get("media_type") == "image":
                                 st.image(msg["media_url"], width=300)
                             elif msg.get("media_type") == "video":
-                                st.video(msg["media_url"])
+                                st.video(msg["media_url"], autoplay=False)
                             else:
                                 st.markdown(f"[Media file]({msg['media_url']})")
                         except Exception as e:
@@ -3313,7 +3320,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                             if msg.get("media_type") == "image":
                                 st.image(msg["media_url"], width=300)
                             elif msg.get("media_type") == "video":
-                                st.video(msg["media_url"])
+                                st.video(msg["media_url"], autoplay=False)
                             else:
                                 st.markdown(f"[Media file]({msg['media_url']})")
                         except Exception as e:
@@ -3621,11 +3628,12 @@ def render_live_page(session_id):
                                 st.warning("Please enter a URL")
             if stream_url:
                 if "facebook.com" in stream_url:
+                    # no autoplay
                     embed_code = f"""
                     <div id="fb-root"></div>
                     <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
                     <div class="fb-video" data-href="{stream_url}" 
-                         data-width="100%" data-allowfullscreen="true" data-autoplay="true"></div>
+                         data-width="100%" data-allowfullscreen="true"></div>
                     """
                     st.components.v1.html(embed_code, height=450)
                 elif "youtube.com" in stream_url or "youtu.be" in stream_url:
@@ -3636,16 +3644,18 @@ def render_live_page(session_id):
                     else:
                         video_id = None
                     if video_id:
-                        embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1"
-                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>', height=410)
+                        # no autoplay
+                        embed_url = f"https://www.youtube.com/embed/{video_id}"
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="encrypted-media" allowfullscreen></iframe>', height=410)
                     else:
-                        st.video(stream_url)
+                        st.video(stream_url, autoplay=False)
                 elif "twitch.tv" in stream_url:
                     channel = stream_url.split("/")[-1].split("?")[0]
-                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}&autoplay=true"
+                    # no autoplay
+                    embed_url = f"https://player.twitch.tv/?channel={channel}&parent={st.request.host}"
                     st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>', height=410)
                 else:
-                    st.video(stream_url)
+                    st.video(stream_url, autoplay=False)
             else:
                 st.info("The streamer has not provided a video URL yet.")
         else:
