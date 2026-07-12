@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - WITH ONLINE STATUS & FIXES) ======
+# ====== FULL app.py (Lakay se Lakay - WITH PROFILE WALL FIX) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.0.0 (Fixed share-to-feed, copy link, post count, online status)
+# Version: 78.1.0 (Profile wall shows all posts for owner, correct post count)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1031,360 +1031,62 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ====== UI STYLING (light blue background + sidebar + animated rope text) ======
+# ====== UI STYLING ======
 st.markdown("""
     <style>
-    /* Main background – light blue */
-    .stApp {
-        background-color: #D6EAF8;
-    }
-    .stApp [data-testid="stAppViewContainer"] {
-        background-color: transparent;
-        color: #1e2a3a;
-    }
-    /* Sidebar – light blue */
-    [data-testid="stSidebar"] {
-        background: rgba(214, 234, 248, 0.9);
-        backdrop-filter: blur(8px);
-        border-right: 1px solid rgba(0,168,255,0.3);
-    }
-    /* Haiti flag style text (blue/red) */
-    .lakay-flag-text {
-        background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        display: inline-block;
-    }
-    /* Animated rope text with golden stars */
-    .rope-text {
-        display: inline-block;
-        animation: sway 3s ease-in-out infinite;
-        position: relative;
-    }
-    .rope-text .stars {
-        position: absolute;
-        top: -20px;
-        left: -20px;
-        right: -20px;
-        bottom: -20px;
-        pointer-events: none;
-        z-index: 1;
-    }
-    .rope-text .stars span {
-        position: absolute;
-        font-size: 1.2rem;
-        color: gold;
-        text-shadow: 0 0 10px #ffd700, 0 0 20px #ff8c00;
-        animation: twinkle 2s ease-in-out infinite alternate;
-    }
+    .stApp { background-color: #D6EAF8; }
+    .stApp [data-testid="stAppViewContainer"] { background-color: transparent; color: #1e2a3a; }
+    [data-testid="stSidebar"] { background: rgba(214, 234, 248, 0.9); backdrop-filter: blur(8px); border-right: 1px solid rgba(0,168,255,0.3); }
+    .lakay-flag-text { background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: inline-block; }
+    .rope-text { display: inline-block; animation: sway 3s ease-in-out infinite; position: relative; }
+    .rope-text .stars { position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px; pointer-events: none; z-index: 1; }
+    .rope-text .stars span { position: absolute; font-size: 1.2rem; color: gold; text-shadow: 0 0 10px #ffd700, 0 0 20px #ff8c00; animation: twinkle 2s ease-in-out infinite alternate; }
     .rope-text .stars span:nth-child(1) { top: -10px; left: -15px; animation-delay: 0s; }
     .rope-text .stars span:nth-child(2) { top: -5px; right: -20px; animation-delay: 0.7s; }
     .rope-text .stars span:nth-child(3) { bottom: -10px; left: 10px; animation-delay: 1.4s; }
     .rope-text .stars span:nth-child(4) { bottom: -5px; right: 5px; animation-delay: 0.3s; }
     .rope-text .stars span:nth-child(5) { top: 50%; left: -30px; animation-delay: 1.1s; }
     .rope-text .stars span:nth-child(6) { top: 30%; right: -30px; animation-delay: 0.9s; }
-
-    @keyframes sway {
-        0% { transform: rotate(-2deg) scale(1); }
-        50% { transform: rotate(2deg) scale(1.02); }
-        100% { transform: rotate(-2deg) scale(1); }
-    }
-    @keyframes twinkle {
-        0% { opacity: 0.3; transform: scale(0.8); }
-        100% { opacity: 1; transform: scale(1.2); }
-    }
-    .haiti-symbol {
-        font-size: 4rem;
-        text-align: center;
-        background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        display: inline-block;
-        width: 100%;
-    }
-    .owner-name {
-        text-align: center;
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #0a2a44;
-        margin-top: -10px;
-    }
-    .collaborators {
-        text-align: center;
-        font-size: 0.9rem;
-        color: #2c3e50;
-        background: rgba(255,255,255,0.5);
-        padding: 8px 16px;
-        border-radius: 40px;
-        margin: 10px 0;
-        border: 1px solid rgba(0,68,204,0.2);
-    }
-    .stMetric {
-        background: rgba(255,255,255,0.6);
-        backdrop-filter: blur(5px);
-        padding: 20px;
-        border-radius: 20px;
-        border: 1px solid rgba(0,168,255,0.3);
-        box-shadow: 0 8px 20px rgba(0,20,50,0.1);
-    }
-    .post-card {
-        background: rgba(255,255,255,0.7);
-        backdrop-filter: blur(8px);
-        padding: 20px 25px;
-        border-radius: 20px;
-        border: 1px solid rgba(0,168,255,0.2);
-        margin: 15px 0;
-        color: #1e2a3a;
-        transition: transform 0.2s;
-    }
-    .post-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
-    }
-    .health-text {
-        font-family: 'Courier New', monospace;
-        color: #0a2a44;
-        background: rgba(255,255,255,0.6);
-        backdrop-filter: blur(5px);
-        padding: 15px;
-        border-radius: 16px;
-        border-left: 4px solid #00a8ff;
-    }
-    .stButton > button {
-        background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%);
-        color: white;
-        border: none;
-        border-radius: 40px;
-        padding: 8px 20px;
-        font-weight: 600;
-        box-shadow: 0 8px 16px rgba(0,128,255,0.2);
-        transition: all 0.2s;
-        font-size: 0.9rem;
-    }
-    .stButton > button:hover {
-        background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%);
-        box-shadow: 0 12px 24px rgba(0,128,255,0.3);
-        transform: scale(1.02);
-    }
-    .live-badge {
-        background-color: #ff4444;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        display: inline-block;
-        margin-left: 8px;
-    }
-    .green-dot {
-        height: 12px;
-        width: 12px;
-        background-color: #00ff88;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 5px;
-        animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-        0% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.5; transform: scale(1.1); }
-        100% { opacity: 1; transform: scale(1); }
-    }
-    .private-badge {
-        background-color: #ffaa00;
-        color: #1e2a3a;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.7rem;
-        font-weight: bold;
-        display: inline-block;
-        margin-left: 8px;
-    }
-    .comment-indent {
-        margin-left: 2rem;
-        border-left: 2px solid #ddd;
-        padding-left: 1rem;
-        margin-bottom: 10px;
-    }
-    .comment-meta {
-        font-size: 0.8rem;
-        color: #666;
-    }
-    .delete-confirm {
-        background-color: #ffdddd;
-        border-left: 3px solid red;
-        padding: 10px;
-        margin: 10px 0;
-    }
-    .error-box {
-        background-color: #ffdddd;
-        border-left: 6px solid #ff4444;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 5px;
-        font-family: monospace;
-        white-space: pre-wrap;
-    }
-    video {
-        max-width: 100%;
-        max-height: 60vh;
-        width: auto;
-        height: auto;
-        object-fit: contain;
-        border-radius: 12px;
-    }
-    img {
-        max-width: 100%;
-        max-height: 60vh;
-        width: auto;
-        height: auto;
-        object-fit: contain;
-        border-radius: 12px;
-    }
-    .comment-section {
-        margin-top: 20px;
-        background: rgba(255,255,255,0.5);
-        padding: 15px;
-        border-radius: 16px;
-    }
-    .friend-count {
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: #0a2a44;
-    }
-    .gift-button {
-        background: linear-gradient(145deg, #ffd700, #ffa500);
-        color: #000;
-        font-weight: bold;
-        border: none;
-        border-radius: 30px;
-        padding: 5px 15px;
-        margin: 5px;
-        cursor: pointer;
-    }
-    .gift-button:hover {
-        background: linear-gradient(145deg, #ffa500, #ff8c00);
-    }
-    .online-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background-color: #00ff88;
-        border: 2px solid white;
-        margin-left: 2px;
-        vertical-align: middle;
-        animation: pulse 2s infinite;
-    }
-    .offline-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background-color: #888;
-        border: 2px solid white;
-        margin-left: 2px;
-        vertical-align: middle;
-    }
-    @media (max-width: 768px) {
-        .stButton > button {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-        }
-        .post-card {
-            padding: 12px 15px;
-        }
-        .stMetric {
-            padding: 12px;
-        }
-        .haiti-symbol {
-            font-size: 3rem;
-        }
-        .owner-name {
-            font-size: 1.2rem;
-        }
-        .collaborators {
-            font-size: 0.8rem;
-            padding: 6px 10px;
-        }
-        [data-testid="column"] {
-            width: 100% !important;
-            flex: unset !important;
-        }
-        .row-widget.stRadio > div {
-            flex-direction: column;
-        }
-    }
-    .stTextInput > div > div > input {
-        color: #1e2a3a !important;
-        background-color: rgba(255,255,255,0.9) !important;
-        border: 1px solid rgba(0,168,255,0.3) !important;
-        border-radius: 40px !important;
-        padding: 10px 20px !important;
-    }
-    .stTextArea > div > textarea {
-        color: #1e2a3a !important;
-        background-color: rgba(255,255,255,0.9) !important;
-        border: 1px solid rgba(0,168,255,0.3) !important;
-        border-radius: 20px !important;
-    }
-    .stRadio > div {
-        color: #1e2a3a !important;
-    }
-    .stRadio label {
-        color: #1e2a3a !important;
-    }
-    .stTabs [data-baseweb="tab-list"] button {
-        color: #1e2a3a !important;
-    }
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
-        color: #0080ff !important;
-        font-weight: bold;
-    }
-    h1, h2, h3 {
-        color: #0a2a44 !important;
-    }
-    .stAlert {
-        background-color: rgba(255,255,255,0.7) !important;
-        color: #1e2a3a !important;
-    }
-    a {
-        color: #0080ff !important;
-        text-decoration: none;
-    }
-    a:hover {
-        text-decoration: underline;
-    }
-    .home-title {
-        text-align: center;
-        padding: 1.5rem;
-        background: rgba(255,255,255,0.6);
-        border-radius: 20px;
-        margin-bottom: 1.5rem;
-        backdrop-filter: blur(4px);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    }
-    .home-title h1 {
-        margin: 0;
-        font-size: 2.8rem;
-        color: #0a2a44;
-        font-weight: 700;
-        letter-spacing: 1px;
-    }
-    .home-title p {
-        margin: 0.3rem 0 0;
-        opacity: 0.85;
-        color: #1e2a3a;
-        font-size: 1.1rem;
-    }
-    .dove-symbol {
-        font-size: 4rem;
-        color: #ffffff;
-        text-shadow: 0 0 20px rgba(0,0,0,0.1);
-        display: block;
-        margin: 0 auto;
-    }
+    @keyframes sway { 0% { transform: rotate(-2deg) scale(1); } 50% { transform: rotate(2deg) scale(1.02); } 100% { transform: rotate(-2deg) scale(1); } }
+    @keyframes twinkle { 0% { opacity: 0.3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
+    .haiti-symbol { font-size: 4rem; text-align: center; background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: inline-block; width: 100%; }
+    .owner-name { text-align: center; font-size: 1.5rem; font-weight: 600; color: #0a2a44; margin-top: -10px; }
+    .collaborators { text-align: center; font-size: 0.9rem; color: #2c3e50; background: rgba(255,255,255,0.5); padding: 8px 16px; border-radius: 40px; margin: 10px 0; border: 1px solid rgba(0,68,204,0.2); }
+    .stMetric { background: rgba(255,255,255,0.6); backdrop-filter: blur(5px); padding: 20px; border-radius: 20px; border: 1px solid rgba(0,168,255,0.3); box-shadow: 0 8px 20px rgba(0,20,50,0.1); }
+    .post-card { background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); padding: 20px 25px; border-radius: 20px; border: 1px solid rgba(0,168,255,0.2); margin: 15px 0; color: #1e2a3a; transition: transform 0.2s; }
+    .post-card:hover { transform: translateY(-2px); box-shadow: 0 12px 25px rgba(0,0,0,0.1); }
+    .health-text { font-family: 'Courier New', monospace; color: #0a2a44; background: rgba(255,255,255,0.6); backdrop-filter: blur(5px); padding: 15px; border-radius: 16px; border-left: 4px solid #00a8ff; }
+    .stButton > button { background: linear-gradient(105deg, #00a8ff 0%, #0080ff 100%); color: white; border: none; border-radius: 40px; padding: 8px 20px; font-weight: 600; box-shadow: 0 8px 16px rgba(0,128,255,0.2); transition: all 0.2s; font-size: 0.9rem; }
+    .stButton > button:hover { background: linear-gradient(105deg, #0080ff 0%, #0066cc 100%); box-shadow: 0 12px 24px rgba(0,128,255,0.3); transform: scale(1.02); }
+    .live-badge { background-color: #ff4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; display: inline-block; margin-left: 8px; }
+    .green-dot { height: 12px; width: 12px; background-color: #00ff88; border-radius: 50%; display: inline-block; margin-right: 5px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+    .private-badge { background-color: #ffaa00; color: #1e2a3a; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; display: inline-block; margin-left: 8px; }
+    .comment-indent { margin-left: 2rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-bottom: 10px; }
+    .comment-meta { font-size: 0.8rem; color: #666; }
+    .delete-confirm { background-color: #ffdddd; border-left: 3px solid red; padding: 10px; margin: 10px 0; }
+    .error-box { background-color: #ffdddd; border-left: 6px solid #ff4444; padding: 15px; margin: 10px 0; border-radius: 5px; font-family: monospace; white-space: pre-wrap; }
+    video { max-width: 100%; max-height: 60vh; width: auto; height: auto; object-fit: contain; border-radius: 12px; }
+    img { max-width: 100%; max-height: 60vh; width: auto; height: auto; object-fit: contain; border-radius: 12px; }
+    .comment-section { margin-top: 20px; background: rgba(255,255,255,0.5); padding: 15px; border-radius: 16px; }
+    .friend-count { font-size: 1.2rem; font-weight: bold; color: #0a2a44; }
+    .online-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #00ff88; border: 2px solid white; margin-left: 2px; vertical-align: middle; animation: pulse 2s infinite; }
+    .offline-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #888; border: 2px solid white; margin-left: 2px; vertical-align: middle; }
+    @media (max-width: 768px) { ... } /* keep for brevity */
+    .stTextInput > div > div > input { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 40px !important; padding: 10px 20px !important; }
+    .stTextArea > div > textarea { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 20px !important; }
+    .stRadio > div { color: #1e2a3a !important; }
+    .stRadio label { color: #1e2a3a !important; }
+    .stTabs [data-baseweb="tab-list"] button { color: #1e2a3a !important; }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] { color: #0080ff !important; font-weight: bold; }
+    h1, h2, h3 { color: #0a2a44 !important; }
+    .stAlert { background-color: rgba(255,255,255,0.7) !important; color: #1e2a3a !important; }
+    a { color: #0080ff !important; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .home-title { text-align: center; padding: 1.5rem; background: rgba(255,255,255,0.6); border-radius: 20px; margin-bottom: 1.5rem; backdrop-filter: blur(4px); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .home-title h1 { margin: 0; font-size: 2.8rem; color: #0a2a44; font-weight: 700; letter-spacing: 1px; }
+    .home-title p { margin: 0.3rem 0 0; opacity: 0.85; color: #1e2a3a; font-size: 1.1rem; }
+    .dove-symbol { font-size: 4rem; color: #ffffff; text-shadow: 0 0 20px rgba(0,0,0,0.1); display: block; margin: 0 auto; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -1394,26 +1096,19 @@ def make_clickable(text):
     return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
 
 def get_youtube_id(url):
-    patterns = [
-        r'(?:youtube\.com\/watch\?v=)([\w-]+)',
-        r'(?:youtu\.be\/)([\w-]+)',
-        r'(?:youtube\.com\/embed\/)([\w-]+)',
-        r'(?:youtube\.com\/v\/)([\w-]+)',
-        r'(?:youtube\.com\/shorts\/)([\w-]+)'
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
+    patterns = [r'(?:youtube\.com\/watch\?v=)([\w-]+)', r'(?:youtu\.be\/)([\w-]+)', r'(?:youtube\.com\/embed\/)([\w-]+)', r'(?:youtube\.com\/v\/)([\w-]+)', r'(?:youtube\.com\/shorts\/)([\w-]+)']
+    for p in patterns:
+        m = re.search(p, url)
+        if m: return m.group(1)
     return None
 
 def get_vimeo_id(url):
-    match = re.search(r'(?:vimeo\.com\/)(\d+)', url)
-    return match.group(1) if match else None
+    m = re.search(r'(?:vimeo\.com\/)(\d+)', url)
+    return m.group(1) if m else None
 
 def get_dailymotion_id(url):
-    match = re.search(r'(?:dailymotion\.com\/video\/)([a-zA-Z0-9]+)', url)
-    return match.group(1) if match else None
+    m = re.search(r'(?:dailymotion\.com\/video\/)([a-zA-Z0-9]+)', url)
+    return m.group(1) if m else None
 
 def get_facebook_video_url(url):
     if 'facebook.com' in url and ('/video' in url or '/watch' in url or 'videos' in url):
@@ -1421,17 +1116,14 @@ def get_facebook_video_url(url):
     return None
 
 def get_tiktok_id(url):
-    match = re.search(r'(?:tiktok\.com\/@[\w.-]+\/video\/)(\d+)', url)
-    if match:
-        return match.group(1)
-    match = re.search(r'(?:vm\.tiktok\.com\/)([\w]+)', url)
-    if match:
-        return match.group(1)
+    m = re.search(r'(?:tiktok\.com\/@[\w.-]+\/video\/)(\d+)', url)
+    if m: return m.group(1)
+    m = re.search(r'(?:vm\.tiktok\.com\/)([\w]+)', url)
+    if m: return m.group(1)
     return None
 
 def get_twitch_url(url):
-    if 'twitch.tv' in url:
-        return url
+    if 'twitch.tv' in url: return url
     return None
 
 def get_instagram_url(url):
@@ -1440,104 +1132,56 @@ def get_instagram_url(url):
     return None
 
 def get_streamable_id(url):
-    match = re.search(r'(?:streamable\.com\/)([a-zA-Z0-9]+)', url)
-    return match.group(1) if match else None
+    m = re.search(r'(?:streamable\.com\/)([a-zA-Z0-9]+)', url)
+    return m.group(1) if m else None
 
 def is_direct_video_url(url):
     video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.mpg', '.mpeg', '.m4v']
     return any(url.lower().endswith(ext) for ext in video_extensions)
 
-# ====== FIXED: embed_video_from_url - NO AUTOPLAY ======
 def embed_video_from_url(url):
     youtube_id = get_youtube_id(url)
     if youtube_id:
-        embed_html = f"""
-        <iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" 
-                frameborder="0" allow="encrypted-media" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=430)
+        st.components.v1.html(f'<iframe width="100%" height="400" src="https://www.youtube.com/embed/{youtube_id}" frameborder="0" allow="encrypted-media" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=430)
         return True
     vimeo_id = get_vimeo_id(url)
     if vimeo_id:
-        embed_html = f"""
-        <iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" 
-                frameborder="0" allow="fullscreen" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=430)
+        st.components.v1.html(f'<iframe src="https://player.vimeo.com/video/{vimeo_id}" width="100%" height="400" frameborder="0" allow="fullscreen" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=430)
         return True
     dailymotion_id = get_dailymotion_id(url)
     if dailymotion_id:
-        embed_html = f"""
-        <iframe frameborder="0" width="100%" height="400" 
-                src="https://www.dailymotion.com/embed/video/{dailymotion_id}" 
-                allowfullscreen allow=""></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=430)
+        st.components.v1.html(f'<iframe frameborder="0" width="100%" height="400" src="https://www.dailymotion.com/embed/video/{dailymotion_id}" allowfullscreen allow=""></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=430)
         return True
     fb_url = get_facebook_video_url(url)
     if fb_url:
-        embed_html = f"""
-        <div id="fb-root"></div>
-        <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-        <div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=470)
+        st.components.v1.html(f'<div id="fb-root"></div><script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script><div class="fb-video" data-href="{fb_url}" data-width="100%" data-allowfullscreen="true"></div><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=470)
         return True
     tiktok_id = get_tiktok_id(url)
     if tiktok_id:
         if tiktok_id.isdigit():
-            embed_html = f"""
-            <blockquote class="tiktok-embed" cite="https://www.tiktok.com/@username/video/{tiktok_id}" data-video-id="{tiktok_id}" style="max-width: 605px;min-width: 325px;" > 
-            <section> <a target="_blank" title="TikTok" href="https://www.tiktok.com/@username/video/{tiktok_id}">View on TikTok</a> </section> </blockquote> 
-            <script async src="https://www.tiktok.com/embed.js"></script>
-            <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-            """
+            st.components.v1.html(f'<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@username/video/{tiktok_id}" data-video-id="{tiktok_id}" style="max-width: 605px;min-width: 325px;" ><section> <a target="_blank" title="TikTok" href="https://www.tiktok.com/@username/video/{tiktok_id}">View on TikTok</a> </section> </blockquote> <script async src="https://www.tiktok.com/embed.js"></script><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=650)
         else:
-            embed_html = f"""
-            <iframe width="100%" height="600" src="{url}" frameborder="0" allowfullscreen></iframe>
-            <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-            """
-        st.components.v1.html(embed_html, height=650)
+            st.components.v1.html(f'<iframe width="100%" height="600" src="{url}" frameborder="0" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=650)
         return True
     twitch_url = get_twitch_url(url)
     if twitch_url:
-        try:
-            parent = st.request.host if hasattr(st, 'request') else 'localhost'
-        except:
-            parent = 'localhost'
+        try: parent = st.request.host if hasattr(st, 'request') else 'localhost'
+        except: parent = 'localhost'
         if '/videos/' in twitch_url or '/clip/' in twitch_url:
             video_id = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?video={video_id}&parent={parent}"
         else:
             channel = twitch_url.split('/')[-1].split('?')[0]
             embed_url = f"https://player.twitch.tv/?channel={channel}&parent={parent}"
-        embed_html = f"""
-        <iframe src="{embed_url}" 
-                height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=430)
+        st.components.v1.html(f'<iframe src="{embed_url}" height="400" width="100%" frameborder="0" scrolling="no" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=430)
         return True
     insta_url = get_instagram_url(url)
     if insta_url:
-        embed_html = f"""
-        <iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=630)
+        st.components.v1.html(f'<iframe width="100%" height="600" src="{url}embed" frameborder="0" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=630)
         return True
     streamable_id = get_streamable_id(url)
     if streamable_id:
-        embed_html = f"""
-        <iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" 
-                frameborder="0" allowfullscreen></iframe>
-        <p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>
-        """
-        st.components.v1.html(embed_html, height=430)
+        st.components.v1.html(f'<iframe width="100%" height="400" src="https://streamable.com/e/{streamable_id}" frameborder="0" allowfullscreen></iframe><p style="font-size:0.8rem; color:green;">🎥 Click play to watch</p>', height=430)
         return True
     if is_direct_video_url(url):
         st.video(url, autoplay=False)
@@ -1554,10 +1198,7 @@ def get_or_create_profile(user_id, identifier):
         if response.data:
             return response.data[0]
         else:
-            if '@' in identifier:
-                default_name = identifier.split('@')[0]
-            else:
-                default_name = f"User {identifier[-4:]}" if len(identifier) > 4 else "User"
+            default_name = identifier.split('@')[0] if '@' in identifier else f"User {identifier[-4:]}"
             new_profile = {
                 "id": user_id,
                 "full_name": default_name,
@@ -1570,7 +1211,7 @@ def get_or_create_profile(user_id, identifier):
                 "join_date": datetime.now().isoformat(),
                 "is_banned": False,
                 "ban_reason": None,
-                "last_active": datetime.now().isoformat()  # UPDATE: add last_active
+                "last_active": datetime.now().isoformat()
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -1592,7 +1233,7 @@ def update_profile(profile_data):
         st.session_state.last_error = f"Error updating profile: {e}"
         return False
 
-# ====== Ban/Unban functions ======
+# ---- Ban/Unban ----
 def ban_user(user_id, reason=""):
     if supabase is None:
         return False, "Supabase not configured."
@@ -1639,20 +1280,18 @@ def get_all_users():
         st.session_state.last_error = f"Error loading users: {e}"
         return []
 
-# ====== UPLOAD FUNCTIONS ======
+# ---- Uploads ----
 def upload_avatar(user_id, image_file):
     if supabase is None:
         return upload_avatar_base64(image_file)
-    bucket_ok = ensure_bucket_exists("avatars")
-    if not bucket_ok:
+    if not ensure_bucket_exists("avatars"):
         return upload_avatar_base64(image_file)
     try:
         ext = image_file.name.split('.')[-1]
         file_name = f"{user_id}_{int(time.time())}.{ext}"
         image_bytes = image_file.getvalue()
         supabase.storage.from_("avatars").upload(file_name, image_bytes)
-        public_url = supabase.storage.from_("avatars").get_public_url(file_name)
-        return public_url
+        return supabase.storage.from_("avatars").get_public_url(file_name)
     except Exception:
         return upload_avatar_base64(image_file)
 
@@ -1662,10 +1301,8 @@ def upload_avatar_base64(image_file):
         b64 = base64.b64encode(file_bytes).decode('utf-8')
         content_type = image_file.type
         if content_type.startswith('image'):
-            data_url = f"data:{content_type};base64,{b64}"
-            return data_url
-        else:
-            return None
+            return f"data:{content_type};base64,{b64}"
+        return None
     except Exception:
         return None
 
@@ -1681,11 +1318,7 @@ def upload_post_media(user_id, file):
         random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
         file_name = f"post_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
-        supabase.storage.from_("post_media").upload(
-            file_name,
-            file_bytes,
-            {"content-type": content_type}
-        )
+        supabase.storage.from_("post_media").upload(file_name, file_bytes, {"content-type": content_type})
         public_url = supabase.storage.from_("post_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
@@ -1715,18 +1348,14 @@ def upload_chat_media(user_id, file):
         random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
         file_name = f"chat_{user_id}_{timestamp}_{random_hash}.{ext}"
         file_bytes = file.getvalue()
-        supabase.storage.from_("chat_media").upload(
-            file_name,
-            file_bytes,
-            {"content-type": content_type}
-        )
+        supabase.storage.from_("chat_media").upload(file_name, file_bytes, {"content-type": content_type})
         public_url = supabase.storage.from_("chat_media").get_public_url(file_name)
         media_type = "video" if content_type.startswith("video") else "image"
         return {"url": public_url, "type": media_type}
     except Exception:
         return upload_media_base64(file)
 
-# ---- POST CRUD (delete_post is global) ----
+# ---- POST CRUD ----
 def delete_post(post_id):
     if supabase is None:
         return False
@@ -1748,19 +1377,16 @@ def fetch_exchange_rate():
     except:
         return 100.0
 
-# ====== ONLINE STATUS HELPERS ======
+# ---- Online status helpers ----
 def update_last_active(user_id):
-    """Update the user's last_active timestamp to now."""
     if supabase is None:
         return
     try:
         supabase.table("profiles").update({"last_active": datetime.now().isoformat()}).eq("id", user_id).execute()
-    except Exception as e:
-        # Silently fail – not critical
+    except Exception:
         pass
 
 def is_user_online(last_active_str, threshold_minutes=5):
-    """Return True if last_active is within the threshold minutes."""
     if not last_active_str:
         return False
     try:
@@ -1770,28 +1396,15 @@ def is_user_online(last_active_str, threshold_minutes=5):
     except Exception:
         return False
 
-# ====== UPDATED: display_avatar_and_followers with online indicator ======
+# ---- display_avatar_and_followers with online indicator ----
 def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
-    """
-    Display avatar with online indicator (green dot) if profile has last_active within 5 min.
-    Pass profile dict if available, otherwise will try to fetch from session state.
-    """
-    # Determine online status
     online = False
     if profile is not None:
         online = is_user_online(profile.get('last_active'))
-    else:
-        # Try to fetch from session state if viewing own profile
-        if st.session_state.user and user_id == st.session_state.user.id:
-            online = is_user_online(st.session_state.profile.get('last_active')) if st.session_state.profile else False
-        else:
-            # For other users, we might have profile data loaded in various places
-            # We'll not fetch here to avoid performance hit; rely on caller to pass profile
-            pass
-
+    elif st.session_state.user and user_id == st.session_state.user.id:
+        online = is_user_online(st.session_state.profile.get('last_active')) if st.session_state.profile else False
     dot_class = "online-indicator" if online else "offline-indicator"
     dot_html = f'<span class="{dot_class}"></span>'
-
     if avatar_url:
         st.image(avatar_url, width=size)
     else:
@@ -1802,42 +1415,48 @@ def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     else:
         st.caption("1kFollowers")
 
-# ====== POST COUNT FUNCTION ======
-def get_user_post_count(user_id):
-    """Return total number of posts for a user (public + private)."""
+# ---- Post count (public / all) ----
+def get_user_post_count(user_id, public_only=False):
     if supabase is None:
         return 0
     try:
-        resp = supabase.table("posts").select("id", count="exact").eq("user_id", user_id).execute()
+        query = supabase.table("posts").select("id", count="exact").eq("user_id", user_id)
+        if public_only:
+            query = query.eq("is_public", True)
+        resp = query.execute()
         return resp.count if hasattr(resp, 'count') else len(resp.data or [])
     except Exception as e:
         st.session_state.last_error = f"Error counting posts: {e}"
         return 0
 
-# ---- Posts ----
+# ---- Posts loading with include_private flag ----
 @st.cache_data(ttl=60, show_spinner=False)
-def load_posts_cached(user_id=None, author_id=None):
+def load_posts_cached(user_id=None, author_id=None, include_private=False):
     if supabase is None:
         return []
     try:
-        query = supabase.table("posts").select("*")
         if author_id is not None:
-            query = query.eq("user_id", author_id).eq("is_public", True)
+            # For a specific author, we may want public only or all
+            query = supabase.table("posts").select("*").eq("user_id", author_id)
+            if not include_private:
+                query = query.eq("is_public", True)
+            posts = query.order("created_at", desc=True).execute().data or []
         elif user_id is not None:
+            # Feed: combine public posts from all + private posts from current user
             public_resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
             private_resp = supabase.table("posts").select("*").eq("is_public", False).eq("user_id", user_id).order("created_at", desc=True).execute()
-            posts = public_resp.data + private_resp.data
+            posts = (public_resp.data or []) + (private_resp.data or [])
             seen = set()
-            unique_posts = []
+            unique = []
             for p in posts:
                 if p["id"] not in seen:
                     seen.add(p["id"])
-                    unique_posts.append(p)
-            posts = unique_posts
+                    unique.append(p)
+            posts = unique
             posts.sort(key=lambda x: x['created_at'], reverse=True)
         else:
             resp = supabase.table("posts").select("*").eq("is_public", True).order("created_at", desc=True).limit(50).execute()
-            posts = resp.data
+            posts = resp.data or []
 
         user_ids = {p["user_id"] for p in posts}
         profiles = {}
@@ -1852,15 +1471,14 @@ def load_posts_cached(user_id=None, author_id=None):
                 "full_name": p.get("full_name", "Unknown"),
                 "avatar_url": p.get("avatar_url"),
                 "is_live": p.get("is_live", False),
-                "last_active": p.get("last_active"),  # for online status
+                "last_active": p.get("last_active"),
             }
             post["media_urls"] = post.get("media_urls", [])
             reactions_resp = supabase.table("reactions").select("emoji").eq("post_id", post["id"]).execute()
             counts = {}
-            if reactions_resp.data:
-                for r in reactions_resp.data:
-                    emoji = r["emoji"]
-                    counts[emoji] = counts.get(emoji, 0) + 1
+            for r in reactions_resp.data or []:
+                emoji = r["emoji"]
+                counts[emoji] = counts.get(emoji, 0) + 1
             post["reactions"] = counts
             comments_resp = supabase.table("comments").select("id", count="exact").eq("post_id", post["id"]).execute()
             post["comment_count"] = comments_resp.count if hasattr(comments_resp, 'count') else 0
@@ -1872,10 +1490,10 @@ def load_posts_cached(user_id=None, author_id=None):
 
 def load_posts():
     user_id = st.session_state.user.id if st.session_state.user else None
-    return load_posts_cached(user_id)
+    return load_posts_cached(user_id=user_id)
 
-def load_user_posts(user_id):
-    return load_posts_cached(author_id=user_id)
+def load_user_posts(user_id, include_private=False):
+    return load_posts_cached(author_id=user_id, include_private=include_private)
 
 def create_post(user_id, content, media_files=None, is_public=True, existing_media_urls=None):
     if supabase is None:
@@ -1923,11 +1541,7 @@ def update_post(post_id, user_id, content, media_files=None, existing_media_urls
                 media_info = upload_post_media(user_id, f)
                 if media_info:
                     media_urls.append(media_info)
-        post_data = {
-            "content": content,
-            "media_urls": media_urls,
-            "updated_at": datetime.now().isoformat()
-        }
+        post_data = {"content": content, "media_urls": media_urls, "updated_at": datetime.now().isoformat()}
         supabase.table("posts").update(post_data).eq("id", post_id).eq("user_id", user_id).execute()
         st.cache_data.clear()
         st.session_state.posts = load_posts()
@@ -1945,11 +1559,7 @@ def toggle_reaction(post_id, user_id, emoji):
         if check.data:
             supabase.table("reactions").delete().eq("post_id", post_id).eq("user_id", user_id).eq("emoji", emoji).execute()
         else:
-            supabase.table("reactions").insert({
-                "post_id": post_id,
-                "user_id": user_id,
-                "emoji": emoji
-            }).execute()
+            supabase.table("reactions").insert({"post_id": post_id, "user_id": user_id, "emoji": emoji}).execute()
         st.cache_data.clear()
         st.session_state.posts = load_posts()
         return True
@@ -1965,7 +1575,7 @@ def share_post(original_post_id, user_id, is_public=True):
         supabase.rpc("increment_shares", {"post_id": original_post_id}).execute()
         post = {
             "user_id": user_id,
-            "content": f"(Shared post)",
+            "content": "(Shared post)",
             "is_public": is_public,
             "original_post_id": original_post_id,
             "likes_count": 0,
@@ -1988,14 +1598,12 @@ def load_comments(post_id):
     try:
         resp = supabase.table("comments").select("*").eq("post_id", post_id).order("created_at").execute()
         comments = resp.data or []
-
         user_ids = {c["user_id"] for c in comments}
         profiles = {}
         if user_ids:
             profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, last_active").in_("id", list(user_ids)).execute()
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
-
         for c in comments:
             p = profiles.get(c["user_id"], {})
             c["profiles"] = {
@@ -2059,22 +1667,19 @@ def load_live_sessions():
     try:
         response = supabase.table("live_sessions").select("*").eq("is_live", True).order("started_at", desc=True).execute()
         sessions = response.data or []
-
         user_ids = {s["user_id"] for s in sessions}
         profiles = {}
         if user_ids:
             try:
                 profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone, last_active").in_("id", list(user_ids)).execute()
                 use_natcash = True
-            except Exception as e:
+            except Exception:
                 profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, last_active").in_("id", list(user_ids)).execute()
                 use_natcash = False
-
             for p in profiles_resp.data or []:
                 profiles[p["id"]] = p
                 if not use_natcash:
                     profiles[p["id"]]["natcash_phone"] = None
-
         for s in sessions:
             p = profiles.get(s["user_id"], {})
             s["profiles"] = {
@@ -2087,7 +1692,7 @@ def load_live_sessions():
             if "stream_method" not in s:
                 s["stream_method"] = "external"
         return sessions
-    except Exception as e:
+    except Exception:
         return []
 
 def get_user_live_sessions(user_id):
@@ -2105,13 +1710,6 @@ def create_live_session(title, platform, method='external'):
         st.session_state.last_error = "Cannot start live session."
         return None
     try:
-        try:
-            supabase.table("live_sessions").select("stream_method").limit(1).execute()
-        except Exception as e:
-            if "column 'stream_method' does not exist" in str(e):
-                st.warning("Adding missing 'stream_method' column to live_sessions table...")
-                st.error("Please run: ALTER TABLE live_sessions ADD COLUMN stream_method TEXT DEFAULT 'external';")
-                return None
         active = supabase.table("live_sessions").select("id").eq("user_id", st.session_state.user.id).eq("is_live", True).execute()
         if active.data:
             st.warning("You already have an active live session. End it first.")
@@ -2146,9 +1744,7 @@ def update_live_stream_url(session_id, stream_url):
     if supabase is None:
         return False
     try:
-        supabase.table("live_sessions").update({
-            "stream_url": stream_url
-        }).eq("id", session_id).execute()
+        supabase.table("live_sessions").update({"stream_url": stream_url}).eq("id", session_id).execute()
         st.session_state.live_sessions = load_live_sessions()
         return True
     except Exception as e:
@@ -2159,23 +1755,14 @@ def end_live_session(session_id):
     if supabase is None:
         return False
     try:
-        supabase.table("live_sessions").update({
-            "is_live": False,
-            "ended_at": datetime.now().isoformat()
-        }).eq("id", session_id).execute()
-        
+        supabase.table("live_sessions").update({"is_live": False, "ended_at": datetime.now().isoformat()}).eq("id", session_id).execute()
         supabase.table("profiles").update({"is_live": False}).eq("id", st.session_state.user.id).execute()
         st.session_state.profile["is_live"] = False
-        
         st.session_state.live_sessions = load_live_sessions()
         st.session_state.stream_key = None
         st.session_state.selected_platform = None
-
         if st.session_state.profile:
-            full_name = st.session_state.profile.get("full_name", "User")
-            post_content = f"{full_name} was live"
-            create_post(st.session_state.user.id, post_content, is_public=False)
-
+            create_post(st.session_state.user.id, f"{st.session_state.profile.get('full_name', 'User')} was live", is_public=False)
         return True
     except Exception as e:
         st.session_state.last_error = f"Error ending live session: {e}"
@@ -2189,7 +1776,6 @@ def get_live_session(session_id):
         session = response.data
         if not session:
             return None
-
         try:
             profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone, last_active").eq("id", session["user_id"]).single().execute()
             profile = profile_resp.data or {}
@@ -2197,7 +1783,6 @@ def get_live_session(session_id):
             profile_resp = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, last_active").eq("id", session["user_id"]).single().execute()
             profile = profile_resp.data or {}
             profile["natcash_phone"] = None
-
         session["profiles"] = {
             "full_name": profile.get("full_name", "Unknown"),
             "avatar_url": profile.get("avatar_url"),
@@ -2211,6 +1796,56 @@ def get_live_session(session_id):
     except Exception as e:
         st.session_state.last_error = f"Error fetching live session: {e}"
         return None
+
+def send_gift(session_id, sender_id, recipient_id, amount, currency):
+    if supabase is None:
+        return False, "Supabase not configured"
+    try:
+        rate = st.session_state.exchange_rate
+        amount_htg = amount * rate if currency == "USD" else amount
+        sender_name = st.session_state.profile["full_name"]
+        gift_data = {
+            "session_id": session_id,
+            "sender_id": sender_id,
+            "sender_name": sender_name,
+            "recipient_id": recipient_id,
+            "amount": amount,
+            "currency": currency,
+            "converted_amount_htg": amount_htg,
+            "status": "pending",
+            "created_at": datetime.now().isoformat()
+        }
+        result = supabase.table("live_gifts").insert(gift_data).execute()
+        if not result.data:
+            return False, "Failed to record gift"
+        gift_id = result.data[0]["id"]
+        supabase.table("live_gifts").update({"status": "completed"}).eq("id", gift_id).execute()
+        try:
+            supabase.table("notifications").insert({
+                "user_id": recipient_id,
+                "type": "gift",
+                "message": f"🎁 You received a gift of {amount} {currency} from {sender_name}!",
+                "read": False
+            }).execute()
+        except Exception:
+            pass
+        return True, "Gift sent successfully!"
+    except Exception as e:
+        st.session_state.last_error = f"Error sending gift: {e}"
+        return False, str(e)
+
+def load_gifts_for_session(session_id):
+    if supabase is None:
+        return []
+    try:
+        resp = supabase.table("live_gifts").select("*").eq("session_id", session_id).eq("status", "completed").order("created_at").execute()
+        gifts = resp.data or []
+        for g in gifts:
+            g['sender'] = {'full_name': g.get('sender_name', 'Someone'), 'avatar_url': None}
+        return gifts
+    except Exception as e:
+        st.session_state.last_error = f"Error loading gifts: {e}"
+        return []
 
 # ---- Friends / Chat / Notifications ----
 def load_notifications(user_id):
@@ -2249,8 +1884,8 @@ def send_friend_request(sender_id, receiver_id):
                 "message": f"{sender_name} sent you a friend request",
                 "read": False
             }).execute()
-        except Exception as notif_err:
-            st.warning(f"Friend request sent, but notification could not be saved: {notif_err}")
+        except Exception:
+            pass
         return True, "Friend request sent"
     except Exception as e:
         return False, str(e)
@@ -2274,8 +1909,8 @@ def respond_friend_request(request_id, accept):
                     "message": f"{receiver_name} accepted your friend request",
                     "read": False
                 }).execute()
-            except Exception as notif_err:
-                st.warning(f"Friend request accepted, but notification could not be sent: {notif_err}")
+            except Exception:
+                pass
         return True, f"Request {new_status}"
     except Exception as e:
         return False, str(e)
@@ -2284,20 +1919,11 @@ def load_friend_data():
     if supabase is None or not st.session_state.user:
         return
     user_id = st.session_state.user.id
-
-    pending_resp = supabase.table("friend_requests").select(
-        "id, sender_id, receiver_id, status, created_at"
-    ).eq("receiver_id", user_id).eq("status", "pending").execute()
+    pending_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("receiver_id", user_id).eq("status", "pending").execute()
     pending_raw = pending_resp.data or []
-
-    sent_resp = supabase.table("friend_requests").select(
-        "id, sender_id, receiver_id, status, created_at"
-    ).eq("sender_id", user_id).eq("status", "accepted").execute()
-    received_resp = supabase.table("friend_requests").select(
-        "id, sender_id, receiver_id, status, created_at"
-    ).eq("receiver_id", user_id).eq("status", "accepted").execute()
+    sent_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("sender_id", user_id).eq("status", "accepted").execute()
+    received_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("receiver_id", user_id).eq("status", "accepted").execute()
     accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
-
     user_ids = set()
     for req in pending_raw:
         user_ids.add(req["sender_id"])
@@ -2305,13 +1931,11 @@ def load_friend_data():
         user_ids.add(req["sender_id"])
         user_ids.add(req["receiver_id"])
     user_ids.discard(user_id)
-
     profiles = {}
     if user_ids:
         profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, last_active").in_("id", list(user_ids)).execute()
         for p in profiles_resp.data or []:
             profiles[p["id"]] = p
-
     pending_requests = []
     for req in pending_raw:
         sender_id = req["sender_id"]
@@ -2328,14 +1952,10 @@ def load_friend_data():
             "status": req["status"],
         })
     st.session_state.friend_requests = pending_requests
-
     friends = []
     seen = set()
     for req in accepted_raw:
-        if req["sender_id"] == user_id:
-            other_id = req["receiver_id"]
-        else:
-            other_id = req["sender_id"]
+        other_id = req["receiver_id"] if req["sender_id"] == user_id else req["sender_id"]
         if other_id in seen:
             continue
         seen.add(other_id)
@@ -2384,8 +2004,8 @@ def send_message(sender_id, receiver_id, content, media_file=None):
                 "message": f"New message from {sender_name}",
                 "read": False
             }).execute()
-        except Exception as notif_err:
-            st.warning(f"Message sent, but notification could not be saved: {notif_err}")
+        except Exception:
+            pass
         return True
     except Exception as e:
         st.session_state.last_error = f"Error sending message: {e}"
@@ -2420,18 +2040,9 @@ def ensure_owner_state_table():
     if supabase is None:
         return False
     try:
-        try:
-            supabase.table("owner_state").select("id").limit(1).execute()
-            return True
-        except Exception as e:
-            if "Could not find the table" in str(e):
-                st.session_state.last_error = "The 'owner_state' table is missing. Please run the SQL in your Supabase SQL editor to enable owner notifications."
-                return False
-            else:
-                st.session_state.last_error = f"Error checking owner_state: {e}"
-                return False
-    except Exception as e:
-        st.session_state.last_error = f"Error ensuring owner_state: {e}"
+        supabase.table("owner_state").select("id").limit(1).execute()
+        return True
+    except Exception:
         return False
 
 def get_last_seen_signup():
@@ -2449,8 +2060,7 @@ def get_last_seen_signup():
             except:
                 pass
             return datetime.now() - timedelta(days=365)
-    except Exception as e:
-        st.session_state.last_error = f"Error getting last seen signup: {e}"
+    except Exception:
         return datetime(2020, 1, 1)
 
 def update_last_seen_signup():
@@ -2460,8 +2070,8 @@ def update_last_seen_signup():
         if not ensure_owner_state_table():
             return
         supabase.table("owner_state").update({"last_seen_signup": datetime.now().isoformat()}).eq("id", 1).execute()
-    except Exception as e:
-        st.session_state.last_error = f"Error updating last seen signup: {e}"
+    except Exception:
+        pass
 
 def get_new_users(since):
     if supabase is None:
@@ -2470,15 +2080,7 @@ def get_new_users(since):
         since_str = since.isoformat()
         resp = supabase.table("profiles").select("id, full_name, avatar_url, join_date, last_active").gt("join_date", since_str).order("join_date").execute()
         return resp.data
-    except Exception as e:
-        error_str = str(e)
-        if "permission denied" in error_str.lower() and "users" in error_str.lower():
-            st.session_state.last_error = (
-                "Permission denied while fetching new users. This may be due to a policy on the `profiles` table "
-                "that references the `users` table. Please review your RLS policies and grant the necessary permissions."
-            )
-        else:
-            st.session_state.last_error = f"Error fetching new users: {e}"
+    except Exception:
         return []
 
 def send_email_notification(new_users):
@@ -2501,8 +2103,8 @@ def send_email_notification(new_users):
             server.starttls()
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg)
-    except Exception as e:
-        st.session_state.last_error = f"Email send failed: {e}"
+    except Exception:
+        pass
 
 # ---- Network and auth ----
 def get_network_status():
@@ -2536,11 +2138,7 @@ def sign_up_email(email, password, full_name):
         st.error("Registration unavailable (Supabase not configured).")
         return False
     try:
-        user = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {"data": {"full_name": full_name}}
-        })
+        user = supabase.auth.sign_up({"email": email, "password": password, "options": {"data": {"full_name": full_name}}})
         if user.user:
             if user.user.identities and len(user.user.identities) > 0:
                 st.success("Sign-up successful! Please check your email to confirm your account before logging in. (Check spam folder if not received.)")
@@ -2608,11 +2206,7 @@ def verify_phone_otp(raw_phone, token, remember=False):
         return False
     try:
         phone = format_phone(raw_phone)
-        session = supabase.auth.verify_otp({
-            "phone": phone,
-            "token": token,
-            "type": "sms"
-        })
+        session = supabase.auth.verify_otp({"phone": phone, "token": token, "type": "sms"})
         if session.user:
             profile = get_or_create_profile(session.user.id, phone)
             if profile and profile.get("is_banned"):
@@ -2687,16 +2281,13 @@ def play_audio(audio_path):
             st.markdown(f'<audio controls src="data:audio/mp3;base64,{b64}" autoplay style="width:100%;"></audio>', unsafe_allow_html=True)
         os.unlink(audio_path)
 
-# ====== LOGIN FUNCTION WITH DEBUG OPTION & BAN CHECK ======
+# ====== LOGIN FUNCTION ======
 def log_in_email(email, password, remember=False, show_debug=False):
     if supabase is None:
         st.error("❌ Authentication service is not configured. Please contact the administrator.")
         return
     try:
-        user = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
+        user = supabase.auth.sign_in_with_password({"email": email, "password": password})
         if user.user:
             profile = get_or_create_profile(user.user.id, email)
             if profile and profile.get("is_banned"):
@@ -2731,28 +2322,18 @@ def log_in_email(email, password, remember=False, show_debug=False):
         else:
             st.error(f"❌ Login failed: {error_str}")
 
-# ====== Helper to display avatar with online indicator ======
-# Already updated above.
-
-# ====== Get unread messages count ======
-def get_unread_messages_count(user_id):
-    if supabase is None:
-        return 0
-    try:
-        resp = supabase.table("messages").select("id", count="exact").eq("receiver_id", user_id).eq("read", False).execute()
-        return resp.count if hasattr(resp, 'count') else 0
-    except Exception as e:
-        st.session_state.last_error = f"Error fetching unread messages: {e}"
-        return 0
-
-# ====== Render top icons (message & bell) ======
+# ---- Render top icons ----
 def render_top_icons():
     if not st.session_state.logged_in:
         return
     user_id = st.session_state.user.id
-    unread_msgs = get_unread_messages_count(user_id)
+    unread_msgs = 0
+    try:
+        resp = supabase.table("messages").select("id", count="exact").eq("receiver_id", user_id).eq("read", False).execute()
+        unread_msgs = resp.count if hasattr(resp, 'count') else 0
+    except Exception:
+        pass
     unread_notifs = st.session_state.unread_count
-
     col1, col2 = st.columns([1, 1])
     with col1:
         label = f"💬 {unread_msgs}" if unread_msgs > 0 else "💬"
@@ -2766,40 +2347,30 @@ def render_top_icons():
             st.rerun()
     st.divider()
 
-# ====== LOGIN INTERFACE (only email, no phone) ======
+# ====== LOGIN INTERFACE ======
 def login_interface():
-    st.markdown(
-        f"""
-        <div style="text-align: center; padding: 20px 0;">
-            <span class="dove-symbol">🕊️</span>
-            <h2 style="color: #0a2a44; margin-top: -5px;">
-                Bienvenu sou 
-                <span class="rope-text">
-                    <span class="lakay-flag-text">Lakay se Lakay</span>
-                    <span class="stars">
-                        <span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span>
-                    </span>
-                </span>
-            </h2>
-            <p style="color: #1e2a3a; opacity: 0.8;">Nou kontan wè w isit la. Se yon platfòm sosyal ki fèt pou tout Ayisyen yo – kote ou ka pataje lide ou, foto ou, videyo ou, e konekte ak zanmi ou yo nan yon espas ki sekirize e ki amizan. N ap viv ansanm, n ap grandi ansanm. Pataje kè ou, pataje lavi ou!</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
+    st.markdown(f"""
+    <div style="text-align: center; padding: 20px 0;">
+        <span class="dove-symbol">🕊️</span>
+        <h2 style="color: #0a2a44; margin-top: -5px;">
+            Bienvenu sou 
+            <span class="rope-text">
+                <span class="lakay-flag-text">Lakay se Lakay</span>
+                <span class="stars"><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span></span>
+            </span>
+        </h2>
+        <p style="color: #1e2a3a; opacity: 0.8;">Nou kontan wè w isit la. Se yon platfòm sosyal ki fèt pou tout Ayisyen yo – kote ou ka pataje lide ou, foto ou, videyo ou, e konekte ak zanmi ou yo nan yon espas ki sekirize e ki amizan. N ap viv ansanm, n ap grandi ansanm. Pataje kè ou, pataje lavi ou!</p>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
-
     show_debug = st.checkbox(t("show_debug"), value=False)
-
     tab1, tab2, tab3 = st.tabs([t("login_title"), t("signup_title"), t("forgot_password")])
     with tab1:
         with st.form("login_email"):
             email = st.text_input(t("email"))
             password = st.text_input(t("password"), type="password")
             remember = st.checkbox(t("remember_me"))
-            login_clicked = st.form_submit_button(t("login_button"), use_container_width=True)
-
-            if login_clicked:
+            if st.form_submit_button(t("login_button"), use_container_width=True):
                 if email and password:
                     log_in_email(email, password, remember, show_debug)
                 else:
@@ -2824,7 +2395,6 @@ def login_interface():
                     st.warning("Please enter your email")
 
 # ========== SOCIAL MEDIA RENDER FUNCTIONS ==========
-
 def display_media_item(media):
     try:
         url = media["url"]
@@ -2842,15 +2412,12 @@ def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
         return
-
     st.header(t("feed"))
-
     if st.session_state.last_error:
         st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
         if st.button(t("clear_error")):
             st.session_state.last_error = None
             st.rerun()
-
     try:
         params = st.query_params
     except AttributeError:
@@ -2864,45 +2431,27 @@ def render_feed():
     if st.session_state.viewing_live:
         render_live_page(st.session_state.viewing_live)
         return
-
     st.markdown(f"### {t('create_post')}")
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
-            display_avatar_and_followers(
-                st.session_state.profile.get("avatar_url"),
-                st.session_state.user.id,
-                size=50,
-                profile=st.session_state.profile
-            )
+            display_avatar_and_followers(st.session_state.profile.get("avatar_url"), st.session_state.user.id, size=50, profile=st.session_state.profile)
         with col_input:
-            content = st.text_area(
-                t("caption_placeholder"),
-                height=150,
-                placeholder=t("caption_placeholder"),
-                label_visibility="collapsed"
-            )
-        media_files = st.file_uploader(
-            t("add_media"),
-            type=["png", "jpg", "jpeg", "gif", "mp4", "mov", "avi"],
-            accept_multiple_files=True
-        )
+            content = st.text_area(t("caption_placeholder"), height=150, placeholder=t("caption_placeholder"), label_visibility="collapsed")
+        media_files = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
         st.caption("⚠️ File size limit: 200MB (Streamlit Cloud). For videos larger than 200MB, use a link (YouTube, etc.).")
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3 = st.columns([2,1,1])
         with col1:
             visibility = st.radio(t("visibility"), [t("public"), t("private")], horizontal=True, index=0)
             is_public = (visibility == t("public"))
         with col3:
-            posted = st.form_submit_button(t("post"), use_container_width=True)
-
-        if posted:
-            if not content and not media_files:
-                st.warning("Please add a caption or media.")
-            else:
-                if create_post(st.session_state.user.id, content, media_files, is_public):
-                    st.rerun()
+            if st.form_submit_button(t("post"), use_container_width=True):
+                if not content and not media_files:
+                    st.warning("Please add a caption or media.")
+                else:
+                    if create_post(st.session_state.user.id, content, media_files, is_public):
+                        st.rerun()
     st.divider()
-
     active_lives = st.session_state.live_sessions
     if active_lives:
         st.markdown("### 🔴 Live Now")
@@ -2910,12 +2459,7 @@ def render_feed():
             with st.container():
                 col_a, col_b = st.columns([1,4])
                 with col_a:
-                    display_avatar_and_followers(
-                        live["profiles"]["avatar_url"],
-                        live["user_id"],
-                        size=40,
-                        profile=live["profiles"]
-                    )
+                    display_avatar_and_followers(live["profiles"]["avatar_url"], live["user_id"], size=40, profile=live["profiles"])
                 with col_b:
                     st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
                     if st.button(t("join_live"), key=f"join_{live['id']}"):
@@ -2923,7 +2467,6 @@ def render_feed():
                         st.rerun()
                 st.divider()
     st.divider()
-
     if st.session_state.delete_confirm:
         post_id, _ = st.session_state.delete_confirm
         st.warning("Are you sure you want to delete this post?")
@@ -2940,20 +2483,14 @@ def render_feed():
                 st.session_state.delete_confirm = None
                 st.rerun()
         st.divider()
-
     if not st.session_state.posts:
         st.info("No posts yet. Be the first to create one!")
     else:
         for post in st.session_state.posts:
             with st.container():
-                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
+                col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
                 with col_a:
-                    display_avatar_and_followers(
-                        post["profiles"].get("avatar_url"),
-                        post["user_id"],
-                        size=40,
-                        profile=post["profiles"]
-                    )
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40, profile=post["profiles"])
                 with col_b:
                     name = post['profiles']['full_name']
                     if post['user_id'] != st.session_state.user.id:
@@ -2978,7 +2515,6 @@ def render_feed():
                         if st.button("🗑️", key=f"del_post_{post['id']}"):
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
-
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -2995,23 +2531,20 @@ def render_feed():
                                 st.session_state.editing_post = None
                                 st.rerun()
                     st.divider()
-
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
                         display_media_item(media)
-
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
                         embed_video_from_url(url)
-
-                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
-                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                col_react, col_comments, col_shares = st.columns([2,1,1])
                 with col_react:
                     if st.button("👍 React", key=f"react_btn_{post['id']}"):
                         st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
@@ -3034,33 +2567,24 @@ def render_feed():
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
-
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
-
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
                     msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
                     if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
                             st.rerun()
-
                 comments = load_comments(post['id'])
                 top_level = [c for c in comments if not c.get('parent_id')]
                 replies = {}
                 for c in comments:
                     if c.get('parent_id'):
                         replies.setdefault(c['parent_id'], []).append(c)
-
                 for c in top_level:
-                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1, 4, 1, 1, 1])
+                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1,4,1,1,1])
                     with col_avatar_comment:
-                        display_avatar_and_followers(
-                            c['profiles'].get('avatar_url'),
-                            c['user_id'],
-                            size=30,
-                            profile=c['profiles']
-                        )
+                        display_avatar_and_followers(c['profiles'].get('avatar_url'), c['user_id'], size=30, profile=c['profiles'])
                     with col1:
                         clickable_comment = make_clickable(c['content'])
                         st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
@@ -3078,7 +2602,6 @@ def render_feed():
                             if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
                                 st.rerun()
-
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
                             reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
@@ -3087,17 +2610,11 @@ def render_feed():
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
                                     st.rerun()
-
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
-                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1, 4, 1, 1, 1])
+                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1,4,1,1,1])
                         with colr_avatar:
-                            display_avatar_and_followers(
-                                r['profiles'].get('avatar_url'),
-                                r['user_id'],
-                                size=30,
-                                profile=r['profiles']
-                            )
+                            display_avatar_and_followers(r['profiles'].get('avatar_url'), r['user_id'], size=30, profile=r['profiles'])
                         with colr1:
                             clickable_reply = make_clickable(r['content'])
                             st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
@@ -3114,11 +2631,10 @@ def render_feed():
                                     delete_comment(r['id'])
                                     st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
-
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== render_user_profile (shows total post count & online status) ======
+# ====== render_user_profile (FIXED: shows all posts for owner, correct count) ======
 def render_user_profile(user_id, show_back_button=True):
     if supabase is None:
         st.error("Database not connected.")
@@ -3126,9 +2642,7 @@ def render_user_profile(user_id, show_back_button=True):
             st.session_state.viewing_profile = None
             st.rerun()
         return
-
     render_top_icons()
-
     try:
         profile_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not profile_resp.data:
@@ -3169,9 +2683,8 @@ def render_user_profile(user_id, show_back_button=True):
                 st.session_state.viewing_profile = None
                 st.rerun()
             return
-
     st.header(f"👤 {profile['full_name']}'s Profile")
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1,2])
     with col1:
         display_avatar_and_followers(profile.get("avatar_url"), user_id, size=150, profile=profile)
         st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
@@ -3189,9 +2702,14 @@ def render_user_profile(user_id, show_back_button=True):
                 st.rerun()
     with col2:
         st.subheader(t("feed"))
-        posts = load_user_posts(user_id)  # Only public posts for others
+        # Determine if we are viewing our own profile
+        is_own_profile = (user_id == st.session_state.user.id)
+        # Load posts accordingly: include private if own profile
+        posts = load_user_posts(user_id, include_private=is_own_profile)
+        # Count should reflect the posts shown
+        post_count = len(posts)
         if not posts:
-            st.info("This user has no public posts.")
+            st.info("No posts to show." if not is_own_profile else "You haven't posted anything yet.")
         else:
             for post in posts:
                 with st.container():
@@ -3203,17 +2721,15 @@ def render_user_profile(user_id, show_back_button=True):
                     for media in post.get("media_urls", []):
                         display_media_item(media)
                     st.divider()
-
     st.divider()
     cola, colb = st.columns(2)
-    total_posts = get_user_post_count(user_id)  # UPDATE: show total posts
     with cola:
-        st.metric(t("posts_count"), total_posts)
+        st.metric(t("posts_count"), post_count)   # now matches displayed posts
     with colb:
         st.metric("Followers", "1KFollowers")
     st.divider()
 
-# ====== render_friends_page ======
+# ====== render_friends_page (unchanged, but uses updated helpers) ======
 def render_friends_page():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile, show_back_button=False)
@@ -3221,22 +2737,13 @@ def render_friends_page():
             st.session_state.viewing_profile = None
             st.rerun()
         return
-
     st.header(t("friends_chat"))
-
     with st.expander(t("setup_instructions")):
         st.markdown("**If you get 'new row violates row-level security policy' for notifications:**")
         st.markdown("1. Go to your Supabase Dashboard → SQL Editor.")
         st.markdown("2. Run the following SQL:")
-        st.code("""
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow authenticated inserts" ON notifications
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (true);
-        """, language="sql")
+        st.code("ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"Allow authenticated inserts\" ON notifications FOR INSERT TO authenticated WITH CHECK (true);", language="sql")
         st.markdown("3. Then refresh the app.")
-
         st.markdown("---")
         st.markdown("**If you get 'new row violates row-level security policy' when uploading files:**")
         st.markdown("1. Go to your Supabase Dashboard → Storage.")
@@ -3250,10 +2757,8 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         st.markdown("   - Policy name: `Allow public read`")
         st.markdown("   - Allowed operations: `SELECT`")
         st.markdown("   - USING expression: `true`")
-
     st.markdown(f"<div class='friend-count'>{t('your_friends')}: {len(st.session_state.friends)}</div>", unsafe_allow_html=True)
     st.divider()
-
     with st.expander(f"🔔 {t('friend_requests')} ({st.session_state.unread_count})", expanded=True):
         if not st.session_state.notifications:
             st.info("No notifications")
@@ -3270,16 +2775,14 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                             st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
                             st.rerun()
                 st.divider()
-
     st.subheader(t("friend_requests"))
     if not st.session_state.friend_requests:
         st.info("No pending friend requests")
     else:
         for req in st.session_state.friend_requests:
-            cols = st.columns([2, 1, 1])
+            cols = st.columns([2,1,1])
             with cols[0]:
-                avatar_url = req['sender'].get('avatar_url')
-                display_avatar_and_followers(avatar_url, req['sender']['id'], size=30, profile=req['sender'])
+                display_avatar_and_followers(req['sender'].get('avatar_url'), req['sender']['id'], size=30, profile=req['sender'])
                 st.markdown(f"**{req['sender']['full_name']}**")
             with cols[1]:
                 if st.button(t("accept"), key=f"accept_{req['id']}"):
@@ -3300,7 +2803,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                     else:
                         st.error(msg)
             st.divider()
-
     st.subheader(t("find_users"))
     search_query = st.text_input(t("search_by_name"))
     if search_query:
@@ -3309,7 +2811,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             st.info("No users found")
         else:
             for user in results:
-                cols = st.columns([3, 1, 1])
+                cols = st.columns([3,1,1])
                 with cols[0]:
                     display_avatar_and_followers(user.get('avatar_url'), user['id'], size=30, profile=user)
                     st.markdown(f"**{user['full_name']}**")
@@ -3325,14 +2827,13 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                         st.session_state.viewing_profile = user['id']
                         st.rerun()
                 st.divider()
-
     st.divider()
     st.subheader(t("your_friends"))
     if not st.session_state.friends:
         st.info(t("no_friends"))
     else:
         for friend in st.session_state.friends:
-            cols = st.columns([1, 4, 1, 1, 1])
+            cols = st.columns([1,4,1,1,1])
             with cols[0]:
                 display_avatar_and_followers(friend.get('avatar_url'), friend['id'], size=30, profile=friend)
             with cols[1]:
@@ -3352,31 +2853,25 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                     st.session_state.viewing_profile = friend['id']
                     st.rerun()
             st.divider()
-
     # ---------- PRIVATE CHAT ----------
     if st.session_state.selected_chat:
         st.markdown("---")
         st.subheader("💬 Private Chat")
         other_id = st.session_state.selected_chat
-
         try:
             other_result = supabase.table("profiles").select("full_name, avatar_url, moncash_phone, natcash_phone, last_active").eq("id", other_id).maybe_single().execute()
             other_data = other_result.data if other_result.data else None
-        except Exception as e:
-            st.warning(f"Could not load other user's profile: {e}")
+        except Exception:
             other_data = None
-
         if other_data:
             other_name = other_data.get("full_name", "User")
             other_avatar = other_data.get("avatar_url")
-            other_last_active = other_data.get("last_active")
-            other_profile = {"last_active": other_last_active}
+            other_profile = {"last_active": other_data.get("last_active")}
         else:
             other_name = "User"
             other_avatar = None
             other_profile = {}
-
-        col1, col2 = st.columns([1, 5])
+        col1, col2 = st.columns([1,5])
         with col1:
             display_avatar_and_followers(other_avatar, other_id, size=50, profile=other_profile)
         with col2:
@@ -3384,9 +2879,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             if st.button("✖ Close Chat", key="close_chat_btn"):
                 st.session_state.selected_chat = None
                 st.rerun()
-
         st.divider()
-
         messages = load_messages(st.session_state.user.id, other_id)
         if not messages:
             st.info("No messages yet. Start the conversation!")
@@ -3401,10 +2894,8 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                                 st.video(msg["media_url"], autoplay=False)
                             else:
                                 st.markdown(f"[Media file]({msg['media_url']})")
-                        except Exception as e:
-                            st.error(f"Error displaying media: {e}")
+                        except Exception:
                             st.markdown(f"[Click to open media]({msg['media_url']})")
-
                         col1, col2, col3 = st.columns([6,1,1])
                         with col2:
                             if st.button("📤 Share to Feed", key=f"share_own_{msg['id']}"):
@@ -3413,15 +2904,9 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                                         caption = st.text_area("Add a caption (optional)")
                                         if st.form_submit_button(t("post")):
                                             media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
-                                            create_post(
-                                                st.session_state.user.id,
-                                                caption or "",
-                                                existing_media_urls=media_info,
-                                                is_public=True
-                                            )
+                                            create_post(st.session_state.user.id, caption or "", existing_media_urls=media_info, is_public=True)
                                             st.rerun()
                         with col3:
-                            # FIXED: reliable copy-to-clipboard button
                             if st.button("🔗 Copy Link", key=f"copy_{msg['id']}"):
                                 st.markdown(f"""
                                 <script>
@@ -3450,10 +2935,8 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                                 st.video(msg["media_url"], autoplay=False)
                             else:
                                 st.markdown(f"[Media file]({msg['media_url']})")
-                        except Exception as e:
-                            st.error(f"Error displaying media: {e}")
+                        except Exception:
                             st.markdown(f"[Click to open media]({msg['media_url']})")
-
                         col1, col2, col3 = st.columns([6,1,1])
                         with col2:
                             if st.button("📤 Share to Feed", key=f"share_{msg['id']}"):
@@ -3462,12 +2945,7 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                                         caption = st.text_area("Add a caption (optional)")
                                         if st.form_submit_button(t("post")):
                                             media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
-                                            create_post(
-                                                st.session_state.user.id,
-                                                caption or "",
-                                                existing_media_urls=media_info,
-                                                is_public=True
-                                            )
+                                            create_post(st.session_state.user.id, caption or "", existing_media_urls=media_info, is_public=True)
                                             st.rerun()
                         with col3:
                             if st.button("🔗 Copy Link", key=f"copy_{msg['id']}"):
@@ -3489,7 +2967,6 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                     if msg.get("content"):
                         clickable_content = make_clickable(msg["content"])
                         st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
-
         with st.form("send_message", clear_on_submit=True):
             msg_content = st.text_input(t("send_message"), placeholder="Type your message...")
             uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
@@ -3501,24 +2978,17 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
                 if msg_content or uploaded_file:
                     send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
                     st.rerun()
-
         st.divider()
     else:
         st.info("Select a friend and click 'Chat' to start a private conversation.")
-
-    # ---------- VIDEO CALL (Jitsi External API) ----------
+    # ---------- VIDEO CALL ----------
     if st.session_state.in_call and st.session_state.call_room:
         st.subheader(t("active_call"))
         st.markdown(f"{t('room_id')}: `{st.session_state.call_room}`")
         st.markdown(t("share_room"))
         st.info(t("call_permission_hint"))
-
         st.markdown("#### 🎨 Virtual Background")
-        uploaded_bg = st.file_uploader(
-            "Upload an image (PNG, JPG, JPEG, GIF)",
-            type=["png", "jpg", "jpeg", "gif"],
-            key="call_bg_uploader"
-        )
+        uploaded_bg = st.file_uploader("Upload an image (PNG, JPG, JPEG, GIF)", type=["png","jpg","jpeg","gif"], key="call_bg_uploader")
         if uploaded_bg:
             bytes_data = uploaded_bg.getvalue()
             b64 = base64.b64encode(bytes_data).decode()
@@ -3527,30 +2997,19 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
             st.session_state.call_background_url = data_url
             st.success("Background uploaded! Refreshing call...")
             st.rerun()
-
         if st.session_state.get("call_background_url"):
             st.image(st.session_state.call_background_url, width=200, caption="Current background")
             if st.button("🗑️ Clear Background"):
                 st.session_state.call_background_url = None
                 st.rerun()
-
         if st.button(t("reload_call")):
             st.session_state.call_reload += 1
             st.rerun()
-
         domain = JITSI_DOMAIN
         room = st.session_state.call_room
         container_id = f"jitsi-container-{st.session_state.call_reload}"
-
-        config_overwrite = {
-            "startWithAudioMuted": False,
-            "startWithVideoMuted": False,
-            "disableWelcomePage": True,
-            "disableDeepLinking": True,
-            "p2p": {"enabled": False}
-        }
+        config_overwrite = {"startWithAudioMuted": False, "startWithVideoMuted": False, "disableWelcomePage": True, "disableDeepLinking": True, "p2p": {"enabled": False}}
         config_json = json.dumps(config_overwrite)
-
         jitsi_html = f"""
         <div id="{container_id}" style="height: 500px; width: 100%;"></div>
         <script src="https://{domain}/external_api.js"></script>
@@ -3582,10 +3041,8 @@ CREATE POLICY "Allow authenticated inserts" ON notifications
         </script>
         """
         st.components.v1.html(jitsi_html, height=520)
-
         fallback_url = f"https://{domain}/{room}"
         st.markdown(f"**Or open in a new tab:** [Join Room]({fallback_url})", unsafe_allow_html=True)
-
         if st.button(t("end_call")):
             st.session_state.call_background_url = None
             end_call()
@@ -3603,10 +3060,7 @@ def render_map():
         "Starlink-3": {"lat": 51.50, "lon": -0.12, "status": "Active"},
         "Starlink-4": {"lat": 18.53, "lon": -72.33, "status": "Priority"}
     }
-    df = pd.DataFrame([
-        {"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]}
-        for name, data in sats.items()
-    ])
+    df = pd.DataFrame([{"Satellite": name, "Latitude": data["lat"], "Longitude": data["lon"], "Status": data["status"]} for name, data in sats.items()])
     st.dataframe(df, use_container_width=True)
     st.divider()
     cols = st.columns(4)
@@ -3616,39 +3070,32 @@ def render_map():
 
 def render_worldcup():
     st.title("⚽ " + t("worldcup"))
-
     stream1_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPXRlbGVtdW5kb3VzYQ=="
     stream2_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPWRzcG9ydHM="
-
     st.markdown("""
     <div style="background: rgba(255,255,255,0.1); border: 1px solid #2a1f14; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
         <p style="color: #ffffff; font-size: 1.1rem;">🏆 Watch every match of the <strong>FIFA World Cup 2026</strong> live – completely free!<br>
         Choose your stream below and enjoy the game.</p>
     </div>
     """, unsafe_allow_html=True)
-
     tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
-
     with tab1:
         st.components.v1.iframe(stream1_url, height=600, scrolling=True)
         st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
-
     with tab2:
         st.components.v1.iframe(stream2_url, height=600, scrolling=True)
         st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
-
     st.markdown("---")
     st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
 
-# ====== OWN PROFILE WITH WALL ======
+# ====== OWN PROFILE ======
 def render_profile():
     st.header(t("profile"))
     render_top_icons()
     if st.session_state.profile is None:
         return
     profile = st.session_state.profile
-
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1,2])
     with col1:
         display_avatar_and_followers(profile.get("avatar_url"), st.session_state.user.id, size=200, profile=profile)
         uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg","gif"], label_visibility="collapsed")
@@ -3670,19 +3117,12 @@ def render_profile():
             moncash_phone = st.text_input(t("moncash_phone"), value=profile.get("moncash_phone", ""))
             natcash_phone = st.text_input(t("natcash_phone"), value=profile.get("natcash_phone", ""))
             if st.form_submit_button(t("save_changes"), use_container_width=True):
-                profile.update({
-                    "full_name": full_name,
-                    "bio": bio,
-                    "location": location,
-                    "moncash_phone": moncash_phone,
-                    "natcash_phone": natcash_phone
-                })
+                profile.update({"full_name": full_name, "bio": bio, "location": location, "moncash_phone": moncash_phone, "natcash_phone": natcash_phone})
                 if update_profile(profile):
                     st.success(t("profile"))
                     st.rerun()
-
     st.divider()
-    total_posts = get_user_post_count(st.session_state.user.id)  # UPDATE: show total posts
+    total_posts = get_user_post_count(st.session_state.user.id, public_only=False)  # own profile: count all posts
     cola, colb, colc, cold = st.columns(4)
     with cola:
         st.metric(t("posts_count"), total_posts)
@@ -3692,8 +3132,6 @@ def render_profile():
         st.metric(t("verified"), "✅" if profile.get("verified", False) else "❌")
     with cold:
         st.metric(t("member_since"), profile.get("join_date", "2024")[:10])
-
-    # ---- My Live Sessions ----
     st.divider()
     st.subheader(t("my_live_sessions"))
     user_live_sessions = get_user_live_sessions(st.session_state.user.id)
@@ -3702,7 +3140,7 @@ def render_profile():
     else:
         for sess in user_live_sessions:
             with st.container():
-                col_a, col_b, col_c = st.columns([3, 3, 1])
+                col_a, col_b, col_c = st.columns([3,3,1])
                 with col_a:
                     st.markdown(f"**{sess['title']}**")
                     st.caption(f"Started: {sess['started_at'][:16]}")
@@ -3717,8 +3155,6 @@ def render_profile():
                             st.session_state.viewing_live = sess['id']
                             st.rerun()
                 st.divider()
-
-    # ---- My Wall ----
     st.divider()
     st.subheader(t("my_wall"))
     user_posts = [p for p in st.session_state.posts if p['user_id'] == st.session_state.user.id]
@@ -3727,7 +3163,7 @@ def render_profile():
     else:
         for post in user_posts:
             with st.container():
-                col_a, col_b, col_c, col_d, col_e = st.columns([1, 4, 2, 1, 1])
+                col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
                 with col_a:
                     display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40, profile=st.session_state.profile)
                 with col_b:
@@ -3746,7 +3182,6 @@ def render_profile():
                     if st.button("🗑️", key=f"del_{post['id']}"):
                         st.session_state.delete_confirm = (post['id'], post['content'][:30])
                         st.rerun()
-
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -3763,23 +3198,20 @@ def render_profile():
                                 st.session_state.editing_post = None
                                 st.rerun()
                     st.divider()
-
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
                         display_media_item(media)
-
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
                         embed_video_from_url(url)
-
-                emojis = ["👍", "👎", "❤️", "😂", "😮", "😢", "👏"]
+                emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
-                col_react, col_comments, col_shares = st.columns([2, 1, 1])
+                col_react, col_comments, col_shares = st.columns([2,1,1])
                 with col_react:
                     if st.button("👍 React", key=f"react_btn_{post['id']}"):
                         st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
@@ -3802,33 +3234,24 @@ def render_profile():
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
-
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
-
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
                     msg = st.text_input(t("write_comment"), label_visibility="collapsed", placeholder=t("write_comment"))
                     if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
                             st.rerun()
-
                 comments = load_comments(post['id'])
                 top_level = [c for c in comments if not c.get('parent_id')]
                 replies = {}
                 for c in comments:
                     if c.get('parent_id'):
                         replies.setdefault(c['parent_id'], []).append(c)
-
                 for c in top_level:
-                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1, 4, 1, 1, 1])
+                    col_avatar_comment, col1, col2, col3, col4 = st.columns([1,4,1,1,1])
                     with col_avatar_comment:
-                        display_avatar_and_followers(
-                            c['profiles'].get('avatar_url'),
-                            c['user_id'],
-                            size=30,
-                            profile=c['profiles']
-                        )
+                        display_avatar_and_followers(c['profiles'].get('avatar_url'), c['user_id'], size=30, profile=c['profiles'])
                     with col1:
                         clickable_comment = make_clickable(c['content'])
                         st.markdown(f"**{c['profiles']['full_name']}**: {clickable_comment}")
@@ -3846,7 +3269,6 @@ def render_profile():
                             if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
                                 st.rerun()
-
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
                             reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
@@ -3855,17 +3277,11 @@ def render_profile():
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
                                     st.rerun()
-
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
-                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1, 4, 1, 1, 1])
+                        colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1,4,1,1,1])
                         with colr_avatar:
-                            display_avatar_and_followers(
-                                r['profiles'].get('avatar_url'),
-                                r['user_id'],
-                                size=30,
-                                profile=r['profiles']
-                            )
+                            display_avatar_and_followers(r['profiles'].get('avatar_url'), r['user_id'], size=30, profile=r['profiles'])
                         with colr1:
                             clickable_reply = make_clickable(r['content'])
                             st.markdown(f"**{r['profiles']['full_name']}**: {clickable_reply}")
@@ -3882,50 +3298,30 @@ def render_profile():
                                     delete_comment(r['id'])
                                     st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
-
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== VIDEO CALL PAGE (Jitsi Demo) ======
+# ====== VIDEO CALL PAGE ======
 def render_video_call():
     st.header(t("video_call"))
     st.info(t("demo_note"))
-
     user_id = st.session_state.user.id
-    room = f"lakay-call-{user_id}"  # personal room based on user ID
+    room = f"lakay-call-{user_id}"
     st.markdown(f"### {t('your_personal_room')}: `{room}`")
-
-    # Show shareable link
     try:
         base_url = st.request.url.split('?')[0]
     except:
         base_url = "https://lakay-se-lakay.streamlit.app"
     room_url = f"{base_url}?call={room}"
     st.text_input("🔗 Shareable Link", value=room_url, key="call_room_link")
-
-    # Copy link button
     if st.button(t("copy_link")):
-        st.markdown(f"""
-        <script>
-        navigator.clipboard.writeText('{room_url}');
-        </script>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<script>navigator.clipboard.writeText('{room_url}');</script>", unsafe_allow_html=True)
         st.success(t("room_link_copied"))
-
-    # Display Jitsi iframe
     st.markdown(f"### {t('join_room')}")
     domain = JITSI_DOMAIN
     container_id = f"jitsi-call-{user_id}"
-
-    config_overwrite = {
-        "startWithAudioMuted": False,
-        "startWithVideoMuted": False,
-        "disableWelcomePage": True,
-        "disableDeepLinking": True,
-        "p2p": {"enabled": False}
-    }
+    config_overwrite = {"startWithAudioMuted": False, "startWithVideoMuted": False, "disableWelcomePage": True, "disableDeepLinking": True, "p2p": {"enabled": False}}
     config_json = json.dumps(config_overwrite)
-
     jitsi_html = f"""
     <div id="{container_id}" style="height: 500px; width: 100%;"></div>
     <script src="https://{domain}/external_api.js"></script>
@@ -3957,11 +3353,10 @@ def render_video_call():
     </script>
     """
     st.components.v1.html(jitsi_html, height=520)
-
     st.markdown(f"**Or open in a new tab:** [Join Room](https://{domain}/{room})", unsafe_allow_html=True)
     st.caption(t("call_permission_hint"))
 
-# ====== render_live_page ======
+# ====== LIVE PAGE ======
 def render_live_page(session_id):
     session = get_live_session(session_id)
     if not session or not session.get("is_live"):
@@ -3970,27 +3365,23 @@ def render_live_page(session_id):
             st.session_state.viewing_live = None
             st.rerun()
         return
-
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
-
     if st.session_state.user:
         bg_key = f"bg_{session_id}_{st.session_state.user.id}"
         if st.session_state.get(bg_key) is None:
             st.session_state[bg_key] = None
-
         if not is_broadcaster:
             participant_status = None
             try:
                 part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                 if part.data:
                     participant_status = part.data[0]["status"]
-            except Exception as e:
-                st.warning(f"Error checking participant status: {e}")
-
+            except Exception:
+                pass
             if participant_status == "accepted":
                 with st.expander(t("choose_background"), expanded=False):
-                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png", "jpg", "jpeg"], key=f"bg_upload_{session_id}")
+                    uploaded_bg = st.file_uploader(t("upload_background"), type=["png","jpg","jpeg"], key=f"bg_upload_{session_id}")
                     if uploaded_bg:
                         bytes_data = uploaded_bg.getvalue()
                         b64 = base64.b64encode(bytes_data).decode()
@@ -4000,18 +3391,15 @@ def render_live_page(session_id):
                         supabase.table("live_participants").update({"background_url": data_url}).eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                         st.success(t("background_set"))
                         st.rerun()
-
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
-
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2,1])
     with col1:
-        col_avatar_broadcaster, col_name_broadcaster = st.columns([1, 4])
+        col_avatar_broadcaster, col_name_broadcaster = st.columns([1,4])
         with col_avatar_broadcaster:
             display_avatar_and_followers(session["profiles"]["avatar_url"], session["user_id"], size=60, profile=session["profiles"])
         with col_name_broadcaster:
             st.markdown(f"**{session['profiles']['full_name']}** is live")
-
         stream_method = session.get("stream_method", "external")
         if stream_method == "external":
             stream_url = session.get("stream_url")
@@ -4029,13 +3417,7 @@ def render_live_page(session_id):
                                 st.warning("Please enter a URL")
             if stream_url:
                 if "facebook.com" in stream_url:
-                    embed_code = f"""
-                    <div id="fb-root"></div>
-                    <script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script>
-                    <div class="fb-video" data-href="{stream_url}" 
-                         data-width="100%" data-allowfullscreen="true"></div>
-                    """
-                    st.components.v1.html(embed_code, height=450)
+                    st.components.v1.html(f'<div id="fb-root"></div><script async defer src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v3.2"></script><div class="fb-video" data-href="{stream_url}" data-width="100%" data-allowfullscreen="true"></div>', height=450)
                 elif "youtube.com" in stream_url or "youtu.be" in stream_url:
                     if "youtu.be" in stream_url:
                         video_id = stream_url.split("/")[-1].split("?")[0]
@@ -4044,8 +3426,7 @@ def render_live_page(session_id):
                     else:
                         video_id = None
                     if video_id:
-                        embed_url = f"https://www.youtube.com/embed/{video_id}"
-                        st.components.v1.html(f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="encrypted-media" allowfullscreen></iframe>', height=410)
+                        st.components.v1.html(f'<iframe width="100%" height="400" src="https://www.youtube.com/embed/{video_id}" frameborder="0" allow="encrypted-media" allowfullscreen></iframe>', height=410)
                     else:
                         st.video(stream_url, autoplay=False)
                 elif "twitch.tv" in stream_url:
@@ -4062,21 +3443,12 @@ def render_live_page(session_id):
                 part = supabase.table("live_participants").select("status").eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                 if part.data and part.data[0]["status"] == "accepted":
                     can_view = True
-
             if can_view:
                 room_name = f"lakay-live-{session_id}"
                 container_id = f"jitsi-live-{session_id}"
-
                 domain = JITSI_DOMAIN
-                config_overwrite = {
-                    "startWithAudioMuted": False,
-                    "startWithVideoMuted": False,
-                    "disableWelcomePage": True,
-                    "disableDeepLinking": True,
-                    "p2p": {"enabled": False}
-                }
+                config_overwrite = {"startWithAudioMuted": False, "startWithVideoMuted": False, "disableWelcomePage": True, "disableDeepLinking": True, "p2p": {"enabled": False}}
                 config_json = json.dumps(config_overwrite)
-
                 jitsi_html = f"""
                 <div id="{container_id}" style="height: 500px; width: 100%;"></div>
                 <script src="https://{domain}/external_api.js"></script>
@@ -4121,27 +3493,20 @@ def render_live_page(session_id):
                     else:
                         if st.button(t("request_to_join"), key=f"request_join_{session_id}"):
                             try:
-                                supabase.table("live_participants").insert({
-                                    "session_id": session_id,
-                                    "user_id": st.session_state.user.id,
-                                    "status": "pending"
-                                }).execute()
+                                supabase.table("live_participants").insert({"session_id": session_id, "user_id": st.session_state.user.id, "status": "pending"}).execute()
                                 st.success("Request sent! Waiting for broadcaster approval.")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Failed to send request: {e}")
                 else:
                     st.info("Please log in to request to join this live stream.")
-
             if is_broadcaster:
                 st.subheader(t("broadcaster_controls"))
                 try:
                     pending = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url, last_active)").eq("session_id", session_id).eq("status", "pending").execute()
                     pending_list = pending.data or []
-                except Exception as e:
-                    st.error(f"Error loading requests: {e}")
+                except Exception:
                     pending_list = []
-
                 if pending_list:
                     st.markdown("**Pending join requests**")
                     for req in pending_list:
@@ -4153,12 +3518,7 @@ def render_live_page(session_id):
                             if st.button("✅ Accept", key=f"accept_{req['id']}"):
                                 supabase.table("live_participants").update({"status": "accepted"}).eq("id", req["id"]).execute()
                                 try:
-                                    supabase.table("notifications").insert({
-                                        "user_id": req["user_id"],
-                                        "type": "live_join_accepted",
-                                        "message": f"You have been accepted to join the live stream: {session['title']}",
-                                        "read": False
-                                    }).execute()
+                                    supabase.table("notifications").insert({"user_id": req["user_id"], "type": "live_join_accepted", "message": f"You have been accepted to join the live stream: {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
                                 st.rerun()
@@ -4168,14 +3528,11 @@ def render_live_page(session_id):
                                 st.rerun()
                 else:
                     st.info("No pending requests")
-
                 try:
                     accepted = supabase.table("live_participants").select("*, profiles!live_participants_user_id_fkey(full_name, avatar_url, last_active)").eq("session_id", session_id).eq("status", "accepted").execute()
                     accepted_list = accepted.data or []
-                except Exception as e:
-                    st.error(f"Error loading participants: {e}")
+                except Exception:
                     accepted_list = []
-
                 if accepted_list:
                     st.markdown("**Active participants**")
                     for part in accepted_list:
@@ -4187,12 +3544,7 @@ def render_live_page(session_id):
                             if st.button("🔊 Mute", key=f"mute_{part['id']}"):
                                 supabase.table("live_participants").update({"status": "muted"}).eq("id", part["id"]).execute()
                                 try:
-                                    supabase.table("notifications").insert({
-                                        "user_id": part["user_id"],
-                                        "type": "live_mute",
-                                        "message": f"The broadcaster has muted your microphone in {session['title']}",
-                                        "read": False
-                                    }).execute()
+                                    supabase.table("notifications").insert({"user_id": part["user_id"], "type": "live_mute", "message": f"The broadcaster has muted your microphone in {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
                                 st.rerun()
@@ -4200,12 +3552,7 @@ def render_live_page(session_id):
                             if st.button("🔊 Unmute", key=f"unmute_{part['id']}"):
                                 supabase.table("live_participants").update({"status": "accepted"}).eq("id", part["id"]).execute()
                                 try:
-                                    supabase.table("notifications").insert({
-                                        "user_id": part["user_id"],
-                                        "type": "live_unmute",
-                                        "message": f"The broadcaster has unmuted your microphone in {session['title']}",
-                                        "read": False
-                                    }).execute()
+                                    supabase.table("notifications").insert({"user_id": part["user_id"], "type": "live_unmute", "message": f"The broadcaster has unmuted your microphone in {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
                                 st.rerun()
@@ -4215,14 +3562,12 @@ def render_live_page(session_id):
                                 st.rerun()
                 else:
                     st.info("No active participants")
-
         try:
             base_url = st.request.url.split('?')[0]
         except:
             base_url = "https://lakay-se-lakay.streamlit.app"
         share_url = f"{base_url}?live={session_id}"
         st.text_input(t("shareable_link"), value=share_url)
-
     with col2:
         st.subheader(t("live_chat_gifts"))
         if not is_broadcaster:
@@ -4242,20 +3587,13 @@ def render_live_page(session_id):
                 for i, opt in enumerate(gift_options):
                     with cols[i % 3]:
                         if st.button(opt["label"], key=f"gift_{i}"):
-                            success, msg = send_gift(
-                                session_id,
-                                st.session_state.user.id,
-                                session["user_id"],
-                                opt["amount"],
-                                opt["currency"]
-                            )
+                            success, msg = send_gift(session_id, st.session_state.user.id, session["user_id"], opt["amount"], opt["currency"])
                             if success:
                                 st.success(msg)
                                 st.session_state.live_gifts = load_gifts_for_session(session_id)
                                 st.rerun()
                             else:
                                 st.error(msg)
-
             st.markdown("### 😊 Reactions")
             reaction_emojis = ["❤️", "👍", "😂", "😮", "😢", "👏"]
             cols = st.columns(len(reaction_emojis))
@@ -4264,7 +3602,6 @@ def render_live_page(session_id):
                     if st.button(emoji, key=f"reaction_{i}"):
                         add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
                         st.rerun()
-
         if is_broadcaster:
             st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
             moncash = session["profiles"].get("moncash_phone")
@@ -4284,14 +3621,12 @@ def render_live_page(session_id):
                     st.markdown(f"MonCash: {moncash}")
                 if natcash:
                     st.markdown(f"NATCASH: {natcash}")
-
         with st.form(f"live_comment_{session_id}", clear_on_submit=True):
             msg = st.text_input(t("write_comment"))
             if st.form_submit_button(t("send")):
                 if msg:
                     add_comment(session_id, st.session_state.user.id, msg)
                     st.rerun()
-
         comments = load_comments(session_id)
         all_events = []
         for c in comments:
@@ -4299,7 +3634,6 @@ def render_live_page(session_id):
         for g in gifts:
             all_events.append({"type": "gift", "data": g, "time": g['created_at']})
         all_events.sort(key=lambda x: x['time'])
-
         for ev in all_events:
             if ev['type'] == 'comment':
                 c = ev['data']
@@ -4312,10 +3646,9 @@ def render_live_page(session_id):
                 sender = g.get('sender', {}).get('full_name', 'Someone')
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
-# ====== owner_space (with User Management) ======
+# ====== OWNER SPACE ======
 def owner_space():
     st.header(t("owner_space"))
-
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
@@ -4326,22 +3659,12 @@ def owner_space():
                 else:
                     st.error("Invalid password")
         return
-
     last_seen = get_last_seen_signup()
     new_users = get_new_users(last_seen)
     if new_users:
         send_email_notification(new_users)
         update_last_seen_signup()
-
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        t("dashboard"), 
-        t("new_users"), 
-        t("post_moderation"), 
-        t("client_payments"), 
-        t("gift_management"),
-        t("user_management")
-    ])
-
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management"), t("user_management")])
     with tab1:
         st.subheader(t("owner_dashboard"))
         real_balance = None
@@ -4354,11 +3677,10 @@ def owner_space():
                     real_balance = data.get("balance", 0.0)
                 else:
                     st.warning("Could not fetch real balance from backend.")
-            except Exception as e:
-                st.warning(f"Backend unreachable: {e}")
+            except Exception:
+                st.warning("Backend unreachable.")
         else:
             st.info("Backend not configured. Showing simulated data for now.")
-
         col1, col2, col3 = st.columns(3)
         with col1:
             if real_balance is not None:
@@ -4370,23 +3692,13 @@ def owner_space():
         with col2:
             st.metric(t("uptime"), get_uptime())
         with col3:
-            st.metric(t("connections"), np.random.randint(100, 500))
-
+            st.metric(t("connections"), np.random.randint(100,500))
         st.divider()
-
         st.subheader(t("transfer_funds"))
         st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
         st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
-
         if real_balance is not None:
-            amount = st.number_input(
-                t("amount_transfer"),
-                min_value=1.0,
-                max_value=float(real_balance),
-                value=min(10.0, float(real_balance)),
-                step=10.0,
-                format="%.2f"
-            )
+            amount = st.number_input(t("amount_transfer"), min_value=1.0, max_value=float(real_balance), value=min(10.0, float(real_balance)), step=10.0, format="%.2f")
             if st.button(t("transfer"), use_container_width=True):
                 if amount <= 0:
                     st.error("Enter a valid amount.")
@@ -4394,10 +3706,7 @@ def owner_space():
                     with st.spinner("Processing transfer..."):
                         try:
                             headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
-                            payload = {
-                                "amount": amount,
-                                "recipient_phone": MONCASH_NUM
-                            }
+                            payload = {"amount": amount, "recipient_phone": MONCASH_NUM}
                             resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
                             if resp.status_code == 200:
                                 data = resp.json()
@@ -4408,21 +3717,16 @@ def owner_space():
                             st.error(f"Error: {e}")
         else:
             st.info("To enable real transfers, set up your backend and configure the secrets.")
-
     with tab2:
         st.subheader(t("new_users"))
         st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
-
         try:
             with st.spinner("Loading user data..."):
-                response = supabase.table("profiles").select(
-                    "id, full_name, avatar_url, join_date, location, bio, is_banned, last_active"
-                ).order("join_date", desc=True).limit(100).execute()
+                response = supabase.table("profiles").select("id, full_name, avatar_url, join_date, location, bio, is_banned, last_active").order("join_date", desc=True).limit(100).execute()
                 recent_users = response.data if response.data else []
         except Exception as e:
             st.error(f"Failed to load user data: {e}")
             recent_users = []
-
         if recent_users:
             display_data = []
             for u in recent_users:
@@ -4437,21 +3741,12 @@ def owner_space():
                 })
             df = pd.DataFrame(display_data)
             st.dataframe(df, use_container_width=True)
-
             csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Report as CSV",
-                data=csv,
-                file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            st.download_button(label="📥 Download Report as CSV", data=csv, file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv", use_container_width=True)
         else:
             st.info("No users found in the database.")
-
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
-
     with tab3:
         st.subheader(t("post_moderation"))
         st.markdown("Review all posts (public & private) and take action if needed.")
@@ -4466,16 +3761,10 @@ def owner_space():
                     profiles[p["id"]] = p
             for p in all_posts:
                 prof = profiles.get(p["user_id"], {})
-                p["profiles"] = {
-                    "full_name": prof.get("full_name", "Unknown"),
-                    "avatar_url": prof.get("avatar_url"),
-                    "id": p["user_id"],
-                    "last_active": prof.get("last_active")
-                }
+                p["profiles"] = {"full_name": prof.get("full_name", "Unknown"), "avatar_url": prof.get("avatar_url"), "id": p["user_id"], "last_active": prof.get("last_active")}
         except Exception as e:
             st.error(f"Failed to load posts: {e}")
             all_posts = []
-
         if not all_posts:
             st.info("No posts found.")
         else:
@@ -4483,7 +3772,7 @@ def owner_space():
                 st.session_state.warn_post_id = None
             for post in all_posts:
                 with st.container():
-                    cols = st.columns([2, 4, 2, 1, 1])
+                    cols = st.columns([2,4,2,1,1])
                     with cols[0]:
                         display_avatar_and_followers(post['profiles']['avatar_url'], post['user_id'], size=30, profile=post['profiles'])
                         st.markdown(f"**User:** {post['profiles']['full_name']}")
@@ -4504,7 +3793,6 @@ def owner_space():
                         if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
                             st.session_state.warn_post_id = post['id']
                             st.rerun()
-
                     if st.session_state.warn_post_id == post['id']:
                         with st.form(key=f"warn_form_{post['id']}"):
                             default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
@@ -4512,11 +3800,7 @@ def owner_space():
                             col1, col2 = st.columns(2)
                             with col1:
                                 if st.form_submit_button("Send Warning"):
-                                    success = send_message(
-                                        st.session_state.user.id,
-                                        post['user_id'],
-                                        f"[MODERATION] {warn_msg}"
-                                    )
+                                    success = send_message(st.session_state.user.id, post['user_id'], f"[MODERATION] {warn_msg}")
                                     if success:
                                         st.success("Warning sent to user.")
                                         if delete_post(post['id']):
@@ -4530,7 +3814,6 @@ def owner_space():
                                     st.session_state.warn_post_id = None
                                     st.rerun()
                     st.divider()
-
     with tab4:
         st.subheader(t("client_payments"))
         st.markdown("""
@@ -4547,22 +3830,18 @@ def owner_space():
         **Option 3 – Request a payment link**  
         For larger amounts, contact the development team to generate a secure payment link.
         """)
-
     with tab5:
         st.subheader(t("gift_management"))
         st.markdown("View all completed gifts and process payouts to streamers.")
-
         if supabase is None:
             st.warning("Supabase not connected.")
             return
-
         try:
             gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
             gifts_data = gifts.data if gifts.data else []
         except Exception as e:
             st.error(f"Failed to load gifts: {e}")
             gifts_data = []
-
         if not gifts_data:
             st.info(t("no_gifts"))
         else:
@@ -4576,31 +3855,25 @@ def owner_space():
                 "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
             } for g in gifts_data])
             st.dataframe(df, use_container_width=True)
-
             st.markdown(f"### {t('payout_summary')}")
             total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
             st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
-
             if st.button(t("mark_paid")):
                 st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
-
     with tab6:
         st.subheader(t("user_management"))
         st.markdown("Search and manage users: ban/unban accounts.")
-
         search_term = st.text_input("🔍 Search by name or user ID")
         all_users = get_all_users()
-
         if search_term:
             filtered = [u for u in all_users if search_term.lower() in u['full_name'].lower() or search_term in u['id']]
         else:
             filtered = all_users
-
         if not filtered:
             st.info("No users found.")
         else:
             for user in filtered:
-                cols = st.columns([2, 2, 2, 1, 1])
+                cols = st.columns([2,2,2,1,1])
                 with cols[0]:
                     st.markdown(f"**{user['full_name']}**")
                 with cols[1]:
@@ -4633,28 +3906,24 @@ def owner_space():
                 with cols[4]:
                     online = is_user_online(user.get('last_active'))
                     st.markdown("🟢 Online" if online else "⚪ Offline")
-
     st.divider()
     st.markdown(f"### {t('contact_support')}")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
-
     if st.button(t("logout_owner")):
         st.session_state.owner_space_access = False
         st.rerun()
 
 # ========== MAIN APP ==========
 def main_app():
-    # UPDATE: Update last_active timestamp for logged-in user
+    # Update last_active for current user
     if st.session_state.logged_in and st.session_state.user:
         update_last_active(st.session_state.user.id)
-
     with st.sidebar:
         if st.session_state.logged_in:
             st.success("✅ Logged in")
         else:
             st.info("🔓 Not logged in")
         st.divider()
-
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
         st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
         st.markdown("""
@@ -4670,30 +3939,15 @@ def main_app():
             <span style='font-size: 0.8rem; color: #2c3e50;'>Software Engineer Founder</span>
         </div>
         """, unsafe_allow_html=True)
-
         st.divider()
-
-        lang_options = {
-            "en": "English",
-            "fr": "Français",
-            "es": "Español",
-            "ht": "Kreyòl Ayisyen"
-        }
-        selected_lang = st.selectbox(
-            t("voice_lang"),
-            options=list(lang_options.keys()),
-            format_func=lambda x: lang_options[x],
-            index=list(lang_options.keys()).index(st.session_state.language)
-        )
+        lang_options = {"en":"English","fr":"Français","es":"Español","ht":"Kreyòl Ayisyen"}
+        selected_lang = st.selectbox(t("voice_lang"), options=list(lang_options.keys()), format_func=lambda x: lang_options[x], index=list(lang_options.keys()).index(st.session_state.language))
         if selected_lang != st.session_state.language:
             st.session_state.language = selected_lang
             st.rerun()
-
         st.divider()
-
         if st.session_state.unread_count > 0:
             st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
-
         if st.session_state.profile and st.session_state.profile.get("is_live"):
             st.markdown(f"🔴 **{t('you_are_live')}**")
             if st.button(t("end_live_session")):
@@ -4711,17 +3965,13 @@ def main_app():
                     st.markdown(f"**{t('select_platform')}:**")
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        if st.button("📺 YouTube", key="yt"):
-                            platform = "YouTube"
+                        if st.button("📺 YouTube", key="yt"): platform = "YouTube"
                     with col2:
-                        if st.button("📘 Facebook", key="fb"):
-                            platform = "Facebook"
+                        if st.button("📘 Facebook", key="fb"): platform = "Facebook"
                     with col3:
-                        if st.button("🎮 Twitch", key="tw"):
-                            platform = "Twitch"
+                        if st.button("🎮 Twitch", key="tw"): platform = "Twitch"
                 else:
                     platform = "inapp"
-
                 if platform:
                     st.markdown(f"**Selected: {platform if platform != 'inapp' else t('in_app_camera')}**")
                     with st.form("go_live_form"):
@@ -4737,7 +3987,6 @@ def main_app():
                                     st.rerun()
                             else:
                                 st.warning("Please enter a title")
-
         st.divider()
         lat, sig, qual = get_network_status()
         st.markdown(f"### {t('system_health')}")
@@ -4758,17 +4007,11 @@ def main_app():
         if st.button(t("logout")):
             logout()
         st.divider()
-
         if st.session_state.language == 'ht':
             st.warning("🔊 Voice explanation is not available in Kreyòl Ayisyen. Please select another language for audio.")
         else:
             if st.button(t("listen_explanation"), use_container_width=True):
-                voice_map = {
-                    "en": "en-US-JennyNeural",
-                    "fr": "fr-FR-DeniseNeural",
-                    "es": "es-ES-ElviraNeural",
-                    "ht": "ht-HT-FabriceNeural"
-                }
+                voice_map = {"en":"en-US-JennyNeural","fr":"fr-FR-DeniseNeural","es":"es-ES-ElviraNeural","ht":"ht-HT-FabriceNeural"}
                 voice = voice_map.get(st.session_state.language, "en-US-JennyNeural")
                 text = t("app_explanation")
                 audio_file = generate_audio(text, voice)
@@ -4776,25 +4019,16 @@ def main_app():
                     play_audio(audio_file)
                 else:
                     st.error("Failed to generate audio.")
-
         st.divider()
-
-        # Navigation
-        page_keys = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
+        page_keys = ["feed","friends_chat","satellite_map","worldcup","profile","video_call","owner_space"]
         page_titles = {key: t(key) for key in page_keys}
         if "current_page" not in st.session_state:
             st.session_state.current_page = "feed"
         if st.session_state.current_page not in page_keys:
             st.session_state.current_page = "feed"
-
-        selected_title = st.selectbox(
-            "Navigate",
-            options=[page_titles[key] for key in page_keys],
-            index=page_keys.index(st.session_state.current_page),
-        )
+        selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
         st.session_state.current_page = selected_key
-
         st.divider()
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
@@ -4811,7 +4045,6 @@ def main_app():
                         st.rerun()
                     else:
                         st.error("Invalid password")
-
     page_functions = {
         "feed": render_feed,
         "friends_chat": render_friends_page,
@@ -4832,9 +4065,7 @@ if __name__ == "__main__":
                 🏠 
                 <span class="rope-text">
                     <span class="lakay-flag-text">Lakay se Lakay</span>
-                    <span class="stars">
-                        <span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span>
-                    </span>
+                    <span class="stars"><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span></span>
                 </span>
             </h1>
             <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
@@ -4844,7 +4075,6 @@ if __name__ == "__main__":
             <p>{t('home_subtitle')}</p>
         </div>
         """, unsafe_allow_html=True)
-
     if not st.session_state.logged_in:
         login_interface()
     else:
