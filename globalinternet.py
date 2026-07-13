@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - LOVE STORIES OPEN IN NEW TAB) ======
+# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.10.1 (Love Stories open in new tab)
+# Version: 78.11.0 (Feed shuffled like a cord)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1533,9 +1533,37 @@ def load_posts_cached(user_id=None, author_id=None, include_private=False):
         st.session_state.last_error = f"Error loading posts: {e}"
         return []
 
+# ---- NEW: Shuffle feed like a cord ----
+def shuffle_feed_posts(posts):
+    """Interleave posts from different users so that each user's content gets visibility."""
+    if not posts:
+        return []
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for p in posts:
+        groups[p['user_id']].append(p)
+    # Sort each user's posts by created_at (most recent first)
+    for uid in groups:
+        groups[uid].sort(key=lambda x: x['created_at'], reverse=True)
+    result = []
+    # While there are any posts left
+    while any(groups.values()):
+        # Get active user IDs (those with remaining posts)
+        active_users = [uid for uid, lst in groups.items() if lst]
+        # Shuffle the order of users each round
+        random.shuffle(active_users)
+        # Take one post from each user in the shuffled order
+        for uid in active_users:
+            if groups[uid]:
+                result.append(groups[uid].pop(0))
+    return result
+
 def load_posts():
     user_id = st.session_state.user.id if st.session_state.user else None
-    return load_posts_cached(user_id=user_id)
+    posts = load_posts_cached(user_id=user_id)
+    if posts:
+        posts = shuffle_feed_posts(posts)
+    return posts
 
 def load_user_posts(user_id, include_private=False):
     return load_posts_cached(author_id=user_id, include_private=include_private)
