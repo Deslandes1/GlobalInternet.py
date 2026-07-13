@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - WITH EXTERNAL LINKS IN SIDEBAR) ======
+# ====== FULL app.py (Lakay se Lakay - WITH SIDEBAR LINKS & NAV FIX) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.4.0 (Added Global Radar & GlobalInternet.py sidebar links)
+# Version: 78.5.0 (Fixed Feed navigation, added external app links)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3489,10 +3489,8 @@ def main_app():
             st.rerun()
         st.divider()
         
-        # ====== NEW: EXTERNAL APP LINKS ======
+        # ====== EXTERNAL APP LINKS ======
         st.markdown("### 🌐 GlobalInternet.py Apps")
-        
-        # Global Radar Link
         st.markdown(
             """
             <a href="https://globalsurveillanceradarad-zxajfceg4timbxqkmpmyqt.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#00209F; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
@@ -3501,8 +3499,6 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
-        
-        # GlobalInternet.py Website Link
         st.markdown(
             """
             <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold;">
@@ -3587,15 +3583,24 @@ def main_app():
                 else:
                     st.error("Failed to generate audio.")
         st.divider()
+        
+        # ---------- NAVIGATION (FIXED) ----------
         page_keys = ["feed","friends_chat","satellite_map","worldcup","profile","video_call","owner_space"]
         page_titles = {key: t(key) for key in page_keys}
         if "current_page" not in st.session_state:
             st.session_state.current_page = "feed"
         if st.session_state.current_page not in page_keys:
             st.session_state.current_page = "feed"
+        
         selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
+        
+        # CRITICAL FIX: Clear viewing flags when switching pages, especially when going back to Feed
+        if selected_key != st.session_state.current_page or selected_key == "feed":
+            st.session_state.viewing_profile = None
+            st.session_state.viewing_live = None
         st.session_state.current_page = selected_key
+        
         st.divider()
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
