@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - FAST UPLOADS + SESSION PERSISTENCE) ======
+# ====== FULL app.py (Lakay se Lakay - WITH LOVE STORIES IN SIDEBAR) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.8.0 (Faster uploads with compression, reliable session restore)
+# Version: 78.9.0 (Added Love Stories section in sidebar)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -179,7 +179,7 @@ if "live_room_name" not in st.session_state:
     st.session_state.live_room_name = None
 
 # ====== LANGUAGE DICTIONARY ======
-# (Full dictionary included – keep all languages)
+# Full dictionary included (all languages: en, fr, es, ht)
 LANG = {
     "en": {
         "login_title": "Login",
@@ -349,11 +349,511 @@ LANG = {
         "your_personal_room": "Your Personal Room",
         "join_room": "Join Room"
     },
-    "fr": { ... },   # keep full dictionary from previous code
-    "es": { ... },
-    "ht": { ... }
+    "fr": {
+        "login_title": "Connexion",
+        "signup_title": "S'inscrire",
+        "forgot_password": "Mot de passe oublié",
+        "email": "Email",
+        "password": "Mot de passe",
+        "full_name": "Nom complet",
+        "remember_me": "Se souvenir de moi",
+        "login_button": "🚀 Connexion",
+        "signup_button": "📝 Inscription",
+        "send_reset_link": "Envoyer le lien de réinitialisation",
+        "feed": "📡 Fil d'actualité",
+        "friends_chat": "👥 Amis et Chat",
+        "satellite_map": "🛰️ Carte satellite",
+        "worldcup": "⚽ Coupe du Monde en direct",
+        "profile": "👤 Profil",
+        "owner_space": "🕊️ Espace propriétaire",
+        "logout": "🚪 Déconnexion",
+        "system_health": "🛡️ État du système",
+        "signal": "📡 Signal",
+        "latency": "⏱️ Latence",
+        "quality": "📊 Qualité",
+        "uptime": "⏰ Temps de fonctionnement",
+        "encrypted": "🔒 Statut : CHIFFRÉ",
+        "compensation": "💰 Compensation",
+        "logged_in_as": "👤 Connecté en tant que",
+        "go_live": "Passer en direct",
+        "external_platform": "Plateforme externe (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Caméra intégrée",
+        "select_platform": "Choisir la plateforme",
+        "live_title": "Titre du direct",
+        "create_live_session": "Créer une session en direct",
+        "you_are_live": "🔴 Vous êtes en direct !",
+        "end_live_session": "Terminer le direct",
+        "set_stream_url": "📹 Définir l'URL du flux",
+        "paste_url": "Collez l'URL de votre flux en direct",
+        "update_url": "Mettre à jour l'URL",
+        "shareable_link": "Lien partageable",
+        "live_chat_gifts": "Chat en direct et cadeaux",
+        "send_gift": "🎁 Envoyer un cadeau",
+        "add_moncash": "Ajoutez votre numéro MonCash dans votre profil pour envoyer des cadeaux.",
+        "add_natcash": "Ajoutez votre numéro NATCASH pour recevoir des cadeaux.",
+        "total_gifts": "Total des cadeaux reçus",
+        "gifts_sent_to": "Les cadeaux seront envoyés à votre MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
+        "write_comment": "Écrire un commentaire...",
+        "send": "Envoyer",
+        "back_to_feed": "Retour au fil",
+        "create_post": "Créer une publication",
+        "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo",
+        "add_media": "Ajouter des images ou vidéos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
+        "visibility": "Visibilité",
+        "public": "Public",
+        "private": "Privé",
+        "post": "🚀 Publier",
+        "delete_post": "🗑️ Supprimer",
+        "comments": "Commentaires",
+        "reply": "💬 Répondre",
+        "post_reply": "Publier la réponse",
+        "your_reply": "Votre réponse",
+        "clear_error": "Effacer l'erreur",
+        "join_live": "Rejoindre le direct",
+        "watch_stream": "▶ REGARDER LE DIRECT",
+        "start_broadcast": "▶ COMMENCER LA DIFFUSION",
+        "stop_broadcast": "■ ARRÊTER LA DIFFUSION",
+        "you_are_broadcaster": "✅ Vous êtes le diffuseur. Utilisez les commandes ci‑dessous pour commencer.",
+        "you_are_viewer": "👀 Vous êtes spectateur. Cliquez sur 'Regarder le direct' pour voir la vidéo.",
+        "choose_background": "🎨 Filtres d'arrière‑plan",
+        "bg_option": "AR",
+        "upload_background": "Ou téléchargez votre propre image",
+        "background_set": "Arrière‑plan défini !",
+        "ready_to_start": "Prêt à commencer. Cliquez sur le bouton ci‑dessus.",
+        "camera_access": "📷 Demande d'accès à la caméra...",
+        "camera_granted": "✅ Accès à la caméra accordé. Connexion au serveur peer...",
+        "broadcasting": "✅ Diffusion en direct ! Votre ID peer",
+        "peer_error": "❌ Erreur peer",
+        "error": "❌ Erreur",
+        "broadcast_ended": "Diffusion terminée",
+        "initializing": "Initialisation...",
+        "connected_requesting": "Connecté. Demande du flux au diffuseur...",
+        "calling": "Appel en cours",
+        "received_stream": "Flux reçu",
+        "now_watching": "✅ Vous regardez maintenant le direct",
+        "call_error": "❌ Erreur d'appel",
+        "call_ended": "Appel terminé",
+        "disconnected": "Déconnecté. Veuillez rafraîchir.",
+        "send_message": "Envoyer",
+        "close_chat": "Fermer le chat",
+        "active_call": "📞 Appel en cours",
+        "room_id": "ID de la salle",
+        "share_room": "Partagez cet ID avec la personne que vous voulez appeler.",
+        "start_call": "Commencer un nouvel appel",
+        "end_call": "Terminer l'appel",
+        "find_users": "🔍 Trouver des utilisateurs",
+        "search_by_name": "Rechercher par nom",
+        "add_friend": "➕ Ajouter un ami",
+        "view_profile": "👤 Voir le profil",
+        "friend_requests": "📨 Demandes d'amis reçues",
+        "accept": "✅ Accepter",
+        "reject": "❌ Refuser",
+        "your_friends": "👥 Vos amis",
+        "no_friends": "Vous n'avez pas encore d'amis",
+        "chat": "💬 Chat",
+        "call": "📞 Appel",
+        "profile_btn": "👤 Profil",
+        "edit_profile": "Modifier le profil",
+        "save_changes": "💾 Enregistrer les modifications",
+        "change_picture": "📸 Changer la photo",
+        "bio": "Bio",
+        "location": "Localisation",
+        "moncash_phone": "Numéro MonCash (pour recevoir des cadeaux)",
+        "natcash_phone": "Numéro NATCASH (pour recevoir des cadeaux)",
+        "posts_count": "Publications",
+        "connections": "Connexions",
+        "verified": "Vérifié",
+        "member_since": "Membre depuis",
+        "dashboard": "💰 Tableau de bord",
+        "new_users": "📈 Nouveaux utilisateurs",
+        "post_moderation": "🛡️ Modération des publications",
+        "client_payments": "📥 Paiements clients",
+        "gift_management": "🎁 Gestion des cadeaux",
+        "owner_dashboard": "🔐 Tableau de bord du propriétaire",
+        "balance": "Solde MonCash Business",
+        "transfer_funds": "💰 Transférer des fonds vers votre compte",
+        "amount_transfer": "Montant à transférer ($)",
+        "transfer": "🚀 Transférer vers MonCash",
+        "no_gifts": "Pas encore de cadeaux.",
+        "payout_summary": "Récapitulatif des paiements",
+        "total_gifts_htg": "Total des cadeaux (HTG)",
+        "mark_paid": "Marquer tout comme payé (simulé)",
+        "contact_support": "📬 Contact pour assistance / paiements importants",
+        "logout_owner": "Déconnexion de l'espace propriétaire",
+        "setup_instructions": "ℹ️ Instructions de configuration (si l'upload échoue)",
+        "storage_error": "Erreur de permission de stockage : veuillez configurer les politiques RLS pour le bucket 'avatars'.",
+        "listen_explanation": "🔊 Écouter l'explication de l'application",
+        "voice_lang": "🌐 Langue de la voix",
+        "app_explanation": "Cette application a été construite par Gesner Deslandes, ingénieur en chef chez GlobalInternet.py. Téléphone : (509) 4738-5663. Email : deslandes78@gmail.com. Contactez Gesner si vous souhaitez créer un site web ou un logiciel. Cette application est une plateforme de médias sociaux haïtienne qui vous permet de vous connecter avec des amis, partager des publications, passer en direct, envoyer des cadeaux et discuter en temps réel. Elle utilise Supabase pour les données, prend en charge la diffusion en direct avec des filtres d'arrière-plan et comprend une carte satellite pour le divertissement. Elle est conçue pour être un espace moderne, sécurisé et amusant pour les utilisateurs haïtiens afin d'interagir en ligne. Toutes les fonctionnalités sont construites avec Python et Streamlit. Et en plus, lorsqu'il y a un match de la Coupe du Monde, vous pouvez le regarder en direct directement sur la plateforme !",
+        "network_error": "⚠️ Impossible de se connecter au serveur d'authentification. Veuillez vérifier votre connexion internet et réessayer. Si le problème persiste, contactez le support.",
+        "debug_hint": "Si vous êtes administrateur, activez 'Afficher les infos de débogage' ci-dessous pour voir l'erreur brute.",
+        "show_debug": "Afficher les infos de débogage",
+        "home_title": "🏠 Lakay se Lakay",
+        "home_haiti": "HAITI",
+        "home_subtitle": "Your Haitian social media platform",
+        "call_permission_hint": "📌 Assurez‑vous que les deux participants autorisent l'accès à la caméra et au microphone. Si vous ne vous voyez pas, rafraîchissez la page et réessayez.",
+        "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro. Si vous ne voyez toujours pas l'autre personne, demandez-lui de vérifier ses paramètres de caméra.",
+        "reload_call": "🔄 Recharger l'appel",
+        "request_to_join": "📨 Demander à rejoindre",
+        "request_pending": "⏳ Demande en attente... en attente de l'approbation du diffuseur.",
+        "broadcaster_controls": "🎛️ Commandes du diffuseur",
+        "join_live": "🔴 Rejoindre le direct",
+        "user_management": "👥 Gestion des utilisateurs",
+        "ban_user": "🚫 Bannir",
+        "unban_user": "✅ Débannir",
+        "ban_reason": "Raison du bannissement",
+        "banned": "Banni",
+        "active": "Actif",
+        "my_wall": "📝 Mon Mur",
+        "my_live_sessions": "📺 Mes sessions en direct",
+        "live_status_live": "🔴 EN DIRECT",
+        "live_status_ended": "Terminé",
+        "video_call": "📞 Appel vidéo (Jitsi Demo)",
+        "demo_note": "ℹ️ Ceci est une démo utilisant Jitsi Meet – gratuit et open-source. Vous pouvez démarrer un appel et partager le lien de la salle avec n'importe qui.",
+        "copy_link": "📋 Copier le lien de la salle",
+        "room_link_copied": "✅ Lien de la salle copié dans le presse-papiers !",
+        "start_video_call": "Démarrer un appel vidéo",
+        "your_personal_room": "Votre salle personnelle",
+        "join_room": "Rejoindre la salle"
+    },
+    "es": {
+        "login_title": "Iniciar sesión",
+        "signup_title": "Registrarse",
+        "forgot_password": "Olvidé mi contraseña",
+        "email": "Correo electrónico",
+        "password": "Contraseña",
+        "full_name": "Nombre completo",
+        "remember_me": "Recordarme",
+        "login_button": "🚀 Iniciar sesión",
+        "signup_button": "📝 Registrarse",
+        "send_reset_link": "Enviar enlace de restablecimiento",
+        "feed": "📡 Feed",
+        "friends_chat": "👥 Amigos y chat",
+        "satellite_map": "🛰️ Mapa satelital",
+        "worldcup": "⚽ Copa del Mundo en vivo",
+        "profile": "👤 Perfil",
+        "owner_space": "🕊️ Espacio del propietario",
+        "logout": "🚪 Cerrar sesión",
+        "system_health": "🛡️ Estado del sistema",
+        "signal": "📡 Señal",
+        "latency": "⏱️ Latencia",
+        "quality": "📊 Calidad",
+        "uptime": "⏰ Tiempo activo",
+        "encrypted": "🔒 Estado: ENCRIPTADO",
+        "compensation": "💰 Compensación",
+        "logged_in_as": "👤 Conectado como",
+        "go_live": "Ir en vivo",
+        "external_platform": "Plataforma externa (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Cámara integrada",
+        "select_platform": "Seleccionar plataforma",
+        "live_title": "Título del directo",
+        "create_live_session": "Crear sesión en vivo",
+        "you_are_live": "🔴 ¡Estás en vivo!",
+        "end_live_session": "Finalizar sesión en vivo",
+        "set_stream_url": "📹 Configurar URL del stream",
+        "paste_url": "Pega la URL de tu transmisión en vivo",
+        "update_url": "Actualizar URL",
+        "shareable_link": "Enlace compartible",
+        "live_chat_gifts": "Chat en vivo y regalos",
+        "send_gift": "🎁 Enviar un regalo",
+        "add_moncash": "Agrega tu número de MonCash en tu perfil para enviar regalos.",
+        "add_natcash": "Agrega tu número de NATCASH para recibir regalos.",
+        "total_gifts": "Total de regalos recibidos",
+        "gifts_sent_to": "Los regalos se enviarán a tu MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
+        "write_comment": "Escribe un comentario...",
+        "send": "Enviar",
+        "back_to_feed": "Volver al feed",
+        "create_post": "Crear una publicación",
+        "caption_placeholder": "Escribe algo... o pega un enlace de video",
+        "add_media": "Agregar imágenes o videos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
+        "visibility": "Visibilidad",
+        "public": "Público",
+        "private": "Privado",
+        "post": "🚀 Publicar",
+        "delete_post": "🗑️ Eliminar",
+        "comments": "Comentarios",
+        "reply": "💬 Responder",
+        "post_reply": "Publicar respuesta",
+        "your_reply": "Tu respuesta",
+        "clear_error": "Limpiar error",
+        "join_live": "Unirse al directo",
+        "watch_stream": "▶ VER TRANSMISIÓN",
+        "start_broadcast": "▶ INICIAR TRANSMISIÓN",
+        "stop_broadcast": "■ DETENER TRANSMISIÓN",
+        "you_are_broadcaster": "✅ Eres el transmisor. Usa los controles a continuación para comenzar.",
+        "you_are_viewer": "👀 Eres espectador. Haz clic en 'Ver transmisión' para ver el video.",
+        "choose_background": "🎨 Filtros de fondo",
+        "bg_option": "FDO",
+        "upload_background": "O sube tu propia imagen",
+        "background_set": "¡Fondo establecido!",
+        "ready_to_start": "Listo para comenzar. Haz clic en el botón de arriba.",
+        "camera_access": "📷 Solicitando acceso a la cámara...",
+        "camera_granted": "✅ Acceso a la cámara concedido. Conectando al servidor peer...",
+        "broadcasting": "✅ ¡Transmitiendo en vivo! Tu ID peer",
+        "peer_error": "❌ Error peer",
+        "error": "❌ Error",
+        "broadcast_ended": "Transmisión finalizada",
+        "initializing": "Inicializando...",
+        "connected_requesting": "Conectado. Solicitando transmisión al emisor...",
+        "calling": "Llamando",
+        "received_stream": "Flujo recibido",
+        "now_watching": "✅ Ahora estás viendo la transmisión en vivo",
+        "call_error": "❌ Error de llamada",
+        "call_ended": "Llamada finalizada",
+        "disconnected": "Desconectado. Por favor refresca.",
+        "send_message": "Enviar",
+        "close_chat": "Cerrar chat",
+        "active_call": "📞 Llamada activa",
+        "room_id": "ID de sala",
+        "share_room": "Comparte este ID con la persona a la que quieres llamar.",
+        "start_call": "Iniciar nueva llamada",
+        "end_call": "Finalizar llamada",
+        "find_users": "🔍 Buscar usuarios",
+        "search_by_name": "Buscar por nombre",
+        "add_friend": "➕ Agregar amigo",
+        "view_profile": "👤 Ver perfil",
+        "friend_requests": "📨 Solicitudes de amistad recibidas",
+        "accept": "✅ Aceptar",
+        "reject": "❌ Rechazar",
+        "your_friends": "👥 Tus amigos",
+        "no_friends": "Aún no tienes amigos",
+        "chat": "💬 Chat",
+        "call": "📞 Llamada",
+        "profile_btn": "👤 Perfil",
+        "edit_profile": "Editar perfil",
+        "save_changes": "💾 Guardar cambios",
+        "change_picture": "📸 Cambiar foto",
+        "bio": "Biografía",
+        "location": "Localización",
+        "moncash_phone": "Número MonCash (para recibir regalos)",
+        "natcash_phone": "Número NATCASH (para recibir regalos)",
+        "posts_count": "Publicaciones",
+        "connections": "Conexiones",
+        "verified": "Verificado",
+        "member_since": "Miembro desde",
+        "dashboard": "💰 Panel",
+        "new_users": "📈 Nuevos usuarios",
+        "post_moderation": "🛡️ Moderación de publicaciones",
+        "client_payments": "📥 Pagos de clientes",
+        "gift_management": "🎁 Gestión de regalos",
+        "owner_dashboard": "🔐 Panel del propietario",
+        "balance": "Saldo MonCash Business",
+        "transfer_funds": "💰 Transferir fondos a tu cuenta",
+        "amount_transfer": "Monto a transferir ($)",
+        "transfer": "🚀 Transferir a MonCash",
+        "no_gifts": "Aún no hay regalos.",
+        "payout_summary": "Resumen de pagos",
+        "total_gifts_htg": "Total de regalos (HTG)",
+        "mark_paid": "Marcar todo como pagado (simulado)",
+        "contact_support": "📬 Contacto para soporte / pagos grandes",
+        "logout_owner": "Cerrar sesión del espacio propietario",
+        "setup_instructions": "ℹ️ Instrucciones de configuración (si falla la subida)",
+        "storage_error": "Error de permiso de almacenamiento: configure políticas RLS para el bucket 'avatars'.",
+        "listen_explanation": "🔊 Escuchar explicación de la aplicación",
+        "voice_lang": "🌐 Idioma de la voz",
+        "app_explanation": "Esta aplicación fue construida por Gesner Deslandes, Ingeniero Jefe en GlobalInternet.py. Teléfono: (509) 4738-5663. Correo: deslandes78@gmail.com. Póngase en contacto con Gesner si desea crear un sitio web o software. Esta aplicación es una plataforma de redes sociales haitiana que le permite conectarse con amigos, compartir publicaciones, transmitir en vivo, enviar regalos y chatear en tiempo real. Utiliza Supabase para los datos, admite transmisión en vivo con filtros de fondo e incluye un mapa satelital para diversión. Está diseñada para ser un espacio moderno, seguro y divertido para que los usuarios haitianos interactúen en línea. Todas las características están construidas con Python y Streamlit. ¡Además, cuando haya un partido del Mundial, podrás verlo en vivo aquí mismo en la plataforma!",
+        "network_error": "⚠️ No se puede conectar al servidor de autenticación. Verifique su conexión a internet e intente de nuevo. Si el problema persiste, contacte al soporte.",
+        "debug_hint": "Si es administrador, active 'Mostrar información de depuración' a continuación para ver el error sin procesar.",
+        "show_debug": "Mostrar información de depuración",
+        "home_title": "🏠 Lakay se Lakay",
+        "home_haiti": "HAITI",
+        "home_subtitle": "Your Haitian social media platform",
+        "call_permission_hint": "📌 Asegúrese de que ambos participantes concedan acceso a la cámara y al micrófono. Si no se ven, actualicen la página y vuelvan a intentarlo.",
+        "join_instructions": "📌 Después de unirse a la sala, haga clic en el botón **'Unirse'** en la ventana de video y permita el acceso a cámara/mic. Si aún no ve a la otra persona, pídale que revise su configuración de cámara.",
+        "reload_call": "🔄 Recargar llamada",
+        "request_to_join": "📨 Solicitar unirse",
+        "request_pending": "⏳ Solicitud pendiente... esperando aprobación del transmisor.",
+        "broadcaster_controls": "🎛️ Controles del transmisor",
+        "join_live": "🔴 Unirse al directo",
+        "user_management": "👥 Gestión de usuarios",
+        "ban_user": "🚫 Banear",
+        "unban_user": "✅ Desbanear",
+        "ban_reason": "Razón del baneo",
+        "banned": "Baneado",
+        "active": "Activo",
+        "my_wall": "📝 Mi Muro",
+        "my_live_sessions": "📺 Mis sesiones en vivo",
+        "live_status_live": "🔴 EN VIVO",
+        "live_status_ended": "Terminado",
+        "video_call": "📞 Videollamada (Jitsi Demo)",
+        "demo_note": "ℹ️ Esto es una demo usando Jitsi Meet – gratuito y de código abierto. Puedes iniciar una llamada y compartir el enlace de la sala con cualquiera.",
+        "copy_link": "📋 Copiar enlace de la sala",
+        "room_link_copied": "✅ ¡Enlace de la sala copiado al portapapeles!",
+        "start_video_call": "Iniciar una videollamada",
+        "your_personal_room": "Tu sala personal",
+        "join_room": "Unirse a la sala"
+    },
+    "ht": {
+        "login_title": "Konekte",
+        "signup_title": "Enskri",
+        "forgot_password": "Bliye modpas",
+        "email": "Imèl",
+        "password": "Modpas",
+        "full_name": "Non konplè",
+        "remember_me": "Sonje m",
+        "login_button": "🚀 Konekte",
+        "signup_button": "📝 Enskri",
+        "send_reset_link": "Voye lyen reyinisyalizasyon",
+        "feed": "📡 Feed",
+        "friends_chat": "👥 Zanmi ak chat",
+        "satellite_map": "🛰️ Kat satelit",
+        "worldcup": "⚽ Mondyal an dirèk",
+        "profile": "👤 Pwofil",
+        "owner_space": "🕊️ Espas Pwopriyetè",
+        "logout": "🚪 Dekonekte",
+        "system_health": "🛡️ Sante sistèm",
+        "signal": "📡 Siyal",
+        "latency": "⏱️ Latansi",
+        "quality": "📊 Kalite",
+        "uptime": "⏰ Tan fonksyònman",
+        "encrypted": "🔒 Estati: CHIFRE",
+        "compensation": "💰 Konpansasyon",
+        "logged_in_as": "👤 Konekte kòm",
+        "go_live": "Ale an dirèk",
+        "external_platform": "Platfòm ekstèn (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Kamera entegre",
+        "select_platform": "Chwazi platfòm",
+        "live_title": "Tit dirèk",
+        "create_live_session": "Kreye sesyon dirèk",
+        "you_are_live": "🔴 Ou an dirèk!",
+        "end_live_session": "Fèmen sesyon dirèk",
+        "set_stream_url": "📹 Mete URL stream",
+        "paste_url": "Kole URL stream dirèk ou",
+        "update_url": "Mete ajou URL",
+        "shareable_link": "Lyen pataj",
+        "live_chat_gifts": "Chat dirèk ak kado",
+        "send_gift": "🎁 Voye yon kado",
+        "add_moncash": "Ajoute nimewo MonCash ou nan pwofil ou pou voye kado.",
+        "add_natcash": "Ajoute nimewo NATCASH ou pou resevwa kado.",
+        "total_gifts": "Total kado resevwa",
+        "gifts_sent_to": "Kado yo pral voye nan MonCash ou",
+        "gifts_sent_to_natcash": "NATCASH",
+        "write_comment": "Ekri yon kòmantè...",
+        "send": "Voye",
+        "back_to_feed": "Retounen nan feed",
+        "create_post": "Kreye yon pòs",
+        "caption_placeholder": "Ekri yon bagay... oswa kole yon lyen videyo",
+        "add_media": "Ajoute imaj oswa videyo (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
+        "visibility": "Vizibilite",
+        "public": "Piblik",
+        "private": "Prive",
+        "post": "🚀 Pibliye",
+        "delete_post": "🗑️ Efase",
+        "comments": "Kòmantè",
+        "reply": "💬 Reponn",
+        "post_reply": "Pibliye repons",
+        "your_reply": "Repons ou",
+        "clear_error": "Efase erè",
+        "join_live": "Antre nan dirèk",
+        "watch_stream": "▶ GADE STREAM",
+        "start_broadcast": "▶ KÒMANSE DIFIZYON",
+        "stop_broadcast": "■ STOP DIFIZYON",
+        "you_are_broadcaster": "✅ Ou se difizè. Sèvi ak kontwòl anba a pou kòmanse.",
+        "you_are_viewer": "👀 Ou se yon telespektatè. Klike sou 'Gade Stream' pou wè videyo a.",
+        "choose_background": "🎨 Filtre background",
+        "bg_option": "BG",
+        "upload_background": "Oswa telechaje pwòp imaj ou",
+        "background_set": "Background mete!",
+        "ready_to_start": "Pare pou kòmanse. Klike sou bouton an pi wo a.",
+        "camera_access": "📷 Mande aksè kamera...",
+        "camera_granted": "✅ Aksè kamera akòde. Konekte ak sèvè peer...",
+        "broadcasting": "✅ Difizyon an dirèk! ID peer ou",
+        "peer_error": "❌ Erè peer",
+        "error": "❌ Erè",
+        "broadcast_ended": "Difizyon fini",
+        "initializing": "Inisyalizasyon...",
+        "connected_requesting": "Konekte. Mande stream nan men difizè...",
+        "calling": "Ap rele",
+        "received_stream": "Resevwa stream",
+        "now_watching": "✅ Koulye a w ap gade stream an dirèk",
+        "call_error": "❌ Erè apèl",
+        "call_ended": "Apèl fini",
+        "disconnected": "Dekonekte. Tanpri rafrechi.",
+        "send_message": "Voye",
+        "close_chat": "Fèmen chat",
+        "active_call": "📞 Apèl aktif",
+        "room_id": "ID sal",
+        "share_room": "Pataje ID sal sa a ak moun ou vle rele.",
+        "start_call": "Kòmanse yon nouvo apèl",
+        "end_call": "Fèmen apèl",
+        "find_users": "🔍 Chèche itilizatè",
+        "search_by_name": "Chèche pa non",
+        "add_friend": "➕ Ajoute zanmi",
+        "view_profile": "👤 Gade pwofil",
+        "friend_requests": "📨 Demann zanmi resevwa",
+        "accept": "✅ Aksepte",
+        "reject": "❌ Rejte",
+        "your_friends": "👥 Zanmi ou yo",
+        "no_friends": "Ou poko gen zanmi",
+        "chat": "💬 Chat",
+        "call": "📞 Rele",
+        "profile_btn": "👤 Pwofil",
+        "edit_profile": "Modifye pwofil",
+        "save_changes": "💾 Sove chanjman",
+        "change_picture": "📸 Chanje foto",
+        "bio": "Biwo",
+        "location": "Kote",
+        "moncash_phone": "Nimewo MonCash (pou resevwa kado)",
+        "natcash_phone": "Nimewo NATCASH (pou resevwa kado)",
+        "posts_count": "Pòs",
+        "connections": "Koneksyon",
+        "verified": "Verifye",
+        "member_since": "Manm depi",
+        "dashboard": "💰 Tablo",
+        "new_users": "📈 Nouvo itilizatè",
+        "post_moderation": "🛡️ Moderasyon pòs",
+        "client_payments": "📥 Peman kliyan",
+        "gift_management": "🎁 Jesyon kado",
+        "owner_dashboard": "🔐 Tablo pwopriyetè",
+        "balance": "Balan MonCash Business",
+        "transfer_funds": "💰 Transfere lajan nan kont ou",
+        "amount_transfer": "Montan pou transfere ($)",
+        "transfer": "🚀 Transfere nan MonCash mwen",
+        "no_gifts": "Pokono kado.",
+        "payout_summary": "Rezime peman",
+        "total_gifts_htg": "Total kado (HTG)",
+        "mark_paid": "Make tout kòm peye (simile)",
+        "contact_support": "📬 Kontakte sipò / gwo peman",
+        "logout_owner": "Dekonekte Espas Pwopriyetè",
+        "setup_instructions": "ℹ️ Enstriksyon konfigirasyon (si telechajman echwe)",
+        "storage_error": "Erè pèmisyon depo: Tanpri mete politik RLS pou bucket 'avatars'.",
+        "listen_explanation": "🔊 Koute eksplikasyon aplikasyon an",
+        "voice_lang": "🌐 Lang vwa",
+        "app_explanation": "Aplikasyon sa a te bati pa Gesner Deslandes, Enjenyè an Chèf nan GlobalInternet.py. Telefòn: (509) 4738-5663. Imèl: deslandes78@gmail.com. Kontakte Gesner si ou vle bati yon sit wèb oswa lojisyèl. Aplikasyon sa a se yon platfòm medya sosyal ayisyen ki pèmèt ou konekte ak zanmi, pataje pòs, ale an dirèk, voye kado, ak chat an tan reyèl. Li itilize Supabase pou done, sipòte difizyon an dirèk ak filt background, epi li gen yon kat satelit pou amizman. Li fèt pou yon espas modèn, sekirize ak amizan pou itilizatè ayisyen yo ka entèaktif sou entènèt. Tout fonksyonalite yo bati ak Python ak Streamlit. Anplis de sa, lè gen yon match Mondyal la, ou ka gade l an dirèk sou platfòm nan!",
+        "network_error": "⚠️ Pa ka konekte ak sèvè otantifikasyon an. Tanpri tcheke koneksyon entènèt ou epi eseye ankò. Si pwoblèm nan kontinye, kontakte sipò.",
+        "debug_hint": "Si w se administratè, aktive 'Montre enfòmasyon debogaj' anba a pou wè erè a.",
+        "show_debug": "Montre enfòmasyon debogaj",
+        "home_title": "🏠 Lakay se Lakay",
+        "home_haiti": "Ayiti",
+        "home_subtitle": "Nouvo rezo Sosyal Ayisyen",
+        "call_permission_hint": "📌 Asire w ke tou de patisipan yo bay aksè kamera ak mikwofòn lè navigatè a mande. Si ou pa wè moun nan, rafrechi paj la epi eseye ankò.",
+        "join_instructions": "📌 Apre w fin rantre nan sal la, klike sou bouton **'Join'** nan fenèt videyo a epi pèmèt aksè kamera/mikrofòn. Si w toujou pa wè lòt moun nan, mande l pou l tcheke paramèt kamera li.",
+        "reload_call": "🔄 Reload apèl",
+        "request_to_join": "📨 Mandle pou rantre",
+        "request_pending": "⏳ Demann annat... ap tann difizè a apwouve.",
+        "broadcaster_controls": "🎛️ Kontwòl difizè",
+        "join_live": "🔴 Antre nan dirèk",
+        "user_management": "👥 Jesyon itilizatè",
+        "ban_user": "🚫 Bani",
+        "unban_user": "✅ Retire bani",
+        "ban_reason": "Rezon bani",
+        "banned": "Bani",
+        "active": "Aktif",
+        "my_wall": "📝 Mi Miray",
+        "my_live_sessions": "📺 Sesyondirèk mwen yo",
+        "live_status_live": "🔴 AN DIRÈK",
+        "live_status_ended": "Fini",
+        "video_call": "📞 Apèl videyo (Jitsi Demo)",
+        "demo_note": "ℹ️ Sa a se yon demo lè l sèvi avèk Jitsi Meet – gratis ak sous louvri. Ou ka kòmanse yon apèl epi pataje lyen sal la ak nenpòt moun.",
+        "copy_link": "📋 Kopye lyen sal la",
+        "room_link_copied": "✅ Lyen sal la kopye nan clipboard!",
+        "start_video_call": "Kòmanse yon apèl videyo",
+        "your_personal_room": "Sal pèsonèl ou",
+        "join_room": "Antre nan sal"
+    }
 }
-# For brevity, the full dictionaries are omitted; in your actual file, include all.
 
 def t(key):
     return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
@@ -456,7 +956,6 @@ if not st.session_state.logged_in and supabase:
                 load_friend_data()
                 st.session_state.notifications = load_notifications(user.user.id)
                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
-                # Show a friendly message
                 st.info("🔁 Session restored – you are still logged in.")
         except Exception as e:
             st.session_state.last_error = str(e)
@@ -530,7 +1029,7 @@ st.components.v1.html("""
 </script>
 """, height=0)
 
-# ====== UI STYLING (unchanged) ======
+# ====== UI STYLING ======
 st.markdown("""
     <style>
     .stApp { background-color: #D6EAF8; }
@@ -589,7 +1088,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ====== HELPER FUNCTIONS (with upload speed improvements) ======
+# ====== HELPER FUNCTIONS ======
 def make_clickable(text):
     url_pattern = r'(https?://[^\s]+)'
     return re.sub(url_pattern, r'<a href="\1" target="_blank">\1</a>', text)
@@ -781,25 +1280,17 @@ def get_all_users():
 
 # ---- Uploads with compression ----
 def compress_image(file_bytes, max_size_kb=200, quality=70, max_width=1024):
-    """
-    Compress an image to reduce upload size.
-    Returns compressed bytes and content type.
-    """
     try:
         img = Image.open(io.BytesIO(file_bytes))
-        # Convert to RGB if needed (for PNG with alpha)
         if img.mode in ('RGBA', 'LA', 'P'):
             img = img.convert('RGB')
-        # Resize if too large
         if img.width > max_width:
             ratio = max_width / img.width
             new_size = (max_width, int(img.height * ratio))
             img = img.resize(new_size, Image.Resampling.LANCZOS)
-        # Save to bytes with quality
         output = io.BytesIO()
         img.save(output, format='JPEG', quality=quality, optimize=True)
         compressed = output.getvalue()
-        # If still too big, reduce quality further
         while len(compressed) > max_size_kb * 1024 and quality > 20:
             quality -= 10
             output = io.BytesIO()
@@ -807,8 +1298,7 @@ def compress_image(file_bytes, max_size_kb=200, quality=70, max_width=1024):
             compressed = output.getvalue()
         return compressed, 'image/jpeg'
     except Exception:
-        # If compression fails, return original
-        return file_bytes, 'image/jpeg'  # fallback
+        return file_bytes, 'image/jpeg'
 
 def upload_avatar(user_id, image_file):
     if supabase is None:
@@ -816,7 +1306,6 @@ def upload_avatar(user_id, image_file):
     if not ensure_bucket_exists("avatars"):
         return upload_avatar_base64(image_file)
     try:
-        # Compress image
         original_bytes = image_file.getvalue()
         compressed_bytes, content_type = compress_image(original_bytes, max_size_kb=150)
         ext = 'jpg'
@@ -844,7 +1333,6 @@ def upload_post_media(user_id, file):
         return upload_media_base64(file)
     try:
         content_type = file.type
-        # Compress images only (videos are left as is)
         if content_type.startswith('image'):
             original_bytes = file.getvalue()
             compressed_bytes, content_type = compress_image(original_bytes, max_size_kb=300)
@@ -955,7 +1443,6 @@ def is_user_online(last_active_str, threshold_minutes=5):
     except Exception:
         return False
 
-# ---- display_avatar_and_followers ----
 def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     online = False
     if profile is not None:
@@ -974,7 +1461,6 @@ def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     else:
         st.caption("1kFollowers")
 
-# ---- Post count ----
 def get_user_post_count(user_id, public_only=False):
     if supabase is None:
         return 0
@@ -987,7 +1473,6 @@ def get_user_post_count(user_id, public_only=False):
     except Exception:
         return 0
 
-# ---- Posts loading ----
 @st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None, include_private=False):
     if supabase is None:
@@ -1058,7 +1543,6 @@ def create_post(user_id, content, media_files=None, is_public=True, existing_med
     try:
         media_urls = []
         if media_files:
-            # Show progress bar for uploads
             progress_bar = st.progress(0, text="Uploading media...")
             for i, f in enumerate(media_files):
                 progress_bar.progress((i + 1) / len(media_files), text=f"Uploading {i+1}/{len(media_files)}...")
@@ -1886,7 +2370,6 @@ def log_in_email(email, password, remember=False, show_debug=False):
         else:
             st.error(f"❌ Login failed: {error_str}")
 
-# ---- Render top icons ----
 def render_top_icons():
     if not st.session_state.logged_in:
         return
@@ -2198,7 +2681,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== render_user_profile (shows all posts for owner) ======
+# ====== render_user_profile ======
 def render_user_profile(user_id, show_back_button=True):
     if supabase is None:
         st.error("Database not connected.")
@@ -3563,6 +4046,35 @@ def main_app():
             <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold;">
                 🌍 GlobalInternet.py
             </a>
+            """,
+            unsafe_allow_html=True
+        )
+        st.divider()
+        
+        # ====== LOVE STORIES SECTION ======
+        st.markdown("### 💕 Love Stories")
+        st.markdown(
+            """
+            <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+                <a href="https://www.viki.com/videos/1260791v-live-in-love-episode-1" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 Live in Love – Episode 1
+                </a>
+                <a href="https://www.viki.com/tv/37089c-love-alarm" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 Love Alarm
+                </a>
+                <a href="https://www.viki.com/tv/34681c-my-secret-romance" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 My Secret Romance
+                </a>
+                <a href="https://www.viki.com/tv/37295c-whats-wrong-with-secretary-kim" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 What's Wrong with Secretary Kim
+                </a>
+                <a href="https://www.viki.com/tv/37139c-her-private-life" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 Her Private Life
+                </a>
+                <a href="https://www.viki.com/tv/37398c-touch-your-heart" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    💕 Touch Your Heart
+                </a>
+            </div>
             """,
             unsafe_allow_html=True
         )
