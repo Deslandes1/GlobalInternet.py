@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - WITH SIDEBAR LINKS & NAV FIX) ======
+# ====== FULL app.py (Lakay se Lakay - WITH GLOBAL SHIELD ACTIVE) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.5.0 (Fixed Feed navigation, added external app links)
+# Version: 78.6.0 (Global Shield API key now shown as active)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -102,6 +102,10 @@ EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
 JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
+
+# ====== GLOBAL SHIELD API KEY – hardcoded fallback ======
+GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY", "dglaIuaY_9cwljpxOUddAez4K4rze9FL0oy9ddtVG1Q")
+GLOBAL_SHIELD_ACTIVE = bool(GLOBAL_SHIELD_API_KEY)
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
