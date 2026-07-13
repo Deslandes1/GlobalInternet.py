@@ -2462,16 +2462,31 @@ def display_media_item(media):
         st.markdown(f"[Click to open media]({media['url']})")
 
 def render_feed():
-    # Check if we are showing a love story
+    # ====== FIX: Love Story – open in new tab instead of iframe ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
-        st.title("💕 Now Playing")
-        # Use an iframe to embed the love story (some sites may block iframe)
-        st.components.v1.iframe(st.session_state.love_story_url, height=600, scrolling=True)
+        st.title("💕 Love Story")
+        st.info(
+            "This content is hosted on an external site and cannot be embedded directly "
+            "due to security restrictions. Click the button below to watch in a new tab."
+        )
+        # Open in a new tab (Streamlit 1.33+ supports st.link_button)
+        try:
+            st.link_button("▶ Watch Now", st.session_state.love_story_url)
+        except AttributeError:
+            # Fallback for older Streamlit versions
+            st.markdown(
+                f'<a href="{st.session_state.love_story_url}" target="_blank" '
+                f'style="display:inline-block; background:#0080ff; color:white; '
+                f'padding:10px 20px; border-radius:5px; text-decoration:none; '
+                f'font-weight:bold;">▶ Watch Now</a>',
+                unsafe_allow_html=True
+            )
         if st.button("✖ Close and return to Feed"):
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
             st.rerun()
         return
+    # ----------------------------------------------------------------
 
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
