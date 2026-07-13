@@ -2461,26 +2461,25 @@ def display_media_item(media):
         st.error(f"Error displaying media: {e}")
         st.markdown(f"[Click to open media]({media['url']})")
 
+# ---- Love Story embed helper ----
+def get_embed_url(url):
+    """
+    Convert a Viki URL to an embeddable URL.
+    """
+    if 'viki.com' in url:
+        # Extract the ID: /videos/ID or /tv/ID
+        match = re.search(r'/(?:videos|tv)/([a-zA-Z0-9]+)', url)
+        if match:
+            return f"https://www.viki.com/embed/{match.group(1)}"
+    # For other sites, return the original (may or may not embed)
+    return url
+
 def render_feed():
-    # ====== FIX: Love Story – open in new tab instead of iframe ======
+    # ====== Love Story – embed inside app using Viki's embed URL ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
         st.title("💕 Love Story")
-        st.info(
-            "This content is hosted on an external site and cannot be embedded directly "
-            "due to security restrictions. Click the button below to watch in a new tab."
-        )
-        # Open in a new tab (Streamlit 1.33+ supports st.link_button)
-        try:
-            st.link_button("▶ Watch Now", st.session_state.love_story_url)
-        except AttributeError:
-            # Fallback for older Streamlit versions
-            st.markdown(
-                f'<a href="{st.session_state.love_story_url}" target="_blank" '
-                f'style="display:inline-block; background:#0080ff; color:white; '
-                f'padding:10px 20px; border-radius:5px; text-decoration:none; '
-                f'font-weight:bold;">▶ Watch Now</a>',
-                unsafe_allow_html=True
-            )
+        embed_url = st.session_state.love_story_url
+        st.components.v1.iframe(embed_url, height=600, scrolling=True)
         if st.button("✖ Close and return to Feed"):
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
@@ -4095,7 +4094,8 @@ def main_app():
         ]
         for label, url in love_stories:
             if st.button(f"💕 {label}", key=f"love_{url}", use_container_width=True):
-                st.session_state.love_story_url = url
+                # Convert to embed URL before storing
+                st.session_state.love_story_url = get_embed_url(url)
                 st.session_state.show_love_story = True
                 st.rerun()
         st.divider()
