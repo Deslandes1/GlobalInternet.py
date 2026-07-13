@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED) ======
+# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.0 (Feed shuffled like a cord)
+# Version: 78.11.1 (Shuffled feed + login cache fix)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -955,6 +955,9 @@ if not st.session_state.logged_in and supabase:
                 st.session_state.refresh_token = refresh_token
                 st.session_state.profile = profile
                 st.session_state.connection_time = time.time()
+                # ---- FORCE CACHE CLEAR ON RESTORE ----
+                st.cache_data.clear()
+                # ----------------------------------------
                 st.session_state.posts = load_posts()
                 st.session_state.live_sessions = load_live_sessions()
                 load_friend_data()
@@ -2297,6 +2300,9 @@ def verify_phone_otp(raw_phone, token, remember=False):
                 st.session_state.refresh_token = session.session.refresh_token
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
+            # ---- FORCE CACHE CLEAR ON PHONE LOGIN ----
+            st.cache_data.clear()
+            # -------------------------------------------
             st.session_state.posts = load_posts()
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.phone_otp_sent = False
@@ -2380,6 +2386,9 @@ def log_in_email(email, password, remember=False, show_debug=False):
                 st.session_state.refresh_token = user.session.refresh_token
             st.session_state.profile = profile
             st.session_state.connection_time = time.time()
+            # ---- FORCE CACHE CLEAR ON LOGIN ----
+            st.cache_data.clear()
+            # ------------------------------------
             st.session_state.posts = load_posts()
             st.session_state.live_sessions = load_live_sessions()
             load_friend_data()
