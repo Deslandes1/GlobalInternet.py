@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - LOVE STORIES INSIDE APP) ======
+# ====== FULL app.py (Lakay se Lakay - LOVE STORIES OPEN IN NEW TAB) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.10.0 (Love Stories open inside app via iframe)
+# Version: 78.10.1 (Love Stories open in new tab)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2461,31 +2461,31 @@ def display_media_item(media):
         st.error(f"Error displaying media: {e}")
         st.markdown(f"[Click to open media]({media['url']})")
 
-# ---- Love Story embed helper ----
-def get_embed_url(url):
-    """
-    Convert a Viki URL to an embeddable URL.
-    """
-    if 'viki.com' in url:
-        # Extract the ID: /videos/ID or /tv/ID
-        match = re.search(r'/(?:videos|tv)/([a-zA-Z0-9]+)', url)
-        if match:
-            return f"https://www.viki.com/embed/{match.group(1)}"
-    # For other sites, return the original (may or may not embed)
-    return url
-
 def render_feed():
-    # ====== Love Story – embed inside app using Viki's embed URL ======
+    # ====== LOVE STORY – OPEN IN NEW TAB ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
         st.title("💕 Love Story")
-        embed_url = st.session_state.love_story_url
-        st.components.v1.iframe(embed_url, height=600, scrolling=True)
+        st.info(
+            "This content is hosted on an external site. "
+            "Click the button below to watch in a new tab."
+        )
+        try:
+            st.link_button("▶ Watch Now", st.session_state.love_story_url)
+        except AttributeError:
+            # Fallback for older Streamlit versions
+            st.markdown(
+                f'<a href="{st.session_state.love_story_url}" target="_blank" '
+                f'style="display:inline-block; background:#0080ff; color:white; '
+                f'padding:10px 20px; border-radius:5px; text-decoration:none; '
+                f'font-weight:bold;">▶ Watch Now</a>',
+                unsafe_allow_html=True
+            )
         if st.button("✖ Close and return to Feed"):
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
             st.rerun()
         return
-    # ----------------------------------------------------------------
+    # -------------------------------------------------
 
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
@@ -4082,7 +4082,7 @@ def main_app():
         )
         st.divider()
         
-        # ====== LOVE STORIES SECTION (buttons now) ======
+        # ====== LOVE STORIES SECTION ======
         st.markdown("### 💕 Love Stories")
         love_stories = [
             ("Live in Love – Episode 1", "https://www.viki.com/videos/1260791v-live-in-love-episode-1"),
@@ -4094,8 +4094,8 @@ def main_app():
         ]
         for label, url in love_stories:
             if st.button(f"💕 {label}", key=f"love_{url}", use_container_width=True):
-                # Convert to embed URL before storing
-                st.session_state.love_story_url = get_embed_url(url)
+                # Store the original URL (will open in new tab)
+                st.session_state.love_story_url = url
                 st.session_state.show_love_story = True
                 st.rerun()
         st.divider()
