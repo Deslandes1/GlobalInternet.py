@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - WITH LOVE STORIES IN SIDEBAR) ======
+# ====== FULL app.py (Lakay se Lakay - LOVE STORIES INSIDE APP) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.9.0 (Added Love Stories section in sidebar)
+# Version: 78.10.0 (Love Stories open inside app via iframe)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -177,6 +177,10 @@ if "call_reload" not in st.session_state:
     st.session_state.call_reload = 0
 if "live_room_name" not in st.session_state:
     st.session_state.live_room_name = None
+if "love_story_url" not in st.session_state:
+    st.session_state.love_story_url = None
+if "show_love_story" not in st.session_state:
+    st.session_state.show_love_story = False
 
 # ====== LANGUAGE DICTIONARY ======
 # Full dictionary included (all languages: en, fr, es, ht)
@@ -2306,6 +2310,8 @@ def logout():
     st.session_state.live_gifts = []
     st.session_state.background_url = None
     st.session_state.editing_post = None
+    st.session_state.love_story_url = None
+    st.session_state.show_love_story = False
     st.rerun()
 
 # ====== AUDIO FUNCTION ======
@@ -2456,6 +2462,17 @@ def display_media_item(media):
         st.markdown(f"[Click to open media]({media['url']})")
 
 def render_feed():
+    # Check if we are showing a love story
+    if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
+        st.title("💕 Now Playing")
+        # Use an iframe to embed the love story (some sites may block iframe)
+        st.components.v1.iframe(st.session_state.love_story_url, height=600, scrolling=True)
+        if st.button("✖ Close and return to Feed"):
+            st.session_state.show_love_story = False
+            st.session_state.love_story_url = None
+            st.rerun()
+        return
+
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
         return
@@ -4051,33 +4068,21 @@ def main_app():
         )
         st.divider()
         
-        # ====== LOVE STORIES SECTION ======
+        # ====== LOVE STORIES SECTION (buttons now) ======
         st.markdown("### 💕 Love Stories")
-        st.markdown(
-            """
-            <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
-                <a href="https://www.viki.com/videos/1260791v-live-in-love-episode-1" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 Live in Love – Episode 1
-                </a>
-                <a href="https://www.viki.com/tv/37089c-love-alarm" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 Love Alarm
-                </a>
-                <a href="https://www.viki.com/tv/34681c-my-secret-romance" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 My Secret Romance
-                </a>
-                <a href="https://www.viki.com/tv/37295c-whats-wrong-with-secretary-kim" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 What's Wrong with Secretary Kim
-                </a>
-                <a href="https://www.viki.com/tv/37139c-her-private-life" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 Her Private Life
-                </a>
-                <a href="https://www.viki.com/tv/37398c-touch-your-heart" target="_blank" style="display:block; background:rgba(255,255,255,0.15); padding:8px 12px; border-radius:8px; text-decoration:none; color:#1e2a3a; font-weight:500; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    💕 Touch Your Heart
-                </a>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        love_stories = [
+            ("Live in Love – Episode 1", "https://www.viki.com/videos/1260791v-live-in-love-episode-1"),
+            ("Love Alarm", "https://www.viki.com/tv/37089c-love-alarm"),
+            ("My Secret Romance", "https://www.viki.com/tv/34681c-my-secret-romance"),
+            ("What's Wrong with Secretary Kim", "https://www.viki.com/tv/37295c-whats-wrong-with-secretary-kim"),
+            ("Her Private Life", "https://www.viki.com/tv/37139c-her-private-life"),
+            ("Touch Your Heart", "https://www.viki.com/tv/37398c-touch-your-heart"),
+        ]
+        for label, url in love_stories:
+            if st.button(f"💕 {label}", key=f"love_{url}", use_container_width=True):
+                st.session_state.love_story_url = url
+                st.session_state.show_love_story = True
+                st.rerun()
         st.divider()
         
         # ====== GLOBAL SHIELD STATUS ======
@@ -4175,10 +4180,10 @@ def main_app():
         selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
         
-        # CRITICAL FIX: Clear viewing flags when switching pages, especially when going back to Feed
-        if selected_key != st.session_state.current_page or selected_key == "feed":
-            st.session_state.viewing_profile = None
-            st.session_state.viewing_live = None
+        # Clear love story if navigating to a different page
+        if selected_key != st.session_state.current_page:
+            st.session_state.show_love_story = False
+            st.session_state.love_story_url = None
         st.session_state.current_page = selected_key
         
         st.divider()
