@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - WITH OWNER POST VISIBILITY CONTROL) ======
+# ====== FULL app.py (Lakay se Lakay - WITH EXTERNAL LINKS IN SIDEBAR) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.3.0 (Added owner "Hide from Public" post toggle)
+# Version: 78.4.0 (Added Global Radar & GlobalInternet.py sidebar links)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3488,6 +3488,31 @@ def main_app():
             st.session_state.language = selected_lang
             st.rerun()
         st.divider()
+        
+        # ====== NEW: EXTERNAL APP LINKS ======
+        st.markdown("### 🌐 GlobalInternet.py Apps")
+        
+        # Global Radar Link
+        st.markdown(
+            """
+            <a href="https://globalsurveillanceradarad-zxajfceg4timbxqkmpmyqt.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#00209F; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🛰️ Global Radar
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # GlobalInternet.py Website Link
+        st.markdown(
+            """
+            <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold;">
+                🌍 GlobalInternet.py
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+        st.divider()
+        
         if st.session_state.unread_count > 0:
             st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
         if st.session_state.profile and st.session_state.profile.get("is_live"):
