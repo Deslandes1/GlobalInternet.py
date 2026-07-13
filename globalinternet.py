@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.1 (Shuffled feed + login cache fix)
+# Version: 78.11.2 (Secrets removed from code – use st.secrets only)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -85,11 +85,11 @@ def ensure_bucket_exists(bucket_name, public=True):
     except Exception:
         return False
 
-# --- Secrets ---
-OWNER_CIN = st.secrets.get("OWNER_CIN", "1248795849")
-MONCASH_NUM = st.secrets.get("MONCASH_NUM", "(509)-47385663")
-UNIBANK_ACCOUNT = st.secrets.get("UNIBANK_ACCOUNT", "105-2016-16594727")
-OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password", "OwnerSpace2025")
+# --- Secrets (NO DEFAULTS – all come from st.secrets) ---
+OWNER_CIN = st.secrets.get("OWNER_CIN")
+MONCASH_NUM = st.secrets.get("MONCASH_NUM")
+UNIBANK_ACCOUNT = st.secrets.get("UNIBANK_ACCOUNT")
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password")
 
 BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
@@ -104,9 +104,24 @@ EMAIL_TO = st.secrets.get("EMAIL_TO")
 
 JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
 
-# ====== GLOBAL SHIELD API KEY – hardcoded fallback ======
-GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY", "dglaIuaY_9cwljpxOUddAez4K4rze9FL0oy9ddtVG1Q")
+# ====== GLOBAL SHIELD API KEY – NO FALLBACK! ======
+GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY")
 GLOBAL_SHIELD_ACTIVE = bool(GLOBAL_SHIELD_API_KEY)
+
+# Optional: check for missing critical secrets
+_missing = []
+if not OWNER_CIN:
+    _missing.append("OWNER_CIN")
+if not MONCASH_NUM:
+    _missing.append("MONCASH_NUM")
+if not UNIBANK_ACCOUNT:
+    _missing.append("UNIBANK_ACCOUNT")
+if not OWNSPACE_PASSWORD:
+    _missing.append("OwnSpace_Password")
+if not GLOBAL_SHIELD_API_KEY:
+    _missing.append("GLOBAL_SHIELD_API_KEY")
+if _missing:
+    st.warning(f"⚠️ Missing secrets: {', '.join(_missing)}. Some features may not work. Define them in Streamlit Cloud.")
 
 # --- Session state ---
 if "logged_in" not in st.session_state:
