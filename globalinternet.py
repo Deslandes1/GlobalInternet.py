@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX + AI Math Solver) ======
+# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX + AI Math Solver + More Apps) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.3 (AI Math Solver link added)
+# Version: 78.11.4 (Added more GlobalInternet.py apps to sidebar)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -4114,9 +4114,10 @@ def main_app():
             st.session_state.language = selected_lang
             st.rerun()
         st.divider()
-        
+
         # ====== EXTERNAL APP LINKS ======
         st.markdown("### 🌐 GlobalInternet.py Apps")
+
         st.markdown(
             """
             <a href="https://globalsurveillanceradarad-zxajfceg4timbxqkmpmyqt.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#00209F; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
@@ -4125,25 +4126,84 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
+
         st.markdown(
             """
-            <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold;">
+            <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
                 🌍 GlobalInternet.py
             </a>
             """,
             unsafe_allow_html=True
         )
+
         st.markdown(
             """
-            <a href="https://mathematics-problem-solver-2026-cjhmmanktwdwglxpxdpqtn.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold; margin-bottom:5px;">
+            <a href="https://mathematics-problem-solver-2026-cjhmmanktwdwglxpxdpqtn.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
                 🧮 AI Math Solver
             </a>
             <p style="text-align:center; font-size:0.8rem; color:#2c3e50;">🔑 Login: 20082010</p>
             """,
             unsafe_allow_html=True
         )
+
+        st.markdown("### 🎮 More GlobalInternet.py Apps")
+
+        st.markdown(
+            """
+            <a href="https://playchessagainstthemachinemarch2026-hqnjksiy9jemcb4np5pzmp.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#2c3e50; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                ♟️ Chess vs Machine
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <a href="https://puzzle-game-gdcx5vdkwhbbm824cwxcc9.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#8e44ad; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🧩 Puzzle Game
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <a href="https://whiteboard-software-fdcqkycya2oe38ufvcybjm.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                ✏️ Whiteboard Software
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <a href="https://jqx4o4apg4jjnn3qi9jlhn.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#c0392b; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🎯 App 4
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <a href="https://nic-honestly-crafted-ice-creams-je9srxl472sjg9xkaxzqgj.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#d4a017; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🍦 Ice Cream App
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            """
+            <a href="https://hteer6e6gap5kpgmfsdh92.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#16a085; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                📊 App 6
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
         st.divider()
-        
+
         # ====== LOVE STORIES SECTION ======
         st.markdown("### 💕 Love Stories")
         love_stories = [
@@ -4160,7 +4220,7 @@ def main_app():
                 st.session_state.show_love_story = True
                 st.rerun()
         st.divider()
-        
+
         # ====== GLOBAL SHIELD STATUS ======
         st.markdown(f"### 🛡️ {t('security_badge')}")
         st.markdown(f"<div class='security-badge'>{t('security_caption')}</div>", unsafe_allow_html=True)
@@ -4169,7 +4229,7 @@ def main_app():
         else:
             st.warning("⚠️ Global Shield API Key not configured")
         st.divider()
-        
+
         if st.session_state.unread_count > 0:
             st.sidebar.markdown(f"🔔 **Notifications** <span class='notification-badge'>({st.session_state.unread_count})</span>", unsafe_allow_html=True)
         if st.session_state.profile and st.session_state.profile.get("is_live"):
@@ -4244,7 +4304,7 @@ def main_app():
                 else:
                     st.error("Failed to generate audio.")
         st.divider()
-        
+
         # ---------- NAVIGATION (FIXED) ----------
         page_keys = ["feed","friends_chat","satellite_map","worldcup","profile","video_call","owner_space"]
         page_titles = {key: t(key) for key in page_keys}
@@ -4252,15 +4312,15 @@ def main_app():
             st.session_state.current_page = "feed"
         if st.session_state.current_page not in page_keys:
             st.session_state.current_page = "feed"
-        
+
         selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
-        
+
         if selected_key != st.session_state.current_page:
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
         st.session_state.current_page = selected_key
-        
+
         st.divider()
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
