@@ -4092,7 +4092,8 @@ def main_app():
             st.info("🔓 Not logged in")
         st.divider()
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
-        st.markdown("<div class='owner-name'>Gesner Deslandes</div>", unsafe_allow_html=True)
+        # --- CHANGED: Replace "Gesner Deslandes" with "Lakay Se Lakay" in flag colors ---
+        st.markdown("<div class='owner-name'><span class='lakay-flag-text'>Lakay Se Lakay</span></div>", unsafe_allow_html=True)
         st.markdown("""
         <div class='collaborators'>
             <b>Collaborators:</b><br>
@@ -4155,7 +4156,6 @@ def main_app():
         ]
         for label, url in love_stories:
             if st.button(f"💕 {label}", key=f"love_{url}", use_container_width=True):
-                # Store the original URL (will open in new tab)
                 st.session_state.love_story_url = url
                 st.session_state.show_love_story = True
                 st.rerun()
@@ -4256,7 +4256,6 @@ def main_app():
         selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
         
-        # Clear love story if navigating to a different page
         if selected_key != st.session_state.current_page:
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
