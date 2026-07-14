@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.6 (Friend Discovery on Feed, Login title colored)
+# Version: 78.11.7 (Friend Discovery moved to top of Feed)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1124,6 +1124,19 @@ st.markdown("""
     .marquee span {
         display: inline-block;
         padding-right: 2rem;
+    }
+    /* discover section styling */
+    .discover-card {
+        background: rgba(255,255,255,0.8);
+        backdrop-filter: blur(4px);
+        border-radius: 16px;
+        padding: 15px;
+        border: 1px solid rgba(0,168,255,0.2);
+        margin: 10px 0;
+        transition: 0.2s;
+    }
+    .discover-card:hover {
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -2530,6 +2543,118 @@ def display_media_item(media):
         st.error(f"Error displaying media: {e}")
         st.markdown(f"[Click to open media]({media['url']})")
 
+# ====== RENDER DISCOVER NEW PEOPLE SECTION ======
+def render_discover_section():
+    """Display the 'Discover New People' grid."""
+    if supabase is None:
+        st.info("Unable to load users – database not connected.")
+        return
+    try:
+        current_user_id = st.session_state.user.id
+        # Get all users except current
+        all_users = get_all_users()
+        if not all_users:
+            st.info("No other users found.")
+            return
+
+        # Get current friends IDs
+        friends_ids = {f["id"] for f in st.session_state.friends}
+        # Get pending friend requests (both sent and received)
+        req_resp = supabase.table("friend_requests").select("*").eq("status", "pending").execute()
+        pending_requests = req_resp.data or []
+        sent_dict = {}
+        received_dict = {}
+        for req in pending_requests:
+            if req["sender_id"] == current_user_id:
+                sent_dict[req["receiver_id"]] = req["id"]
+            if req["receiver_id"] == current_user_id:
+                received_dict[req["sender_id"]] = req["id"]
+
+        # Build a list of users to display (not friends, not self)
+        non_friends = []
+        for u in all_users:
+            uid = u["id"]
+            if uid == current_user_id:
+                continue
+            if uid in friends_ids:
+                continue
+            # Determine status
+            if uid in sent_dict:
+                status = "sent"
+                request_id = sent_dict[uid]
+            elif uid in received_dict:
+                status = "received"
+                request_id = received_dict[uid]
+            else:
+                status = "none"
+                request_id = None
+            non_friends.append({**u, "status": status, "request_id": request_id})
+
+        if not non_friends:
+            st.info("🎉 You are already friends with everyone on the platform!")
+            return
+
+        # Display in a grid-like layout using columns
+        cols = st.columns(3)
+        for idx, user in enumerate(non_friends):
+            with cols[idx % 3]:
+                with st.container():
+                    st.markdown('<div class="discover-card">', unsafe_allow_html=True)
+                    # Avatar and name
+                    col_av, col_name = st.columns([1, 3])
+                    with col_av:
+                        display_avatar_and_followers(user.get("avatar_url"), user["id"], size=40, profile=user)
+                    with col_name:
+                        st.markdown(f"**{user['full_name']}**")
+                        if user.get("is_banned"):
+                            st.caption("🚫 Banned")
+                        else:
+                            st.caption("📌 " + user.get("location", ""))
+
+                    # Action buttons
+                    if user.get("is_banned"):
+                        st.info("User banned")
+                    elif user["status"] == "none":
+                        if st.button("➕ Friend request", key=f"fr_send_{user['id']}"):
+                            success, msg = send_friend_request(current_user_id, user["id"])
+                            if success:
+                                st.success("Friend request sent!")
+                                load_friend_data()
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                    elif user["status"] == "sent":
+                        st.button("⏳ Friend request pending", key=f"fr_pending_{user['id']}", disabled=True)
+                    elif user["status"] == "received":
+                        col_acc, col_rej = st.columns(2)
+                        with col_acc:
+                            if st.button("✅ Accept", key=f"fr_accept_{user['id']}"):
+                                success, msg = respond_friend_request(user["request_id"], True)
+                                if success:
+                                    load_friend_data()
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        with col_rej:
+                            if st.button("❌ Reject", key=f"fr_reject_{user['id']}"):
+                                success, msg = respond_friend_request(user["request_id"], False)
+                                if success:
+                                    load_friend_data()
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                    else:
+                        st.button("👥 Friends", key=f"fr_friend_{user['id']}", disabled=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+        # Refresh button
+        if st.button("🔄 Refresh friends list"):
+            load_friend_data()
+            st.rerun()
+    except Exception as e:
+        st.error(f"Could not load users: {e}")
+
+# ====== FEED ======
 def render_feed():
     # ====== LOVE STORY – OPEN IN NEW TAB ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
@@ -2559,12 +2684,14 @@ def render_feed():
     if st.session_state.viewing_profile:
         render_user_profile(st.session_state.viewing_profile)
         return
+
     st.header(t("feed"))
     if st.session_state.last_error:
         st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
         if st.button(t("clear_error")):
             st.session_state.last_error = None
             st.rerun()
+
     try:
         params = st.query_params
     except AttributeError:
@@ -2575,9 +2702,12 @@ def render_feed():
             st.session_state.viewing_live = session_id
         except:
             pass
+
     if st.session_state.viewing_live:
         render_live_page(st.session_state.viewing_live)
         return
+
+    # ---- Create a post ----
     st.markdown(f"### {t('create_post')}")
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
@@ -2598,7 +2728,10 @@ def render_feed():
                 else:
                     if create_post(st.session_state.user.id, content, media_files, is_public):
                         st.rerun()
+
     st.divider()
+
+    # ---- Live Now ----
     active_lives = st.session_state.live_sessions
     if active_lives:
         st.markdown("### 🔴 Live Now")
@@ -2613,7 +2746,16 @@ def render_feed():
                         st.session_state.viewing_live = live["id"]
                         st.rerun()
                 st.divider()
+
+    # ====== DISCOVER NEW PEOPLE – placed prominently ======
+    st.markdown("---")
+    st.subheader("👥 Discover New People")
+    # Refresh friend data to have latest friends list
+    load_friend_data()
+    render_discover_section()
     st.divider()
+
+    # ---- Feed posts ----
     if st.session_state.delete_confirm:
         post_id, _ = st.session_state.delete_confirm
         st.warning("Are you sure you want to delete this post?")
@@ -2630,6 +2772,7 @@ def render_feed():
                 st.session_state.delete_confirm = None
                 st.rerun()
         st.divider()
+
     if not st.session_state.posts:
         st.info("No posts yet. Be the first to create one!")
     else:
@@ -2662,6 +2805,7 @@ def render_feed():
                         if st.button("🗑️", key=f"del_post_{post['id']}"):
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
+
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -2678,16 +2822,19 @@ def render_feed():
                                 st.session_state.editing_post = None
                                 st.rerun()
                     st.divider()
+
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
                         display_media_item(media)
+
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
                         embed_video_from_url(url)
+
                 emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
                 reaction_counts = post.get("reactions", {})
                 summary = " ".join([f"{emoji} {count}" for emoji, count in list(reaction_counts.items())[:3]])
@@ -2714,6 +2861,7 @@ def render_feed():
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
                         st.rerun()
+
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
@@ -2722,12 +2870,14 @@ def render_feed():
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
                             st.rerun()
+
                 comments = load_comments(post['id'])
                 top_level = [c for c in comments if not c.get('parent_id')]
                 replies = {}
                 for c in comments:
                     if c.get('parent_id'):
                         replies.setdefault(c['parent_id'], []).append(c)
+
                 for c in top_level:
                     col_avatar_comment, col1, col2, col3, col4 = st.columns([1,4,1,1,1])
                     with col_avatar_comment:
@@ -2749,6 +2899,7 @@ def render_feed():
                             if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
                                 st.rerun()
+
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
                             reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
@@ -2757,6 +2908,7 @@ def render_feed():
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
                                     st.rerun()
+
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
                         colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1,4,1,1,1])
@@ -2780,112 +2932,6 @@ def render_feed():
                         st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
-
-    # ====== NEW: Discover New People (Friend Discovery) ======
-    st.markdown("---")
-    st.subheader("👥 Discover New People")
-    if supabase is None:
-        st.info("Unable to load users – database not connected.")
-    else:
-        try:
-            current_user_id = st.session_state.user.id
-            # Get all users except current
-            all_users = get_all_users()
-            if not all_users:
-                st.info("No other users found.")
-            else:
-                # Get current friends IDs
-                friends_ids = {f["id"] for f in st.session_state.friends}
-                # Get pending friend requests (both sent and received)
-                # We'll query friend_requests for pending where current user is involved
-                req_resp = supabase.table("friend_requests").select("*").eq("status", "pending").execute()
-                pending_requests = req_resp.data or []
-                sent_dict = {}
-                received_dict = {}
-                for req in pending_requests:
-                    if req["sender_id"] == current_user_id:
-                        sent_dict[req["receiver_id"]] = req["id"]
-                    if req["receiver_id"] == current_user_id:
-                        received_dict[req["sender_id"]] = req["id"]
-                # Build a list of users to display (not friends, not self)
-                non_friends = []
-                for u in all_users:
-                    uid = u["id"]
-                    if uid == current_user_id:
-                        continue
-                    if uid in friends_ids:
-                        continue
-                    # Determine status
-                    if uid in sent_dict:
-                        status = "sent"
-                        request_id = sent_dict[uid]
-                    elif uid in received_dict:
-                        status = "received"
-                        request_id = received_dict[uid]
-                    else:
-                        status = "none"
-                        request_id = None
-                    non_friends.append({**u, "status": status, "request_id": request_id})
-                if not non_friends:
-                    st.info("You are already friends with everyone on the platform!")
-                else:
-                    # Display in a grid-like layout using columns
-                    cols = st.columns(3)
-                    for idx, user in enumerate(non_friends):
-                        with cols[idx % 3]:
-                            with st.container():
-                                # Avatar and name
-                                col_av, col_name = st.columns([1, 3])
-                                with col_av:
-                                    display_avatar_and_followers(user.get("avatar_url"), user["id"], size=40, profile=user)
-                                with col_name:
-                                    st.markdown(f"**{user['full_name']}**")
-                                    if user.get("is_banned"):
-                                        st.caption("🚫 Banned")
-                                    else:
-                                        st.caption("📌 " + user.get("location", ""))
-                                # Action buttons
-                                if user.get("is_banned"):
-                                    st.info("User banned")
-                                elif user["status"] == "none":
-                                    if st.button("➕ Friend request", key=f"fr_send_{user['id']}"):
-                                        success, msg = send_friend_request(current_user_id, user["id"])
-                                        if success:
-                                            st.success("Friend request sent!")
-                                            # Force reload of friend data and rerun
-                                            load_friend_data()
-                                            st.rerun()
-                                        else:
-                                            st.error(msg)
-                                elif user["status"] == "sent":
-                                    st.button("⏳ Friend request pending", key=f"fr_pending_{user['id']}", disabled=True)
-                                elif user["status"] == "received":
-                                    col_acc, col_rej = st.columns(2)
-                                    with col_acc:
-                                        if st.button("✅ Accept", key=f"fr_accept_{user['id']}"):
-                                            success, msg = respond_friend_request(user["request_id"], True)
-                                            if success:
-                                                load_friend_data()
-                                                st.rerun()
-                                            else:
-                                                st.error(msg)
-                                    with col_rej:
-                                        if st.button("❌ Reject", key=f"fr_reject_{user['id']}"):
-                                            success, msg = respond_friend_request(user["request_id"], False)
-                                            if success:
-                                                load_friend_data()
-                                                st.rerun()
-                                            else:
-                                                st.error(msg)
-                                # If friend (should not happen, but just in case)
-                                else:
-                                    st.button("👥 Friends", key=f"fr_friend_{user['id']}", disabled=True)
-                # Refresh friend data periodically
-                if st.button("🔄 Refresh friends list"):
-                    load_friend_data()
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Could not load users: {e}")
 
 # ====== render_user_profile ======
 def render_user_profile(user_id, show_back_button=True):
