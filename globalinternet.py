@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.4 (Added more GlobalInternet.py apps to sidebar)
+# Version: 78.11.5 (Home title marquee)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1107,6 +1107,24 @@ st.markdown("""
     .home-title h1 { margin: 0; font-size: 2.8rem; color: #0a2a44; font-weight: 700; letter-spacing: 1px; }
     .home-title p { margin: 0.3rem 0 0; opacity: 0.85; color: #1e2a3a; font-size: 1.1rem; }
     .dove-symbol { font-size: 4rem; color: #ffffff; text-shadow: 0 0 20px rgba(0,0,0,0.1); display: block; margin: 0 auto; }
+    /* ---- NEW: Marquee (rope) effect ---- */
+    @keyframes scrollLeft {
+        0% { transform: translateX(100%); }
+        100% { transform: translateX(-100%); }
+    }
+    .marquee {
+        white-space: nowrap;
+        overflow: hidden;
+        display: block;
+        animation: scrollLeft 12s linear infinite;
+        font-size: 2.5rem;
+        font-weight: bold;
+        padding: 0.2rem 0;
+    }
+    .marquee span {
+        display: inline-block;
+        padding-right: 2rem;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -4351,20 +4369,15 @@ def main_app():
 # ========== ENTRY ==========
 if __name__ == "__main__":
     if st.session_state.logged_in:
+        # --- UPDATED HOME TITLE: marquee with "New Haiti Facebook / Lakay Se Lakay" ---
         st.markdown(f"""
         <div class="home-title">
-            <h1>
-                🏠 
-                <span class="rope-text">
-                    <span class="lakay-flag-text">Lakay se Lakay</span>
-                    <span class="stars"><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span></span>
-                </span>
-            </h1>
-            <div style="text-align:center; font-size:2.5rem; font-weight:bold; 
-                 background: linear-gradient(135deg, #00209F 0%, #00209F 50%, #D21034 50%, #D21034 100%); 
-                 -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-                 display: inline-block; padding: 0 20px; margin: 0.2rem 0;">{t('home_haiti')}</div>
-            <p>{t('home_subtitle')}</p>
+            <div style="overflow:hidden; width:100%;">
+                <div class="marquee">
+                    <span class="lakay-flag-text">New Haiti Facebook / Lakay Se Lakay</span>
+                </div>
+            </div>
+            <p style="font-size:1.2rem; margin-top:0.2rem;">{t('home_subtitle')}</p>
         </div>
         """, unsafe_allow_html=True)
     if not st.session_state.logged_in:
