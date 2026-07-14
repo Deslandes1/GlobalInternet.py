@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX) ======
+# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX + AI Math Solver) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.2 (Secrets removed from code – use st.secrets only)
+# Version: 78.11.3 (AI Math Solver link added)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -4129,6 +4129,15 @@ def main_app():
             <a href="https://globalinternetsitepy-abh7v6tnmskxxnuplrdcgk.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#D21034; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold;">
                 🌍 GlobalInternet.py
             </a>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            """
+            <a href="https://mathematics-problem-solver-2026-cjhmmanktwdwglxpxdpqtn.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; font-weight:bold; margin-bottom:5px;">
+                🧮 AI Math Solver
+            </a>
+            <p style="text-align:center; font-size:0.8rem; color:#2c3e50;">🔑 Login: 20082010</p>
             """,
             unsafe_allow_html=True
         )
