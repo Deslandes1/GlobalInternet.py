@@ -1,9 +1,9 @@
-# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX + AI Math Solver + More Apps) ======
+# ====== FULL app.py (Lakay se Lakay - SHUFFLED FEED + LOGIN FIX + AI Math Solver + More Apps + Friend Discovery) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.5 (Home title marquee)
+# Version: 78.11.6 (Friend Discovery on Feed, Login title colored)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1107,7 +1107,7 @@ st.markdown("""
     .home-title h1 { margin: 0; font-size: 2.8rem; color: #0a2a44; font-weight: 700; letter-spacing: 1px; }
     .home-title p { margin: 0.3rem 0 0; opacity: 0.85; color: #1e2a3a; font-size: 1.1rem; }
     .dove-symbol { font-size: 4rem; color: #ffffff; text-shadow: 0 0 20px rgba(0,0,0,0.1); display: block; margin: 0 auto; }
-    /* ---- NEW: Marquee (rope) effect ---- */
+    /* ---- MARQUEE (rope) effect ---- */
     @keyframes scrollLeft {
         0% { transform: translateX(100%); }
         100% { transform: translateX(-100%); }
@@ -2476,9 +2476,8 @@ def login_interface():
     <div style="text-align: center; padding: 20px 0;">
         <span class="dove-symbol">🕊️</span>
         <h2 style="color: #0a2a44; margin-top: -5px;">
-            Bienvenu sou 
+            <span class="lakay-flag-text">Bienvenu sou Lakay se Lakay</span>
             <span class="rope-text">
-                <span class="lakay-flag-text">Lakay se Lakay</span>
                 <span class="stars"><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span></span>
             </span>
         </h2>
@@ -2781,6 +2780,112 @@ def render_feed():
                         st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
+
+    # ====== NEW: Discover New People (Friend Discovery) ======
+    st.markdown("---")
+    st.subheader("👥 Discover New People")
+    if supabase is None:
+        st.info("Unable to load users – database not connected.")
+    else:
+        try:
+            current_user_id = st.session_state.user.id
+            # Get all users except current
+            all_users = get_all_users()
+            if not all_users:
+                st.info("No other users found.")
+            else:
+                # Get current friends IDs
+                friends_ids = {f["id"] for f in st.session_state.friends}
+                # Get pending friend requests (both sent and received)
+                # We'll query friend_requests for pending where current user is involved
+                req_resp = supabase.table("friend_requests").select("*").eq("status", "pending").execute()
+                pending_requests = req_resp.data or []
+                sent_dict = {}
+                received_dict = {}
+                for req in pending_requests:
+                    if req["sender_id"] == current_user_id:
+                        sent_dict[req["receiver_id"]] = req["id"]
+                    if req["receiver_id"] == current_user_id:
+                        received_dict[req["sender_id"]] = req["id"]
+                # Build a list of users to display (not friends, not self)
+                non_friends = []
+                for u in all_users:
+                    uid = u["id"]
+                    if uid == current_user_id:
+                        continue
+                    if uid in friends_ids:
+                        continue
+                    # Determine status
+                    if uid in sent_dict:
+                        status = "sent"
+                        request_id = sent_dict[uid]
+                    elif uid in received_dict:
+                        status = "received"
+                        request_id = received_dict[uid]
+                    else:
+                        status = "none"
+                        request_id = None
+                    non_friends.append({**u, "status": status, "request_id": request_id})
+                if not non_friends:
+                    st.info("You are already friends with everyone on the platform!")
+                else:
+                    # Display in a grid-like layout using columns
+                    cols = st.columns(3)
+                    for idx, user in enumerate(non_friends):
+                        with cols[idx % 3]:
+                            with st.container():
+                                # Avatar and name
+                                col_av, col_name = st.columns([1, 3])
+                                with col_av:
+                                    display_avatar_and_followers(user.get("avatar_url"), user["id"], size=40, profile=user)
+                                with col_name:
+                                    st.markdown(f"**{user['full_name']}**")
+                                    if user.get("is_banned"):
+                                        st.caption("🚫 Banned")
+                                    else:
+                                        st.caption("📌 " + user.get("location", ""))
+                                # Action buttons
+                                if user.get("is_banned"):
+                                    st.info("User banned")
+                                elif user["status"] == "none":
+                                    if st.button("➕ Friend request", key=f"fr_send_{user['id']}"):
+                                        success, msg = send_friend_request(current_user_id, user["id"])
+                                        if success:
+                                            st.success("Friend request sent!")
+                                            # Force reload of friend data and rerun
+                                            load_friend_data()
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
+                                elif user["status"] == "sent":
+                                    st.button("⏳ Friend request pending", key=f"fr_pending_{user['id']}", disabled=True)
+                                elif user["status"] == "received":
+                                    col_acc, col_rej = st.columns(2)
+                                    with col_acc:
+                                        if st.button("✅ Accept", key=f"fr_accept_{user['id']}"):
+                                            success, msg = respond_friend_request(user["request_id"], True)
+                                            if success:
+                                                load_friend_data()
+                                                st.rerun()
+                                            else:
+                                                st.error(msg)
+                                    with col_rej:
+                                        if st.button("❌ Reject", key=f"fr_reject_{user['id']}"):
+                                            success, msg = respond_friend_request(user["request_id"], False)
+                                            if success:
+                                                load_friend_data()
+                                                st.rerun()
+                                            else:
+                                                st.error(msg)
+                                # If friend (should not happen, but just in case)
+                                else:
+                                    st.button("👥 Friends", key=f"fr_friend_{user['id']}", disabled=True)
+                # Refresh friend data periodically
+                if st.button("🔄 Refresh friends list"):
+                    load_friend_data()
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Could not load users: {e}")
 
 # ====== render_user_profile ======
 def render_user_profile(user_id, show_back_button=True):
