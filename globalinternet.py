@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.22.0 (Fixed edit, fullscreen worldcup)
+# Version: 78.23.0 (Added Haiti Bus Race Game to sidebar)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -4718,6 +4718,15 @@ def main_app():
             """
             <a href="https://whiteboard-software-fdcqkycya2oe38ufvcybjm.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
                 ✏️ Whiteboard Software
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+        # NEW: Haiti Bus Race Game
+        st.markdown(
+            """
+            <a href="https://haiti-bus-game-2026-gmoxzgjx8jqcuiarbg9mab.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#e67e22; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🚌 Haiti Bus Race Game
             </a>
             """,
             unsafe_allow_html=True
