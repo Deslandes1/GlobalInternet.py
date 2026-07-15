@@ -2611,7 +2611,8 @@ def render_discover_section():
                     # Avatar and name
                     col_av, col_name = st.columns([1, 3])
                     with col_av:
-                        display_avatar_and_followers(user.get("avatar_url"), user["id"], size=40, profile=user)
+                        # Increased avatar size from 40 to 70 for better visibility
+                        display_avatar_and_followers(user.get("avatar_url"), user["id"], size=70, profile=user)
                     with col_name:
                         st.markdown(f"**{user['full_name']}**")
                         if user.get("is_banned"):
@@ -3091,7 +3092,8 @@ def render_friends_page():
             for req in st.session_state.friend_requests:
                 cols = st.columns([2,1,1])
                 with cols[0]:
-                    display_avatar_and_followers(req['sender'].get('avatar_url'), req['sender']['id'], size=30, profile=req['sender'])
+                    # Increased avatar size from 30 to 60 for friend requests
+                    display_avatar_and_followers(req['sender'].get('avatar_url'), req['sender']['id'], size=60, profile=req['sender'])
                     st.markdown(f"**{req['sender']['full_name']}**")
                 with cols[1]:
                     if st.button(t("accept"), key=f"accept_{req['id']}"):
@@ -3123,7 +3125,8 @@ def render_friends_page():
                 for user in results:
                     cols = st.columns([3,1,1])
                     with cols[0]:
-                        display_avatar_and_followers(user.get('avatar_url'), user['id'], size=30, profile=user)
+                        # Increased avatar size from 30 to 60 for search results
+                        display_avatar_and_followers(user.get('avatar_url'), user['id'], size=60, profile=user)
                         st.markdown(f"**{user['full_name']}**")
                     with cols[1]:
                         if st.button(t("add_friend"), key=f"add_{user['id']}"):
@@ -3146,7 +3149,8 @@ def render_friends_page():
             for friend in st.session_state.friends:
                 cols = st.columns([1,4,1,1,1])
                 with cols[0]:
-                    display_avatar_and_followers(friend.get('avatar_url'), friend['id'], size=30, profile=friend)
+                    # Increased avatar size from 30 to 60 for friends list
+                    display_avatar_and_followers(friend.get('avatar_url'), friend['id'], size=60, profile=friend)
                 with cols[1]:
                     st.markdown(f"**{friend['full_name']}**")
                 with cols[2]:
@@ -3188,7 +3192,8 @@ def render_friends_page():
 
             col1, col2 = st.columns([1,5])
             with col1:
-                display_avatar_and_followers(other_avatar, other_id, size=50, profile=other_profile)
+                # Increased avatar size from 50 to 60 for chat
+                display_avatar_and_followers(other_avatar, other_id, size=60, profile=other_profile)
             with col2:
                 st.markdown(f"**Chat with {other_name}**")
                 if st.button("✖ Close Chat", key="close_chat_btn"):
