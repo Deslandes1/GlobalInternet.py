@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - with Groq Search) ======
+# ====== FULL app.py (Lakay se Lakay - with Groq Search, fixed model) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.16.0 (Groq Search replaces YouTube)
+# Version: 78.17.0 (Groq model updated to llama-3.3-70b-versatile)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2622,7 +2622,7 @@ def groq_search(query):
         "Use the user's language (English, French, or Spanish) for the response."
     )
     payload = {
-        "model": "mixtral-8x7b-32768",  # or "llama3-70b-8192"
+        "model": "llama-3.3-70b-versatile",  # Updated to a currently supported model
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query}
@@ -2647,7 +2647,11 @@ def groq_search(query):
                 st.error("Failed to parse the response. Please rephrase your query.")
                 return []
         else:
-            st.error(f"Groq API error: {resp.status_code} - {resp.text}")
+            # Provide more helpful error for model decommissioned (though we fixed it)
+            if resp.status_code == 400 and "model_decommissioned" in resp.text:
+                st.error("The selected Groq model is no longer available. Please contact the app administrator.")
+            else:
+                st.error(f"Groq API error: {resp.status_code} - {resp.text}")
             return []
     except Exception as e:
         st.error(f"Error connecting to Groq: {e}")
