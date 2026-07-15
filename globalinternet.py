@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.10 (Owner Space unlock fix + navigation sync)
+# Version: 78.11.11 (Owner Space unlock fix - remove manual nav_selectbox assignment)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -3999,9 +3999,7 @@ def owner_space():
                 # ---- FIX: trim whitespace from both ----
                 if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
-                    st.session_state.current_page = "owner_space"  # Auto‑navigate
-                    # Sync the sidebar selectbox
-                    st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
+                    st.session_state.current_page = "owner_space"
                     st.rerun()
                 else:
                     st.error("Invalid password")
@@ -4509,7 +4507,6 @@ def main_app():
 
         # ---------- NAVIGATION (FIXED) ----------
         # Use global PAGE_KEYS and PAGE_TITLES (already defined)
-        # Ensure the selectbox value is in sync with current_page
         current_index = PAGE_KEYS.index(st.session_state.current_page)
         selected_title = st.selectbox(
             "Navigate",
@@ -4531,10 +4528,8 @@ def main_app():
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
             st.success("✅ Access granted")
-            # ---- FIX: use query param to navigate ----
             if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
                 st.session_state.current_page = "owner_space"
-                st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
                 st.rerun()
         else:
             with st.form("owner_sidebar_form"):
@@ -4543,9 +4538,7 @@ def main_app():
                     # ---- FIX: trim whitespace from both ----
                     if pwd.strip() == OWNSPACE_PASSWORD.strip():
                         st.session_state.owner_space_access = True
-                        st.session_state.current_page = "owner_space"  # Auto‑navigate
-                        # Sync the selectbox
-                        st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
+                        st.session_state.current_page = "owner_space"
                         st.rerun()
                     else:
                         st.error("Invalid password")
