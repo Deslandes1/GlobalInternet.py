@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - with Albums, Live Monitoring & YouTube Embed Fix) ======
+# ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.19.0 (Fixed YouTube embed in posts with media)
+# Version: 78.20.0 (Removed post_type column dependency)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1416,7 +1416,8 @@ def load_posts():
 def load_user_posts(user_id, include_private=False):
     return load_posts_cached(author_id=user_id, include_private=include_private)
 
-def create_post(user_id, content, media_files=None, is_public=True, existing_media_urls=None, post_type='normal'):
+# --- FIXED: Removed post_type column ---
+def create_post(user_id, content, media_files=None, is_public=True, existing_media_urls=None):
     if supabase is None:
         st.session_state.last_error = "Supabase not configured."
         return False
@@ -1439,8 +1440,7 @@ def create_post(user_id, content, media_files=None, is_public=True, existing_med
             "likes_count": 0,
             "shares_count": 0,
             "media_urls": media_urls,
-            "created_at": datetime.now().isoformat(),
-            "post_type": post_type  # can be 'normal', 'album', 'live'
+            "created_at": datetime.now().isoformat()
         }
         result = supabase.table("posts").insert(post).execute()
         if result.data:
@@ -1660,8 +1660,8 @@ def create_live_session(title, platform, method='external'):
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.stream_key = stream_key
             st.session_state.selected_platform = platform if method == 'external' else 'inapp'
-            # Create a post on feed about the live session
-            create_post(st.session_state.user.id, f"🔴 I'm live: {title}", is_public=True, post_type='live')
+            # Create a post on feed about the live session (no post_type)
+            create_post(st.session_state.user.id, f"🔴 I'm live: {title}", is_public=True)
             return result.data[0]["id"]
         else:
             st.session_state.last_error = "Failed to start live session."
@@ -1691,7 +1691,6 @@ def end_live_session(session_id):
         st.session_state.live_sessions = load_live_sessions()
         st.session_state.stream_key = None
         st.session_state.selected_platform = None
-        # Post about ending live (already done on start)
         return True
     except Exception as e:
         st.session_state.last_error = f"Error ending live session: {e}"
@@ -2068,14 +2067,13 @@ def create_album(user_id, title, description, visibility='public'):
         }
         result = supabase.table("photo_albums").insert(album_data).execute()
         if result.data:
-            # Create a post about the album
+            # Create a post about the album (no post_type)
             album_id = result.data[0]["id"]
             content = f"📸 New album: {title}"
             if visibility == 'public':
-                create_post(user_id, content, is_public=True, post_type='album', existing_media_urls=[])
+                create_post(user_id, content, is_public=True)
             else:
-                # Private album post only visible to owner (but we still create a post with private visibility)
-                create_post(user_id, content, is_public=False, post_type='album')
+                create_post(user_id, content, is_public=False)
             return result.data[0]
         return None
     except Exception as e:
@@ -2752,7 +2750,7 @@ def render_feed():
                 if not content and not media_files:
                     st.warning("Please add a caption or media.")
                 else:
-                    if create_post(st.session_state.user.id, content, media_files, is_public, post_type='normal'):
+                    if create_post(st.session_state.user.id, content, media_files, is_public):
                         st.rerun()
 
     st.divider()
@@ -2869,8 +2867,8 @@ def render_feed():
                         st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
                     if not post.get("is_public", True):
                         st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
-                    # Check if it's a live post
-                    if post.get("post_type") == "live":
+                    # Check if it's a live post (by content, not by column)
+                    if post['content'].startswith("🔴 I'm live:"):
                         # Check if live session is still active
                         live_session = None
                         if supabase:
@@ -2898,29 +2896,25 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # If post is an album post, show album gallery
-                if post.get("post_type") == "album":
-                    st.info("📸 This is an album post. Visit the user's profile to view the full album.")
-                else:
-                    # Normal post: display media files first
-                    media_urls = post.get("media_urls", [])
-                    if media_urls:
-                        for media in media_urls:
-                            display_media_item(media)
+                # Normal post: display media files first
+                media_urls = post.get("media_urls", [])
+                if media_urls:
+                    for media in media_urls:
+                        display_media_item(media)
 
-                    # Then display post content and embed any video links (YouTube etc.)
-                    if post['content']:
-                        clickable_content = make_clickable(post['content'])
-                        st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
-                        # Find URLs in content and embed them
-                        urls = re.findall(r'(https?://[^\s]+)', post['content'])
-                        for url in urls:
-                            # Try to embed (YouTube, Vimeo, etc.)
-                            try:
-                                embed_video_from_url(url)
-                            except Exception as e:
-                                # If embedding fails, just show the link as plain text
-                                st.markdown(f"[Link]({url})")
+                # Then display post content and embed any video links (YouTube etc.)
+                if post['content']:
+                    clickable_content = make_clickable(post['content'])
+                    st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                    # Find URLs in content and embed them
+                    urls = re.findall(r'(https?://[^\s]+)', post['content'])
+                    for url in urls:
+                        # Try to embed (YouTube, Vimeo, etc.)
+                        try:
+                            embed_video_from_url(url)
+                        except Exception as e:
+                            # If embedding fails, just show the link as plain text
+                            st.markdown(f"[Link]({url})")
 
                 emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
                 reaction_counts = post.get("reactions", {})
