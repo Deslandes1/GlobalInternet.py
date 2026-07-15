@@ -3999,6 +3999,7 @@ def owner_space():
                 # ---- FIX: trim whitespace from both ----
                 if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
+                    st.session_state.current_page = "owner_space"  # Auto‑navigate
                     st.rerun()
                 else:
                     st.error("Invalid password")
@@ -4549,6 +4550,7 @@ def main_app():
                     # ---- FIX: trim whitespace from both ----
                     if pwd.strip() == OWNSPACE_PASSWORD.strip():
                         st.session_state.owner_space_access = True
+                        st.session_state.current_page = "owner_space"  # Auto‑navigate
                         st.rerun()
                     else:
                         st.error("Invalid password")
