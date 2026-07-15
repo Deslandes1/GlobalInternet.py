@@ -3996,7 +3996,8 @@ def owner_space():
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
             if st.form_submit_button(t("login_button")):
-                if pwd == OWNSPACE_PASSWORD:
+                # ---- FIX: trim whitespace from both ----
+                if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
                     st.rerun()
                 else:
@@ -4545,7 +4546,8 @@ def main_app():
             with st.form("owner_sidebar_form"):
                 pwd = st.text_input("Password", type="password", placeholder="Enter owner password")
                 if st.form_submit_button("🔓 Unlock Owner Space", use_container_width=True):
-                    if pwd == OWNSPACE_PASSWORD:
+                    # ---- FIX: trim whitespace from both ----
+                    if pwd.strip() == OWNSPACE_PASSWORD.strip():
                         st.session_state.owner_space_access = True
                         st.rerun()
                     else:
