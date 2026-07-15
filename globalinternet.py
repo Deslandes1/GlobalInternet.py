@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - OWNERSPACE PASSWORD RESTORED) ======
+# ====== FULL app.py (Lakay se Lakay - with Groq Search) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.14.0 (OwnerSpace password restored, navigation fixed)
+# Version: 78.16.0 (Groq Search replaces YouTube)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -106,6 +106,9 @@ JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
 GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY")
 GLOBAL_SHIELD_ACTIVE = bool(GLOBAL_SHIELD_API_KEY)
 
+# ====== GROQ API KEY ======
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
+
 # Optional: check for missing critical secrets
 _missing = []
 if not OWNER_CIN:
@@ -118,6 +121,8 @@ if not OWNSPACE_PASSWORD:
     _missing.append("OwnSpace_Password")
 if not GLOBAL_SHIELD_API_KEY:
     _missing.append("GLOBAL_SHIELD_API_KEY")
+if not GROQ_API_KEY:
+    _missing.append("GROQ_API_KEY")
 if _missing:
     st.warning(f"⚠️ Missing secrets: {', '.join(_missing)}. Some features may not work. Define them in Streamlit Cloud.")
 
@@ -194,6 +199,13 @@ if "love_story_url" not in st.session_state:
     st.session_state.love_story_url = None
 if "show_love_story" not in st.session_state:
     st.session_state.show_love_story = False
+# ---- Groq search states ----
+if "groq_search_results" not in st.session_state:
+    st.session_state.groq_search_results = []
+if "groq_selected_item" not in st.session_state:
+    st.session_state.groq_selected_item = None
+if "groq_search_query" not in st.session_state:
+    st.session_state.groq_search_query = ""
 # ---- Navigation page ----
 if "current_page" not in st.session_state:
     st.session_state.current_page = "feed"
@@ -374,7 +386,16 @@ LANG = {
         "room_link_copied": "✅ Room link copied to clipboard!",
         "start_video_call": "Start a Video Call",
         "your_personal_room": "Your Personal Room",
-        "join_room": "Join Room"
+        "join_room": "Join Room",
+        # === Groq search keys ===
+        "search_groq": "🔍 Search Books & Videos",
+        "groq_search_placeholder": "What are you looking for? (books, tutorials, etc.)",
+        "groq_results": "Results",
+        "groq_open": "📖 Open",
+        "groq_close": "✖ Close",
+        "no_groq_results": "No recommendations found.",
+        "groq_api_key_missing": "⚠️ Groq API key not set. Add GROQ_API_KEY to your secrets.",
+        "youtube_not_supported": "⚠️ YouTube links are not supported in this search. Please search for books or other videos."
     },
     "fr": {
         "login_title": "Connexion",
@@ -542,7 +563,16 @@ LANG = {
         "room_link_copied": "✅ Lien de la salle copié dans le presse-papiers !",
         "start_video_call": "Démarrer un appel vidéo",
         "your_personal_room": "Votre salle personnelle",
-        "join_room": "Rejoindre la salle"
+        "join_room": "Rejoindre la salle",
+        # === Groq search keys ===
+        "search_groq": "🔍 Rechercher des livres et vidéos",
+        "groq_search_placeholder": "Que cherchez-vous ? (livres, tutoriels, etc.)",
+        "groq_results": "Résultats",
+        "groq_open": "📖 Ouvrir",
+        "groq_close": "✖ Fermer",
+        "no_groq_results": "Aucune recommandation trouvée.",
+        "groq_api_key_missing": "⚠️ Clé Groq API manquante. Ajoutez GROQ_API_KEY dans vos secrets.",
+        "youtube_not_supported": "⚠️ Les liens YouTube ne sont pas pris en charge dans cette recherche. Recherchez des livres ou d'autres vidéos."
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -710,7 +740,16 @@ LANG = {
         "room_link_copied": "✅ ¡Enlace de la sala copiado al portapapeles!",
         "start_video_call": "Iniciar una videollamada",
         "your_personal_room": "Tu sala personal",
-        "join_room": "Unirse a la sala"
+        "join_room": "Unirse a la sala",
+        # === Groq search keys ===
+        "search_groq": "🔍 Buscar libros y videos",
+        "groq_search_placeholder": "¿Qué estás buscando? (libros, tutoriales, etc.)",
+        "groq_results": "Resultados",
+        "groq_open": "📖 Abrir",
+        "groq_close": "✖ Cerrar",
+        "no_groq_results": "No se encontraron recomendaciones.",
+        "groq_api_key_missing": "⚠️ Falta la clave Groq API. Agrega GROQ_API_KEY en tus secrets.",
+        "youtube_not_supported": "⚠️ Los enlaces de YouTube no son compatibles en esta búsqueda. Busca libros u otros videos."
     },
     "ht": {
         "login_title": "Konekte",
@@ -878,7 +917,16 @@ LANG = {
         "room_link_copied": "✅ Lyen sal la kopye nan clipboard!",
         "start_video_call": "Kòmanse yon apèl videyo",
         "your_personal_room": "Sal pèsonèl ou",
-        "join_room": "Antre nan sal"
+        "join_room": "Antre nan sal",
+        # === Groq search keys ===
+        "search_groq": "🔍 Chèche liv ak videyo",
+        "groq_search_placeholder": "Kisa w ap chèche? (liv, leson, elatriye)",
+        "groq_results": "Rezilta",
+        "groq_open": "📖 Ouvri",
+        "groq_close": "✖ Fèmen",
+        "no_groq_results": "Pa gen rekòmandasyon jwenn.",
+        "groq_api_key_missing": "⚠️ Kle GROQ API manke. Ajoute GROQ_API_KEY nan secrets ou.",
+        "youtube_not_supported": "⚠️ Lyen YouTube pa sipòte nan rechèch sa a. Chèche liv oswa lòt videyo."
     }
 }
 
@@ -2548,6 +2596,63 @@ def display_media_item(media):
         st.error(f"Error displaying media: {e}")
         st.markdown(f"[Click to open media]({media['url']})")
 
+# ====== GROQ SEARCH FUNCTION ======
+def groq_search(query):
+    """Use Groq API to recommend books/videos (not YouTube) based on the query."""
+    api_key = st.secrets.get("GROQ_API_KEY")
+    if not api_key:
+        st.error("Groq API key not set. Add GROQ_API_KEY to your secrets.")
+        return []
+
+    # Detect YouTube links
+    if "youtube.com" in query.lower() or "youtu.be" in query.lower():
+        st.warning(t("youtube_not_supported"))
+        return []
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    # System prompt to get structured JSON
+    system_prompt = (
+        "You are a helpful assistant that recommends books or videos (but not YouTube) based on a user's query. "
+        "Return a JSON array of objects with 'title', 'description', and a 'url' field if available (you can suggest a link to a free source like Project Gutenberg, OpenLibrary, or a search link). "
+        "If you cannot provide a link, set 'url' to null. The JSON should be the only thing in your response. "
+        "Use the user's language (English, French, or Spanish) for the response."
+    )
+    payload = {
+        "model": "mixtral-8x7b-32768",  # or "llama3-70b-8192"
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1024
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            # Try to parse JSON
+            try:
+                results = json.loads(content)
+                if isinstance(results, list):
+                    return results
+                else:
+                    st.error("Unexpected response format. Please try again.")
+                    return []
+            except json.JSONDecodeError:
+                st.error("Failed to parse the response. Please rephrase your query.")
+                return []
+        else:
+            st.error(f"Groq API error: {resp.status_code} - {resp.text}")
+            return []
+    except Exception as e:
+        st.error(f"Error connecting to Groq: {e}")
+        return []
+
 # ====== RENDER DISCOVER NEW PEOPLE SECTION ======
 def render_discover_section():
     """Display the 'Discover New People' grid."""
@@ -2735,6 +2840,60 @@ def render_feed():
                         st.rerun()
 
     st.divider()
+
+    # ====== GROQ SEARCH ======
+    st.markdown(f"### {t('search_groq')}")
+    groq_key = st.secrets.get("GROQ_API_KEY")
+    if not groq_key:
+        st.warning(t("groq_api_key_missing"))
+    else:
+        col_search, col_btn = st.columns([4, 1])
+        with col_search:
+            search_query = st.text_input("", placeholder=t("groq_search_placeholder"),
+                                         key="groq_search_input", label_visibility="collapsed")
+        with col_btn:
+            if st.button("🔍", key="groq_search_btn", use_container_width=True):
+                if search_query:
+                    # Check for YouTube links
+                    if "youtube.com" in search_query.lower() or "youtu.be" in search_query.lower():
+                        st.warning(t("youtube_not_supported"))
+                    else:
+                        with st.spinner("Searching with Groq..."):
+                            results = groq_search(search_query)
+                            st.session_state.groq_search_results = results
+                            st.session_state.groq_selected_item = None
+                            st.session_state.groq_search_query = search_query
+                            st.rerun()
+                else:
+                    st.warning("Please enter a search term.")
+
+        if st.session_state.groq_search_results:
+            st.markdown(f"#### {t('groq_results')} for '{st.session_state.groq_search_query}'")
+            # Display results in a grid
+            cols = st.columns(3)
+            for idx, item in enumerate(st.session_state.groq_search_results):
+                with cols[idx % 3]:
+                    with st.container():
+                        st.markdown(f"**{item.get('title', 'Untitled')}**")
+                        st.caption(item.get('description', '')[:120] + "...")
+                        url = item.get('url')
+                        if url:
+                            if st.button(t("groq_open"), key=f"groq_open_{idx}"):
+                                st.session_state.groq_selected_item = url
+                                st.rerun()
+                        else:
+                            st.button("📚 No link", disabled=True, key=f"groq_nolink_{idx}")
+            if st.session_state.groq_selected_item:
+                st.divider()
+                st.markdown(f"### 🔗 Open Resource")
+                st.markdown(f"[{st.session_state.groq_selected_item}]({st.session_state.groq_selected_item})")
+                # Option to open in new tab
+                st.markdown(f'<a href="{st.session_state.groq_selected_item}" target="_blank">Open in new tab</a>', unsafe_allow_html=True)
+                if st.button(t("groq_close")):
+                    st.session_state.groq_selected_item = None
+                    st.rerun()
+        elif st.session_state.groq_search_query and not st.session_state.groq_search_results:
+            st.info(t("no_groq_results"))
 
     # ---- Live Now ----
     active_lives = st.session_state.live_sessions
