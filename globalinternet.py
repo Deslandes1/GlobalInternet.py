@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.8 (Navigation & remember-me fixes)
+# Version: 78.11.9 (Navigation via query params & avatar size improvements)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -196,6 +196,18 @@ if "love_story_url" not in st.session_state:
     st.session_state.love_story_url = None
 if "show_love_story" not in st.session_state:
     st.session_state.show_love_story = False
+# ---- Navigation page (will be synced with query param) ----
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "feed"
+
+# ---- NAVIGATION FROM QUERY PARAMS (fixes Owner Dashboard button) ----
+if "page" in st.query_params:
+    page_param = st.query_params["page"]
+    valid_pages = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
+    if page_param in valid_pages:
+        st.session_state.current_page = page_param
+    # Clean up the param so it doesn't persist
+    del st.query_params["page"]
 
 # ====== LANGUAGE DICTIONARY ======
 # Full dictionary included (all languages: en, fr, es, ht)
@@ -4525,8 +4537,9 @@ def main_app():
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
             st.success("✅ Access granted")
+            # ---- FIX: use query param to navigate ----
             if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
-                st.session_state.current_page = "owner_space"
+                st.query_params["page"] = "owner_space"
                 st.rerun()
         else:
             with st.form("owner_sidebar_form"):
