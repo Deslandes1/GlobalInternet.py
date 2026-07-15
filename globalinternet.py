@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.9 (Navigation via query params & avatar size improvements)
+# Version: 78.11.10 (Owner Space unlock fix + navigation sync)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -4000,10 +4000,13 @@ def owner_space():
                 if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
                     st.session_state.current_page = "owner_space"  # Auto‑navigate
+                    # Sync the sidebar selectbox
+                    st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
                     st.rerun()
                 else:
                     st.error("Invalid password")
         return
+    # If we are here, access is granted.
     last_seen = get_last_seen_signup()
     new_users = get_new_users(last_seen)
     if new_users:
@@ -4277,6 +4280,10 @@ def owner_space():
         st.session_state.owner_space_access = False
         st.rerun()
 
+# ====== GLOBAL PAGE KEYS / TITLES for navigation ======
+PAGE_KEYS = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
+PAGE_TITLES = {key: t(key) for key in PAGE_KEYS}
+
 # ========== MAIN APP ==========
 def main_app():
     if st.session_state.logged_in and st.session_state.user:
@@ -4288,7 +4295,6 @@ def main_app():
             st.info("🔓 Not logged in")
         st.divider()
         st.markdown("<div class='haiti-symbol'>🇭🇹</div>", unsafe_allow_html=True)
-        # --- CHANGED: Replace "Gesner Deslandes" with "Lakay Se Lakay" in flag colors ---
         st.markdown("<div class='owner-name'><span class='lakay-flag-text'>Lakay Se Lakay</span></div>", unsafe_allow_html=True)
         st.markdown("""
         <div class='collaborators'>
@@ -4502,31 +4508,17 @@ def main_app():
         st.divider()
 
         # ---------- NAVIGATION (FIXED) ----------
-        page_keys = ["feed","friends_chat","satellite_map","worldcup","profile","video_call","owner_space"]
-        page_titles = {key: t(key) for key in page_keys}
-        if "current_page" not in st.session_state:
-            st.session_state.current_page = "feed"
-        if st.session_state.current_page not in page_keys:
-            st.session_state.current_page = "feed"
-
-        # Use a callback to force rerun when selection changes
-        def on_nav_change():
-            # The selected key is automatically updated in the widget value,
-            # but we use this callback to clear love story and force rerun if needed.
-            # Actually we can just set the state here and rerun.
-            # We'll use st.selectbox's value directly.
-            pass
-
-        # We'll create a selectbox with on_change to update session state
+        # Use global PAGE_KEYS and PAGE_TITLES (already defined)
+        # Ensure the selectbox value is in sync with current_page
+        current_index = PAGE_KEYS.index(st.session_state.current_page)
         selected_title = st.selectbox(
             "Navigate",
-            options=[page_titles[key] for key in page_keys],
-            index=page_keys.index(st.session_state.current_page),
-            key="nav_selectbox",
-            on_change=None  # We'll handle it manually
+            options=[PAGE_TITLES[key] for key in PAGE_KEYS],
+            index=current_index,
+            key="nav_selectbox"
         )
         # Determine selected key from the selected title
-        selected_key = next(key for key, title in page_titles.items() if title == selected_title)
+        selected_key = next(key for key, title in PAGE_TITLES.items() if title == selected_title)
 
         # If selection changed, update state and rerun
         if selected_key != st.session_state.current_page:
@@ -4541,7 +4533,8 @@ def main_app():
             st.success("✅ Access granted")
             # ---- FIX: use query param to navigate ----
             if st.button("🔑 Go to Owner Dashboard", use_container_width=True):
-                st.query_params["page"] = "owner_space"
+                st.session_state.current_page = "owner_space"
+                st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
                 st.rerun()
         else:
             with st.form("owner_sidebar_form"):
@@ -4551,9 +4544,12 @@ def main_app():
                     if pwd.strip() == OWNSPACE_PASSWORD.strip():
                         st.session_state.owner_space_access = True
                         st.session_state.current_page = "owner_space"  # Auto‑navigate
+                        # Sync the selectbox
+                        st.session_state.nav_selectbox = PAGE_TITLES["owner_space"]
                         st.rerun()
                     else:
                         st.error("Invalid password")
+
     page_functions = {
         "feed": render_feed,
         "friends_chat": render_friends_page,
