@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.20.0 (Removed post_type column dependency)
+# Version: 78.21.0 (Improved UX for video links)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -274,7 +274,7 @@ LANG = {
         "send": "Send",
         "back_to_feed": "Back to Feed",
         "create_post": "Create a post",
-        "caption_placeholder": "Write something... or paste a video link",
+        "caption_placeholder": "Write something... or paste a video link (YouTube, Vimeo, etc.)",
         "add_media": "Add images or videos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Visibility",
         "public": "Public",
@@ -417,7 +417,8 @@ LANG = {
         "photos_uploaded": "Photos uploaded successfully!",
         "album_deleted": "Album deleted.",
         "cover_photo": "Cover Photo",
-        "owner_albums": "All Albums (Owner View)"
+        "owner_albums": "All Albums (Owner View)",
+        "paste_video_link_hint": "💡 For YouTube, Vimeo, or other video links, simply paste the URL in the caption above. The file uploader is for uploading video/image files from your device."
     },
     "fr": {
         "login_title": "Connexion",
@@ -468,7 +469,7 @@ LANG = {
         "send": "Envoyer",
         "back_to_feed": "Retour au fil",
         "create_post": "Créer une publication",
-        "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo",
+        "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo (YouTube, Vimeo, etc.)",
         "add_media": "Ajouter des images ou vidéos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
         "visibility": "Visibilité",
         "public": "Public",
@@ -611,7 +612,8 @@ LANG = {
         "photos_uploaded": "Photos téléchargées avec succès !",
         "album_deleted": "Album supprimé.",
         "cover_photo": "Photo de couverture",
-        "owner_albums": "Tous les albums (vue propriétaire)"
+        "owner_albums": "Tous les albums (vue propriétaire)",
+        "paste_video_link_hint": "💡 Pour les liens YouTube, Vimeo ou autres, collez simplement l'URL dans la légende ci-dessus. Le téléchargeur de fichiers est pour les fichiers vidéo/image depuis votre appareil."
     },
     "es": {
         # ... (similar translations for Spanish, omitted for brevity but you can add them)
@@ -2733,6 +2735,7 @@ def render_feed():
 
     # ---- Create a post ----
     st.markdown(f"### {t('create_post')}")
+    st.info(t("paste_video_link_hint"))  # <-- NEW HINT
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
