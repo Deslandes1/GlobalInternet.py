@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.21.0 (Improved UX for video links)
+# Version: 78.22.0 (Fixed edit, fullscreen worldcup)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -418,7 +418,8 @@ LANG = {
         "album_deleted": "Album deleted.",
         "cover_photo": "Cover Photo",
         "owner_albums": "All Albums (Owner View)",
-        "paste_video_link_hint": "💡 For YouTube, Vimeo, or other video links, simply paste the URL in the caption above. The file uploader is for uploading video/image files from your device."
+        "paste_video_link_hint": "💡 For YouTube, Vimeo, or other video links, simply paste the URL in the caption above. The file uploader is for uploading video/image files from your device.",
+        "open_in_new_tab": "Open in new tab"
     },
     "fr": {
         "login_title": "Connexion",
@@ -613,10 +614,11 @@ LANG = {
         "album_deleted": "Album supprimé.",
         "cover_photo": "Photo de couverture",
         "owner_albums": "Tous les albums (vue propriétaire)",
-        "paste_video_link_hint": "💡 Pour les liens YouTube, Vimeo ou autres, collez simplement l'URL dans la légende ci-dessus. Le téléchargeur de fichiers est pour les fichiers vidéo/image depuis votre appareil."
+        "paste_video_link_hint": "💡 Pour les liens YouTube, Vimeo ou autres, collez simplement l'URL dans la légende ci-dessus. Le téléchargeur de fichiers est pour les fichiers vidéo/image depuis votre appareil.",
+        "open_in_new_tab": "Ouvrir dans un nouvel onglet"
     },
     "es": {
-        # ... (similar translations for Spanish, omitted for brevity but you can add them)
+        # ... (similar translations, omitted for brevity)
     },
     "ht": {
         # ... (similar translations for Kreyòl)
@@ -2681,7 +2683,7 @@ def render_discover_section():
     except Exception as e:
         st.error(f"Could not load users: {e}")
 
-# ====== FEED (FIXED for YouTube embed with media) ======
+# ====== FEED ======
 def render_feed():
     # ====== LOVE STORY – OPEN IN NEW TAB ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
@@ -2899,6 +2901,24 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
+                # EDIT FORM (shown only when editing this post)
+                if st.session_state.editing_post == post['id']:
+                    with st.form(key=f"edit_form_{post['id']}"):
+                        new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
+                        new_media = st.file_uploader("Add additional media", type=["png","jpg","jpeg","gif","mp4","mov","avi"], accept_multiple_files=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("💾 Save"):
+                                existing = post.get('media_urls', [])
+                                if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
+                                    st.session_state.editing_post = None
+                                    st.rerun()
+                        with col2:
+                            if st.form_submit_button("❌ Cancel"):
+                                st.session_state.editing_post = None
+                                st.rerun()
+                    st.divider()
+
                 # Normal post: display media files first
                 media_urls = post.get("media_urls", [])
                 if media_urls:
@@ -3017,7 +3037,7 @@ def render_feed():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== render_user_profile (modified to include albums) ======
+# ====== render_user_profile ======
 def render_user_profile(user_id, show_back_button=True):
     if supabase is None:
         st.error("Database not connected.")
@@ -3188,7 +3208,7 @@ def render_user_profile(user_id, show_back_button=True):
         st.metric("Followers", "1KFollowers")
     st.divider()
 
-# ====== render_friends_page (unchanged) ======
+# ====== render_friends_page ======
 def render_friends_page():
     try:
         if st.session_state.viewing_profile:
@@ -3549,6 +3569,7 @@ def render_map():
         with cols[i % 4]:
             st.metric(name, data["status"], f"{data['lat']:.1f}°, {data['lon']:.1f}°")
 
+# ====== WORLDCUP – with full‑screen iframes ======
 def render_worldcup():
     st.title("⚽ " + t("worldcup"))
     stream1_url = "https://futbol-libres.su/eventos.html?r=aHR0cHM6Ly9sYXRhbXZpZHpzLm9yZy9jYW5hbC5waHA/c3RyZWFtPXRlbGVtdW5kb3VzYQ=="
@@ -3561,15 +3582,21 @@ def render_worldcup():
     """, unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["📺 Stream #1 (Main)", "⚽ Live WorldCup 2026 #2"])
     with tab1:
-        st.components.v1.iframe(stream1_url, height=600, scrolling=True)
+        st.components.v1.html(f'''
+        <iframe src="{stream1_url}" width="100%" height="600" frameborder="0" allowfullscreen></iframe>
+        ''', height=620)
+        st.markdown(f'<a href="{stream1_url}" target="_blank" style="display:inline-block; margin-top:10px; background:#0080ff; color:white; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:bold;">{t("open_in_new_tab")} ↗</a>', unsafe_allow_html=True)
         st.caption("📺 Live soccer stream – watch the 2026 World Cup matches for free.")
     with tab2:
-        st.components.v1.iframe(stream2_url, height=600, scrolling=True)
+        st.components.v1.html(f'''
+        <iframe src="{stream2_url}" width="100%" height="600" frameborder="0" allowfullscreen></iframe>
+        ''', height=620)
+        st.markdown(f'<a href="{stream2_url}" target="_blank" style="display:inline-block; margin-top:10px; background:#0080ff; color:white; padding:8px 16px; border-radius:8px; text-decoration:none; font-weight:bold;">{t("open_in_new_tab")} ↗</a>', unsafe_allow_html=True)
         st.caption("⚽ Alternative live stream – enjoy the matches via the second feed.")
     st.markdown("---")
     st.info("ℹ️ Stream provided by a third‑party site. If the stream does not load, try refreshing or switching to the other tab.")
 
-# ====== OWN PROFILE (modified with albums) ======
+# ====== OWN PROFILE ======
 def render_profile():
     st.header(t("profile"))
     render_top_icons()
@@ -3850,7 +3877,7 @@ def render_profile():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== OWNER SPACE (modified with albums and live monitoring) ======
+# ====== OWNER SPACE ======
 def owner_space():
     st.header(t("owner_space"))
     if not st.session_state.owner_space_access:
@@ -4245,10 +4272,8 @@ def owner_space():
                             domain = JITSI_DOMAIN
                             monitor_url = f"https://{domain}/{room}"
                             st.markdown(f'<a href="{monitor_url}" target="_blank"><button>Monitor</button></a>', unsafe_allow_html=True)
-                            # We could add a button to "Record" – but we'll just provide a message.
                         with cols[3]:
                             if st.button("End Call (force)", key=f"end_call_{call['id']}"):
-                                # End the call by updating the record and also maybe send a signal? Not implemented.
                                 st.warning("Force ending call is not implemented. Please ask user to end call.")
                         st.divider()
         except Exception as e:
