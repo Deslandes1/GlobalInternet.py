@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - with Albums & Live Monitoring) ======
+# ====== FULL app.py (Lakay se Lakay - with Albums, Live Monitoring & YouTube Embed Fix) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.18.0 (Photo Albums + Owner Space Live Monitoring)
+# Version: 78.19.0 (Fixed YouTube embed in posts with media)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -2681,7 +2681,7 @@ def render_discover_section():
     except Exception as e:
         st.error(f"Could not load users: {e}")
 
-# ====== FEED ======
+# ====== FEED (FIXED for YouTube embed with media) ======
 def render_feed():
     # ====== LOVE STORY – OPEN IN NEW TAB ======
     if st.session_state.get("show_love_story", False) and st.session_state.get("love_story_url"):
@@ -2900,30 +2900,27 @@ def render_feed():
 
                 # If post is an album post, show album gallery
                 if post.get("post_type") == "album":
-                    # Try to find the album
-                    album_id = None
-                    # Extract album ID from content? Could store album_id in post metadata.
-                    # For simplicity, we'll try to fetch the most recent album of that user.
-                    # Better: store album_id in post content? We'll store in a separate field? Not yet.
-                    # For now, we'll just show a link to the user's profile to view albums.
-                    # But we can also fetch the album by title? Not reliable.
-                    # We'll add a note: "View album on user's profile"
                     st.info("📸 This is an album post. Visit the user's profile to view the full album.")
-                    # We can also display cover photos if we had album_id. We'll skip for now.
-
                 else:
-                    # Normal post display
+                    # Normal post: display media files first
                     media_urls = post.get("media_urls", [])
                     if media_urls:
                         for media in media_urls:
                             display_media_item(media)
 
+                    # Then display post content and embed any video links (YouTube etc.)
                     if post['content']:
                         clickable_content = make_clickable(post['content'])
                         st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
+                        # Find URLs in content and embed them
                         urls = re.findall(r'(https?://[^\s]+)', post['content'])
                         for url in urls:
-                            embed_video_from_url(url)
+                            # Try to embed (YouTube, Vimeo, etc.)
+                            try:
+                                embed_video_from_url(url)
+                            except Exception as e:
+                                # If embedding fails, just show the link as plain text
+                                st.markdown(f"[Link]({url})")
 
                 emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
                 reaction_counts = post.get("reactions", {})
