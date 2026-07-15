@@ -3624,14 +3624,13 @@ def render_profile():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== OWNER SPACE (password protected) ======
+# ====== OWNER SPACE (password protected) – FIXED ======
 def owner_space():
     st.header(t("owner_space"))
     if not st.session_state.owner_space_access:
         with st.form("owner_space_login"):
             pwd = st.text_input("Enter Owner Space Password", type="password")
             if st.form_submit_button(t("login_button")):
-                # ---- trim whitespace from both ----
                 if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
                     st.rerun()
@@ -3639,273 +3638,328 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # ====== OWNER DASHBOARD CONTENT ======
-    last_seen = get_last_seen_signup()
-    new_users = get_new_users(last_seen)
-    if new_users:
-        send_email_notification(new_users)
-        update_last_seen_signup()
+    # ====== OWNER DASHBOARD CONTENT (with full error handling) ======
+    try:
+        last_seen = get_last_seen_signup()
+        new_users = get_new_users(last_seen)
+        if new_users:
+            send_email_notification(new_users)
+            update_last_seen_signup()
+    except Exception as e:
+        st.warning(f"⚠️ Could not load new users: {e}")
+        new_users = []
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([t("dashboard"), t("new_users"), t("post_moderation"), t("client_payments"), t("gift_management"), t("user_management")])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        t("dashboard"), t("new_users"), t("post_moderation"),
+        t("client_payments"), t("gift_management"), t("user_management")
+    ])
+
+    # ---- TAB 1: Dashboard ----
     with tab1:
-        st.subheader(t("owner_dashboard"))
-        real_balance = None
-        if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
-            try:
-                headers = {"X-API-Key": BACKEND_API_KEY}
-                resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    real_balance = data.get("balance", 0.0)
-                else:
-                    st.warning("Could not fetch real balance from backend.")
-            except Exception:
-                st.warning("Backend unreachable.")
-        else:
-            st.info("Backend not configured. Showing simulated data for now.")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if real_balance is not None:
-                st.metric(t("balance"), f"${real_balance:,.2f}")
+        try:
+            st.subheader(t("owner_dashboard"))
+            real_balance = None
+            if BACKEND_API_URL and BACKEND_API_URL != "https://your-backend.com":
+                try:
+                    headers = {"X-API-Key": BACKEND_API_KEY}
+                    resp = requests.get(f"{BACKEND_API_URL}/api/balance", headers=headers, timeout=5)
+                    if resp.status_code == 200:
+                        real_balance = resp.json().get("balance", 0.0)
+                    else:
+                        st.warning("Could not fetch real balance from backend.")
+                except Exception:
+                    st.warning("Backend unreachable.")
             else:
-                duration = time.time() - st.session_state.connection_time
-                st.session_state.data_comp = duration * 0.035
-                st.metric(t("compensation"), f"${st.session_state.data_comp:.4f}")
-        with col2:
-            st.metric(t("uptime"), get_uptime())
-        with col3:
-            st.metric(t("connections"), np.random.randint(100,500))
-        st.divider()
-        st.subheader(t("transfer_funds"))
-        st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
-        st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
-        if real_balance is not None:
-            amount = st.number_input(t("amount_transfer"), min_value=1.0, max_value=float(real_balance), value=min(10.0, float(real_balance)), step=10.0, format="%.2f")
-            if st.button(t("transfer"), use_container_width=True):
-                if amount <= 0:
-                    st.error("Enter a valid amount.")
+                st.info("Backend not configured. Showing simulated data for now.")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if real_balance is not None:
+                    st.metric(t("balance"), f"${real_balance:,.2f}")
                 else:
-                    with st.spinner("Processing transfer..."):
-                        try:
-                            headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
-                            payload = {"amount": amount, "recipient_phone": MONCASH_NUM}
-                            resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers, json=payload, timeout=10)
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
-                            else:
-                                st.error(f"Transfer failed: {resp.text}")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        else:
-            st.info("To enable real transfers, set up your backend and configure the secrets.")
-    with tab2:
-        st.subheader(t("new_users"))
-        st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
-        try:
-            with st.spinner("Loading user data..."):
-                response = supabase.table("profiles").select("id, full_name, avatar_url, join_date, location, bio, is_banned, last_active").order("join_date", desc=True).limit(100).execute()
-                recent_users = response.data if response.data else []
+                    duration = time.time() - st.session_state.connection_time
+                    st.session_state.data_comp = duration * 0.035
+                    st.metric(t("compensation"), f"${st.session_state.data_comp:.4f}")
+            with col2:
+                st.metric(t("uptime"), get_uptime())
+            with col3:
+                st.metric(t("connections"), np.random.randint(100, 500))
+
+            st.divider()
+            st.subheader(t("transfer_funds"))
+            st.markdown(f"**Your MonCash Business Number:** `{MONCASH_NUM}`")
+            st.markdown(f"**Your UNIBANK US Account:** `{UNIBANK_ACCOUNT}`")
+            if real_balance is not None:
+                amount = st.number_input(t("amount_transfer"), min_value=1.0, max_value=float(real_balance),
+                                         value=min(10.0, float(real_balance)), step=10.0, format="%.2f")
+                if st.button(t("transfer"), use_container_width=True):
+                    if amount <= 0:
+                        st.error("Enter a valid amount.")
+                    else:
+                        with st.spinner("Processing transfer..."):
+                            try:
+                                headers = {"X-API-Key": BACKEND_API_KEY, "Content-Type": "application/json"}
+                                payload = {"amount": amount, "recipient_phone": MONCASH_NUM}
+                                resp = requests.post(f"{BACKEND_API_URL}/api/transfer", headers=headers,
+                                                     json=payload, timeout=10)
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    st.success(f"✅ Transfer initiated! Transaction ID: {data.get('transaction_id')}")
+                                else:
+                                    st.error(f"Transfer failed: {resp.text}")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+            else:
+                st.info("To enable real transfers, set up your backend and configure the secrets.")
         except Exception as e:
-            st.error(f"Failed to load user data: {e}")
-            recent_users = []
-        if recent_users:
-            display_data = []
-            for u in recent_users:
-                display_data.append({
-                    "Full Name": u.get('full_name', 'N/A'),
-                    "User ID": u['id'],
-                    "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
-                    "Location": u.get('location', 'Not set'),
-                    "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else ''),
-                    "Banned": "✅" if u.get('is_banned') else "❌",
-                    "Online": "🟢" if is_user_online(u.get('last_active')) else "⚪"
-                })
-            df = pd.DataFrame(display_data)
-            st.dataframe(df, use_container_width=True)
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(label="📥 Download Report as CSV", data=csv, file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv", use_container_width=True)
-        else:
-            st.info("No users found in the database.")
-        if st.button("🔄 Refresh", use_container_width=True):
-            st.rerun()
-    with tab3:
-        st.subheader(t("post_moderation"))
-        st.markdown("Review all posts (public & private) and take action if needed. You can also hide posts from the public feed (making them private) without notifying the user.")
+            st.error(f"Error in Dashboard tab: {e}")
+            st.exception(e)
+
+    # ---- TAB 2: New Users ----
+    with tab2:
         try:
-            posts = supabase.table("posts").select("*").order("created_at", desc=True).execute()
-            all_posts = posts.data or []
+            st.subheader(t("new_users"))
+            st.markdown("All recent user signups. Click refresh to update, and download the report at any time.")
+            with st.spinner("Loading user data..."):
+                response = supabase.table("profiles").select(
+                    "id, full_name, avatar_url, join_date, location, bio, is_banned, last_active"
+                ).order("join_date", desc=True).limit(100).execute()
+                recent_users = response.data if response.data else []
+            if recent_users:
+                display_data = []
+                for u in recent_users:
+                    display_data.append({
+                        "Full Name": u.get('full_name', 'N/A'),
+                        "User ID": u['id'],
+                        "Joined": u.get('join_date', '')[:16] if u.get('join_date') else 'Unknown',
+                        "Location": u.get('location', 'Not set'),
+                        "Bio": u.get('bio', '')[:50] + ('...' if len(u.get('bio', '')) > 50 else ''),
+                        "Banned": "✅" if u.get('is_banned') else "❌",
+                        "Online": "🟢" if is_user_online(u.get('last_active')) else "⚪"
+                    })
+                df = pd.DataFrame(display_data)
+                st.dataframe(df, use_container_width=True)
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Report as CSV",
+                    data=csv,
+                    file_name=f"new_users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.info("No users found in the database.")
+            if st.button("🔄 Refresh", use_container_width=True):
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error in New Users tab: {e}")
+            st.exception(e)
+
+    # ---- TAB 3: Post Moderation ----
+    with tab3:
+        try:
+            st.subheader(t("post_moderation"))
+            st.markdown("Review all posts (public & private) and take action if needed.")
+            posts_resp = supabase.table("posts").select("*").order("created_at", desc=True).execute()
+            all_posts = posts_resp.data or []
             user_ids = {p["user_id"] for p in all_posts}
             profiles = {}
             if user_ids:
-                profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, last_active").in_("id", list(user_ids)).execute()
-                for p in profiles_resp.data or []:
+                prof_resp = supabase.table("profiles").select(
+                    "id, full_name, avatar_url, last_active"
+                ).in_("id", list(user_ids)).execute()
+                for p in prof_resp.data or []:
                     profiles[p["id"]] = p
             for p in all_posts:
                 prof = profiles.get(p["user_id"], {})
-                p["profiles"] = {"full_name": prof.get("full_name", "Unknown"), "avatar_url": prof.get("avatar_url"), "id": p["user_id"], "last_active": prof.get("last_active")}
+                p["profiles"] = {
+                    "full_name": prof.get("full_name", "Unknown"),
+                    "avatar_url": prof.get("avatar_url"),
+                    "id": p["user_id"],
+                    "last_active": prof.get("last_active")
+                }
+            if not all_posts:
+                st.info("No posts found.")
+            else:
+                if "warn_post_id" not in st.session_state:
+                    st.session_state.warn_post_id = None
+                for post in all_posts:
+                    with st.container():
+                        cols = st.columns([2, 3, 2, 1, 1, 1])
+                        with cols[0]:
+                            display_avatar_and_followers(post['profiles']['avatar_url'],
+                                                         post['user_id'], size=30, profile=post['profiles'])
+                            st.markdown(f"**User:** {post['profiles']['full_name']}")
+                        with cols[1]:
+                            content = post.get('content', '')[:100] + "..." if post.get('content') and len(
+                                post['content']) > 100 else post.get('content', '')
+                            st.markdown(f"**Content:** {content}")
+                        with cols[2]:
+                            visibility_label = "Public" if post.get('is_public', True) else "Private"
+                            st.markdown(f"**Visibility:** {visibility_label}")
+                            st.caption(post['created_at'][:16])
+                        with cols[3]:
+                            if post.get('is_public', True):
+                                if st.button("🔒 Hide from Public", key=f"hide_{post['id']}"):
+                                    success, msg = toggle_post_visibility(post['id'], False)
+                                    if success:
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                            else:
+                                if st.button("🌐 Make Public", key=f"unhide_{post['id']}"):
+                                    success, msg = toggle_post_visibility(post['id'], True)
+                                    if success:
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                        with cols[4]:
+                            if st.button(t("delete_post"), key=f"del_{post['id']}"):
+                                if delete_post(post['id']):
+                                    st.success("Post deleted.")
+                                    st.rerun()
+                                else:
+                                    st.error("Delete failed.")
+                        with cols[5]:
+                            if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
+                                st.session_state.warn_post_id = post['id']
+                                st.rerun()
+                        if st.session_state.warn_post_id == post['id']:
+                            with st.form(key=f"warn_form_{post['id']}"):
+                                default_msg = f"Your post '{post.get('content', '')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
+                                warn_msg = st.text_area("Warning message", value=default_msg, height=100)
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.form_submit_button("Send Warning"):
+                                        success = send_message(st.session_state.user.id, post['user_id'],
+                                                                f"[MODERATION] {warn_msg}")
+                                        if success:
+                                            st.success("Warning sent to user.")
+                                            if delete_post(post['id']):
+                                                st.info("Post also deleted.")
+                                            st.session_state.warn_post_id = None
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to send message.")
+                                with col2:
+                                    if st.form_submit_button("Cancel"):
+                                        st.session_state.warn_post_id = None
+                                        st.rerun()
+                        st.divider()
         except Exception as e:
-            st.error(f"Failed to load posts: {e}")
-            all_posts = []
-        if not all_posts:
-            st.info("No posts found.")
-        else:
-            if "warn_post_id" not in st.session_state:
-                st.session_state.warn_post_id = None
-            for post in all_posts:
-                with st.container():
-                    cols = st.columns([2,3,2,1,1,1])
+            st.error(f"Error in Post Moderation tab: {e}")
+            st.exception(e)
+
+    # ---- TAB 4: Client Payments ----
+    with tab4:
+        try:
+            st.subheader(t("client_payments"))
+            st.markdown("""
+            **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
+            Clients can send money directly to your MonCash personal number:  
+            `+50947385663`  
+            *(They must use the MonCash app or a MonCash agent.)*
+
+            **Option 2 – US Bank Transfer (for any amount)**  
+            For international clients, you can receive USD via bank transfer to your UNIBANK account:  
+            `105-2016-16594727`  
+            *(Provide them with your bank name: UNIBANK, Haiti.)*
+
+            **Option 3 – Request a payment link**  
+            For larger amounts, contact the development team to generate a secure payment link.
+            """)
+        except Exception as e:
+            st.error(f"Error in Payments tab: {e}")
+            st.exception(e)
+
+    # ---- TAB 5: Gift Management ----
+    with tab5:
+        try:
+            st.subheader(t("gift_management"))
+            st.markdown("View all completed gifts and process payouts to streamers.")
+            if supabase is None:
+                st.warning("Supabase not connected.")
+                return
+            gifts_resp = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at",
+                                                                                                 desc=True).execute()
+            gifts_data = gifts_resp.data if gifts_resp.data else []
+            if not gifts_data:
+                st.info(t("no_gifts"))
+            else:
+                df = pd.DataFrame([{
+                    "ID": g['id'],
+                    "Date": g['created_at'][:16],
+                    "Session ID": g['session_id'],
+                    "Sender": g.get('sender_name', 'Unknown'),
+                    "Recipient ID": g['recipient_id'],
+                    "Amount": f"{g['amount']} {g['currency']}",
+                    "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
+                } for g in gifts_data])
+                st.dataframe(df, use_container_width=True)
+                st.markdown(f"### {t('payout_summary')}")
+                total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
+                st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
+                if st.button(t("mark_paid")):
+                    st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
+        except Exception as e:
+            st.error(f"Error in Gift Management tab: {e}")
+            st.exception(e)
+
+    # ---- TAB 6: User Management ----
+    with tab6:
+        try:
+            st.subheader(t("user_management"))
+            st.markdown("Search and manage users: ban/unban accounts.")
+            search_term = st.text_input("🔍 Search by name or user ID")
+            all_users = get_all_users()
+            if search_term:
+                filtered = [u for u in all_users if search_term.lower() in u['full_name'].lower() or search_term in u['id']]
+            else:
+                filtered = all_users
+            if not filtered:
+                st.info("No users found.")
+            else:
+                for user in filtered:
+                    cols = st.columns([2, 2, 2, 1, 1])
                     with cols[0]:
-                        display_avatar_and_followers(post['profiles']['avatar_url'], post['user_id'], size=30, profile=post['profiles'])
-                        st.markdown(f"**User:** {post['profiles']['full_name']}")
+                        st.markdown(f"**{user['full_name']}**")
                     with cols[1]:
-                        content = post.get('content', '')[:100] + "..." if post.get('content') and len(post['content']) > 100 else post.get('content', '')
-                        st.markdown(f"**Content:** {content}")
+                        st.caption(f"ID: {user['id'][:8]}...")
                     with cols[2]:
-                        visibility_label = "Public" if post.get('is_public', True) else "Private"
-                        st.markdown(f"**Visibility:** {visibility_label}")
-                        st.caption(post['created_at'][:16])
+                        status = "🚫 Banned" if user.get('is_banned') else "✅ Active"
+                        st.markdown(status)
+                        if user.get('is_banned') and user.get('ban_reason'):
+                            st.caption(f"Reason: {user['ban_reason']}")
                     with cols[3]:
-                        if post.get('is_public', True):
-                            if st.button("🔒 Hide from Public", key=f"hide_{post['id']}"):
-                                success, msg = toggle_post_visibility(post['id'], False)
+                        if user.get('is_banned'):
+                            if st.button(t("unban_user"), key=f"unban_{user['id']}"):
+                                success, msg = unban_user(user['id'])
                                 if success:
                                     st.success(msg)
                                     st.rerun()
                                 else:
                                     st.error(msg)
                         else:
-                            if st.button("🌐 Make Public", key=f"unhide_{post['id']}"):
-                                success, msg = toggle_post_visibility(post['id'], True)
-                                if success:
-                                    st.success(msg)
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
+                            if st.button(t("ban_user"), key=f"ban_{user['id']}"):
+                                with st.popover("Enter ban reason"):
+                                    reason = st.text_input("Reason (optional)")
+                                    if st.button("Confirm Ban"):
+                                        success, msg = ban_user(user['id'], reason)
+                                        if success:
+                                            st.success(msg)
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
                     with cols[4]:
-                        if st.button(t("delete_post"), key=f"del_{post['id']}"):
-                            if delete_post(post['id']):
-                                st.success("Post deleted.")
-                                st.rerun()
-                            else:
-                                st.error("Delete failed.")
-                    with cols[5]:
-                        if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
-                            st.session_state.warn_post_id = post['id']
-                            st.rerun()
-                    if st.session_state.warn_post_id == post['id']:
-                        with st.form(key=f"warn_form_{post['id']}"):
-                            default_msg = f"Your post '{post.get('content','')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
-                            warn_msg = st.text_area("Warning message", value=default_msg, height=100)
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if st.form_submit_button("Send Warning"):
-                                    success = send_message(st.session_state.user.id, post['user_id'], f"[MODERATION] {warn_msg}")
-                                    if success:
-                                        st.success("Warning sent to user.")
-                                        if delete_post(post['id']):
-                                            st.info("Post also deleted.")
-                                        st.session_state.warn_post_id = None
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to send message.")
-                            with col2:
-                                if st.form_submit_button("Cancel"):
-                                    st.session_state.warn_post_id = None
-                                    st.rerun()
-                    st.divider()
-    with tab4:
-        st.subheader(t("client_payments"))
-        st.markdown("""
-        **Option 1 – MonCash (for amounts ≤ 1000 HTG)**  
-        Clients can send money directly to your MonCash personal number:  
-        `+50947385663`  
-        *(They must use the MonCash app or a MonCash agent.)*
-
-        **Option 2 – US Bank Transfer (for any amount)**  
-        For international clients, you can receive USD via bank transfer to your UNIBANK account:  
-        `105-2016-16594727`  
-        *(Provide them with your bank name: UNIBANK, Haiti.)*
-
-        **Option 3 – Request a payment link**  
-        For larger amounts, contact the development team to generate a secure payment link.
-        """)
-    with tab5:
-        st.subheader(t("gift_management"))
-        st.markdown("View all completed gifts and process payouts to streamers.")
-        if supabase is None:
-            st.warning("Supabase not connected.")
-            return
-        try:
-            gifts = supabase.table("live_gifts").select("*").eq("status", "completed").order("created_at", desc=True).execute()
-            gifts_data = gifts.data if gifts.data else []
+                        online = is_user_online(user.get('last_active'))
+                        st.markdown("🟢 Online" if online else "⚪ Offline")
         except Exception as e:
-            st.error(f"Failed to load gifts: {e}")
-            gifts_data = []
-        if not gifts_data:
-            st.info(t("no_gifts"))
-        else:
-            df = pd.DataFrame([{
-                "ID": g['id'],
-                "Date": g['created_at'][:16],
-                "Session ID": g['session_id'],
-                "Sender": g.get('sender_name', 'Unknown'),
-                "Recipient ID": g['recipient_id'],
-                "Amount": f"{g['amount']} {g['currency']}",
-                "Converted (HTG)": f"{g['converted_amount_htg']:.0f} HTG"
-            } for g in gifts_data])
-            st.dataframe(df, use_container_width=True)
-            st.markdown(f"### {t('payout_summary')}")
-            total_pending = sum(g['converted_amount_htg'] for g in gifts_data if g.get('status') == 'completed')
-            st.metric(t("total_gifts_htg"), f"{total_pending:.0f} HTG")
-            if st.button(t("mark_paid")):
-                st.success("Payout simulation complete. In reality, this would transfer funds to streamers' MonCash accounts.")
-    with tab6:
-        st.subheader(t("user_management"))
-        st.markdown("Search and manage users: ban/unban accounts.")
-        search_term = st.text_input("🔍 Search by name or user ID")
-        all_users = get_all_users()
-        if search_term:
-            filtered = [u for u in all_users if search_term.lower() in u['full_name'].lower() or search_term in u['id']]
-        else:
-            filtered = all_users
-        if not filtered:
-            st.info("No users found.")
-        else:
-            for user in filtered:
-                cols = st.columns([2,2,2,1,1])
-                with cols[0]:
-                    st.markdown(f"**{user['full_name']}**")
-                with cols[1]:
-                    st.caption(f"ID: {user['id'][:8]}...")
-                with cols[2]:
-                    status = "🚫 Banned" if user.get('is_banned') else "✅ Active"
-                    st.markdown(status)
-                    if user.get('is_banned') and user.get('ban_reason'):
-                        st.caption(f"Reason: {user['ban_reason']}")
-                with cols[3]:
-                    if user.get('is_banned'):
-                        if st.button(t("unban_user"), key=f"unban_{user['id']}"):
-                            success, msg = unban_user(user['id'])
-                            if success:
-                                st.success(msg)
-                                st.rerun()
-                            else:
-                                st.error(msg)
-                    else:
-                        if st.button(t("ban_user"), key=f"ban_{user['id']}"):
-                            with st.popover("Enter ban reason"):
-                                reason = st.text_input("Reason (optional)")
-                                if st.button("Confirm Ban"):
-                                    success, msg = ban_user(user['id'], reason)
-                                    if success:
-                                        st.success(msg)
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
-                with cols[4]:
-                    online = is_user_online(user.get('last_active'))
-                    st.markdown("🟢 Online" if online else "⚪ Offline")
+            st.error(f"Error in User Management tab: {e}")
+            st.exception(e)
+
+    # ---- Footer ----
     st.divider()
     st.markdown(f"### {t('contact_support')}")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
