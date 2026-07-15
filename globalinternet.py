@@ -3,7 +3,7 @@
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
 # Collaborators: Gesner Junior Deslandes, Roosevert Deslandes,
 #                Sebastien Stephane Deslandes, Zendaya Christelle Deslandes
-# Version: 78.11.7 (Friend Discovery moved to top of Feed)
+# Version: 78.11.8 (Navigation & remember-me fixes)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -953,7 +953,7 @@ def refresh_supabase_session():
         st.session_state.last_error = f"Token refresh failed: {e}"
         return False
 
-# --- Restore session ---
+# --- Restore session (with improved error handling) ---
 if not st.session_state.logged_in and supabase:
     inject_cookie_reader()
     refresh_token = get_cookie("sb_refresh_token")
@@ -979,7 +979,14 @@ if not st.session_state.logged_in and supabase:
                 st.session_state.notifications = load_notifications(user.user.id)
                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
                 st.info("🔁 Session restored – you are still logged in.")
+            else:
+                # Invalid token, clear cookie to avoid repeated errors
+                set_cookie("sb_refresh_token", "", -1)
+                st.warning("Session expired. Please log in again.")
         except Exception as e:
+            # Clear the invalid cookie
+            set_cookie("sb_refresh_token", "", -1)
+            st.warning("Could not restore session. Please log in again.")
             st.session_state.last_error = str(e)
 
 if st.session_state.logged_in and supabase and st.session_state.refresh_token:
@@ -998,6 +1005,7 @@ if st.session_state.logged_in and supabase and st.session_state.refresh_token:
                 st.stop()
             st.session_state.profile = profile
     except Exception:
+        # Silently fail; login will handle later
         pass
 
 # ====== STARFIELD ======
@@ -4482,13 +4490,31 @@ def main_app():
         if st.session_state.current_page not in page_keys:
             st.session_state.current_page = "feed"
 
-        selected_title = st.selectbox("Navigate", options=[page_titles[key] for key in page_keys], index=page_keys.index(st.session_state.current_page))
+        # Use a callback to force rerun when selection changes
+        def on_nav_change():
+            # The selected key is automatically updated in the widget value,
+            # but we use this callback to clear love story and force rerun if needed.
+            # Actually we can just set the state here and rerun.
+            # We'll use st.selectbox's value directly.
+            pass
+
+        # We'll create a selectbox with on_change to update session state
+        selected_title = st.selectbox(
+            "Navigate",
+            options=[page_titles[key] for key in page_keys],
+            index=page_keys.index(st.session_state.current_page),
+            key="nav_selectbox",
+            on_change=None  # We'll handle it manually
+        )
+        # Determine selected key from the selected title
         selected_key = next(key for key, title in page_titles.items() if title == selected_title)
 
+        # If selection changed, update state and rerun
         if selected_key != st.session_state.current_page:
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
-        st.session_state.current_page = selected_key
+            st.session_state.current_page = selected_key
+            st.rerun()
 
         st.divider()
         st.markdown("### 🕊️ Owner Space")
