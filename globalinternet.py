@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.23.0 (Added Haiti Bus Race Game to sidebar)
+# Version: 78.24.0 (Fixed friend loading with retry & error handling)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1847,58 +1847,109 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
+# ====== FIXED load_friend_data with retry and error handling ======
 def load_friend_data():
+    """Load friend requests and friends with retry and error handling."""
     if supabase is None or not st.session_state.user:
         return
+
     user_id = st.session_state.user.id
-    pending_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("receiver_id", user_id).eq("status", "pending").execute()
-    pending_raw = pending_resp.data or []
-    sent_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("sender_id", user_id).eq("status", "accepted").execute()
-    received_resp = supabase.table("friend_requests").select("id, sender_id, receiver_id, status, created_at").eq("receiver_id", user_id).eq("status", "accepted").execute()
-    accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
-    user_ids = set()
-    for req in pending_raw:
-        user_ids.add(req["sender_id"])
-    for req in accepted_raw:
-        user_ids.add(req["sender_id"])
-        user_ids.add(req["receiver_id"])
-    user_ids.discard(user_id)
-    profiles = {}
-    if user_ids:
-        profiles_resp = supabase.table("profiles").select("id, full_name, avatar_url, last_active").in_("id", list(user_ids)).execute()
-        for p in profiles_resp.data or []:
-            profiles[p["id"]] = p
-    pending_requests = []
-    for req in pending_raw:
-        sender_id = req["sender_id"]
-        sender = profiles.get(sender_id, {})
-        pending_requests.append({
-            "id": req["id"],
-            "sender": {
-                "id": sender_id,
-                "full_name": sender.get("full_name", "Unknown"),
-                "avatar_url": sender.get("avatar_url"),
-                "last_active": sender.get("last_active"),
-            },
-            "receiver_id": req["receiver_id"],
-            "status": req["status"],
-        })
-    st.session_state.friend_requests = pending_requests
-    friends = []
-    seen = set()
-    for req in accepted_raw:
-        other_id = req["receiver_id"] if req["sender_id"] == user_id else req["sender_id"]
-        if other_id in seen:
-            continue
-        seen.add(other_id)
-        other = profiles.get(other_id, {})
-        friends.append({
-            "id": other_id,
-            "full_name": other.get("full_name", "Unknown"),
-            "avatar_url": other.get("avatar_url"),
-            "last_active": other.get("last_active"),
-        })
-    st.session_state.friends = friends
+    max_retries = 3
+    retry_delay = 1  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            # Fetch pending friend requests (received)
+            pending_resp = supabase.table("friend_requests") \
+                .select("id, sender_id, receiver_id, status, created_at") \
+                .eq("receiver_id", user_id) \
+                .eq("status", "pending") \
+                .execute()
+            pending_raw = pending_resp.data or []
+
+            # Fetch accepted friend requests (sent by user)
+            sent_resp = supabase.table("friend_requests") \
+                .select("id, sender_id, receiver_id, status, created_at") \
+                .eq("sender_id", user_id) \
+                .eq("status", "accepted") \
+                .execute()
+            # Fetch accepted friend requests (received by user)
+            received_resp = supabase.table("friend_requests") \
+                .select("id, sender_id, receiver_id, status, created_at") \
+                .eq("receiver_id", user_id) \
+                .eq("status", "accepted") \
+                .execute()
+
+            accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
+
+            # Collect all user IDs to fetch profiles
+            user_ids = set()
+            for req in pending_raw:
+                user_ids.add(req["sender_id"])
+            for req in accepted_raw:
+                user_ids.add(req["sender_id"])
+                user_ids.add(req["receiver_id"])
+            user_ids.discard(user_id)
+
+            # Fetch profiles for those users
+            profiles = {}
+            if user_ids:
+                profiles_resp = supabase.table("profiles") \
+                    .select("id, full_name, avatar_url, last_active") \
+                    .in_("id", list(user_ids)) \
+                    .execute()
+                for p in profiles_resp.data or []:
+                    profiles[p["id"]] = p
+
+            # Build pending requests list
+            pending_requests = []
+            for req in pending_raw:
+                sender_id = req["sender_id"]
+                sender = profiles.get(sender_id, {})
+                pending_requests.append({
+                    "id": req["id"],
+                    "sender": {
+                        "id": sender_id,
+                        "full_name": sender.get("full_name", "Unknown"),
+                        "avatar_url": sender.get("avatar_url"),
+                        "last_active": sender.get("last_active"),
+                    },
+                    "receiver_id": req["receiver_id"],
+                    "status": req["status"],
+                })
+            st.session_state.friend_requests = pending_requests
+
+            # Build friends list
+            friends = []
+            seen = set()
+            for req in accepted_raw:
+                other_id = req["receiver_id"] if req["sender_id"] == user_id else req["sender_id"]
+                if other_id in seen:
+                    continue
+                seen.add(other_id)
+                other = profiles.get(other_id, {})
+                friends.append({
+                    "id": other_id,
+                    "full_name": other.get("full_name", "Unknown"),
+                    "avatar_url": other.get("avatar_url"),
+                    "last_active": other.get("last_active"),
+                })
+            st.session_state.friends = friends
+
+            # If we reach here, success – break retry loop
+            return
+
+        except Exception as e:
+            st.session_state.last_error = f"Error loading friend data (attempt {attempt+1}/{max_retries}): {e}"
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                # Final failure: set empty lists to avoid breaking the UI
+                st.session_state.friend_requests = []
+                st.session_state.friends = []
+                st.session_state.last_error = f"Failed to load friend data after {max_retries} attempts: {e}"
+                # Optionally show a warning (but avoid st.error to prevent UI disruption)
+                st.warning("Could not load friends data. Please refresh the page.")
 
 def search_users(query):
     if supabase is None or not st.session_state.user:
