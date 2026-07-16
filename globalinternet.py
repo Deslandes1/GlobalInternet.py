@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.28.0 (Consistent 1KFollowers on all avatars)
+# Version: 78.28.1 (Mobile‑stabilized)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -87,7 +87,7 @@ def ensure_bucket_exists(bucket_name, public=True):
 OWNER_CIN = st.secrets.get("OWNER_CIN")
 MONCASH_NUM = st.secrets.get("MONCASH_NUM")
 UNIBANK_ACCOUNT = st.secrets.get("UNIBANK_ACCOUNT")
-OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password")  # <-- Your password
+OWNSPACE_PASSWORD = st.secrets.get("OwnSpace_Password")
 
 BACKEND_API_URL = st.secrets.get("BACKEND_API_URL", "https://your-backend.com")
 BACKEND_API_KEY = st.secrets.get("BACKEND_API_KEY", "")
@@ -224,6 +224,13 @@ if "current_page" not in st.session_state:
 # ---- Feed search term ----
 if "feed_search_term" not in st.session_state:
     st.session_state.feed_search_term = ""
+# ---- Mobile optimization flags ----
+if "_session_restored" not in st.session_state:
+    st.session_state._session_restored = False
+if "_last_token_refresh" not in st.session_state:
+    st.session_state._last_token_refresh = 0
+if "_cookie_read" not in st.session_state:
+    st.session_state._cookie_read = False
 
 # ---- NAVIGATION FROM QUERY PARAMS ----
 if "page" in st.query_params:
@@ -444,7 +451,209 @@ LANG = {
         "refresh_feed": "🔄 Refresh Feed",
     },
     "fr": {
-        # ... (similar translations, but for brevity we can copy from previous version)
+        "login_title": "Connexion",
+        "signup_title": "S'inscrire",
+        "forgot_password": "Mot de passe oublié",
+        "email": "E-mail",
+        "password": "Mot de passe",
+        "full_name": "Nom complet",
+        "remember_me": "Se souvenir de moi",
+        "login_button": "🚀 Se connecter",
+        "signup_button": "📝 S'inscrire",
+        "send_reset_link": "Envoyer le lien de réinitialisation",
+        "feed": "📡 Fil d'actualité",
+        "friends_chat": "👥 Amis & Chat",
+        "satellite_map": "🛰️ Carte satellite",
+        "worldcup": "⚽ Coupe du monde en direct",
+        "profile": "👤 Profil",
+        "owner_space": "🕊️ Espace propriétaire",
+        "logout": "🚪 Déconnexion",
+        "system_health": "🛡️ Santé du système",
+        "signal": "📡 Signal",
+        "latency": "⏱️ Latence",
+        "quality": "📊 Qualité",
+        "uptime": "⏰ Disponibilité",
+        "encrypted": "🔒 Statut : CHIFFRÉ",
+        "compensation": "💰 Compensation",
+        "logged_in_as": "👤 Connecté en tant que",
+        "go_live": "Lancer un live (streaming réel)",
+        "external_platform": "Plateforme externe (YouTube/Facebook/Twitch)",
+        "in_app_camera": "Caméra intégrée",
+        "select_platform": "Choisir une plateforme",
+        "live_title": "Titre du live",
+        "create_live_session": "Créer une session live",
+        "you_are_live": "🔴 Vous êtes en direct !",
+        "end_live_session": "Terminer le live",
+        "set_stream_url": "📹 Définir l'URL du stream",
+        "paste_url": "Collez votre URL de stream",
+        "update_url": "Mettre à jour l'URL",
+        "shareable_link": "Lien partageable",
+        "live_chat_gifts": "Chat en direct & Cadeaux",
+        "send_gift": "🎁 Envoyer un cadeau",
+        "add_moncash": "Ajoutez votre numéro MonCash dans votre profil pour envoyer des cadeaux.",
+        "add_natcash": "Ajoutez votre numéro NATCASH pour recevoir des cadeaux.",
+        "total_gifts": "Total des cadeaux reçus",
+        "gifts_sent_to": "Les cadeaux seront envoyés sur votre MonCash",
+        "gifts_sent_to_natcash": "NATCASH",
+        "write_comment": "Écrire un commentaire...",
+        "send": "Envoyer",
+        "back_to_feed": "Retour au fil",
+        "create_post": "Créer une publication",
+        "caption_placeholder": "Écrivez quelque chose... ou collez un lien vidéo (YouTube, Vimeo, etc.)",
+        "add_media": "Ajouter des images ou vidéos (PNG, JPG, JPEG, GIF, MP4, MOV, AVI)",
+        "visibility": "Visibilité",
+        "public": "Public",
+        "private": "Privé",
+        "post": "🚀 Publier",
+        "delete_post": "🗑️ Supprimer",
+        "comments": "Commentaires",
+        "reply": "💬 Répondre",
+        "post_reply": "Publier la réponse",
+        "your_reply": "Votre réponse",
+        "clear_error": "Effacer l'erreur",
+        "join_live": "Rejoindre le live",
+        "watch_stream": "▶ REGARDER LE STREAM",
+        "start_broadcast": "▶ DÉMARRER LA DIFFUSION",
+        "stop_broadcast": "■ ARRÊTER LA DIFFUSION",
+        "you_are_broadcaster": "✅ Vous êtes le diffuseur. Utilisez les commandes ci‑dessous pour commencer.",
+        "you_are_viewer": "👀 Vous êtes un spectateur. Cliquez sur 'Regarder le stream' pour voir la vidéo.",
+        "choose_background": "🎨 Filtres d'arrière‑plan",
+        "bg_option": "BG",
+        "upload_background": "Ou téléchargez votre propre image",
+        "background_set": "Arrière‑plan défini !",
+        "ready_to_start": "Prêt à démarrer. Cliquez sur le bouton ci‑dessus.",
+        "camera_access": "📷 Demande d'accès à la caméra...",
+        "camera_granted": "✅ Accès à la caméra accordé. Connexion au serveur peer...",
+        "broadcasting": "✅ Diffusion en cours ! Votre ID peer",
+        "peer_error": "❌ Erreur peer",
+        "error": "❌ Erreur",
+        "broadcast_ended": "Diffusion terminée",
+        "initializing": "Initialisation...",
+        "connected_requesting": "Connecté. Demande du stream au diffuseur...",
+        "calling": "Appel en cours",
+        "received_stream": "Stream distant reçu",
+        "now_watching": "✅ Vous regardez maintenant le live",
+        "call_error": "❌ Erreur d'appel",
+        "call_ended": "Appel terminé",
+        "disconnected": "Déconnecté. Veuillez rafraîchir.",
+        "send_message": "Envoyer",
+        "close_chat": "Fermer le chat",
+        "active_call": "📞 Appel actif",
+        "room_id": "ID de la salle",
+        "share_room": "Partagez cet ID avec la personne que vous voulez appeler.",
+        "start_call": "Démarrer un appel",
+        "end_call": "Raccrocher",
+        "find_users": "🔍 Trouver des utilisateurs",
+        "search_by_name": "Rechercher par nom",
+        "add_friend": "➕ Ajouter en ami",
+        "view_profile": "👤 Voir le profil",
+        "friend_requests": "📨 Demandes d'amis reçues",
+        "accept": "✅ Accepter",
+        "reject": "❌ Rejeter",
+        "your_friends": "👥 Vos amis",
+        "no_friends": "Vous n'avez pas encore d'amis",
+        "chat": "💬 Chat",
+        "call": "📞 Appeler",
+        "profile_btn": "👤 Profil",
+        "edit_profile": "Modifier le profil",
+        "save_changes": "💾 Enregistrer",
+        "change_picture": "📸 Changer la photo",
+        "bio": "Bio",
+        "location": "Localisation",
+        "moncash_phone": "Numéro MonCash (pour recevoir des cadeaux)",
+        "natcash_phone": "Numéro NATCASH (pour recevoir des cadeaux)",
+        "posts_count": "Publications",
+        "connections": "Connexions",
+        "verified": "Vérifié",
+        "member_since": "Membre depuis",
+        "dashboard": "💰 Tableau de bord",
+        "new_users": "📈 Nouveaux utilisateurs",
+        "post_moderation": "🛡️ Modération des publications",
+        "client_payments": "📥 Paiements clients",
+        "gift_management": "🎁 Gestion des cadeaux",
+        "owner_dashboard": "🔐 Tableau de bord du propriétaire",
+        "balance": "Solde MonCash Business",
+        "transfer_funds": "💰 Transférer des fonds vers votre compte",
+        "amount_transfer": "Montant à transférer ($)",
+        "transfer": "🚀 Transférer vers mon MonCash",
+        "no_gifts": "Aucun cadeau pour l'instant.",
+        "payout_summary": "Résumé des paiements",
+        "total_gifts_htg": "Total des cadeaux (HTG)",
+        "mark_paid": "Tout marquer comme payé (simulation)",
+        "contact_support": "📬 Contactez le support / Paiements importants",
+        "logout_owner": "Se déconnecter de l'espace propriétaire",
+        "setup_instructions": "ℹ️ Instructions de configuration (si les téléchargements échouent)",
+        "storage_error": "Erreur de permission de stockage : configurez les politiques RLS pour le bucket 'avatars'.",
+        "listen_explanation": "🔊 Écouter l'explication de l'application",
+        "voice_lang": "🌐 Langue vocale",
+        "app_explanation": "Cette application a été construite par Gesner Deslandes, Ingénieur en Chef chez GlobalInternet.py. Tél : (509) 4738-5663. Email : deslandes78@gmail.com. Contactez Gesner si vous souhaitez créer un site web ou un logiciel. Cette application est une plateforme sociale haïtienne qui vous permet de vous connecter avec vos amis, partager des publications, faire des lives, envoyer des cadeaux et chatter en temps réel. Elle utilise Supabase pour les données, supporte le live streaming avec des filtres d'arrière‑plan, et inclut une carte satellite pour le plaisir. Elle est conçue pour être un espace moderne, sécurisé et amusant pour les utilisateurs haïtiens. Toutes les fonctionnalités sont construites avec Python et Streamlit. De plus, lorsqu'il y a un match de la Coupe du Monde, vous pouvez le regarder en direct sur la plateforme !",
+        "network_error": "⚠️ Impossible de se connecter au serveur d'authentification. Vérifiez votre connexion Internet et réessayez. Si le problème persiste, contactez le support.",
+        "debug_hint": "Si vous êtes administrateur, activez 'Afficher les infos de débogage' ci‑dessous pour voir l'erreur brute.",
+        "show_debug": "Afficher les infos de débogage",
+        "home_title": "🏠 Lakay se Lakay",
+        "home_haiti": "HAÏTI",
+        "home_subtitle": "Votre plateforme sociale haïtienne",
+        "call_permission_hint": "📌 Assurez‑vous que les deux participants accordent l'accès à la caméra et au microphone lorsque le navigateur le demande. Si vous ne vous voyez pas, rafraîchissez la page et réessayez.",
+        "join_instructions": "📌 Après avoir rejoint la salle, cliquez sur le bouton **'Rejoindre'** dans la fenêtre vidéo et autorisez l'accès à la caméra/micro. Si vous ne voyez toujours pas l'autre personne, demandez‑lui de vérifier ses paramètres de caméra.",
+        "reload_call": "🔄 Rafraîchir l'appel",
+        "request_to_join": "📨 Demande de participation",
+        "request_pending": "⏳ Demande en attente... en attente d'approbation du diffuseur.",
+        "broadcaster_controls": "🎛️ Commandes du diffuseur",
+        "join_live": "🔴 Rejoindre le live",
+        "user_management": "👥 Gestion des utilisateurs",
+        "ban_user": "🚫 Bannir",
+        "unban_user": "✅ Débannir",
+        "ban_reason": "Raison du bannissement",
+        "banned": "Banni",
+        "active": "Actif",
+        "my_wall": "📝 Mon mur",
+        "my_live_sessions": "📺 Mes sessions live",
+        "live_status_live": "🔴 EN DIRECT",
+        "live_status_ended": "Terminé",
+        "video_call": "📞 Appel vidéo (démo Jitsi)",
+        "demo_note": "ℹ️ Ceci est une démo utilisant Jitsi Meet – gratuit et open‑source. Vous pouvez démarrer un appel et partager le lien de la salle avec n'importe qui.",
+        "copy_link": "📋 Copier le lien de la salle",
+        "room_link_copied": "✅ Lien de la salle copié dans le presse‑papiers !",
+        "start_video_call": "Démarrer un appel vidéo",
+        "your_personal_room": "Votre salle personnelle",
+        "join_room": "Rejoindre la salle",
+        "search_groq": "🔍 Rechercher des livres & vidéos",
+        "groq_search_placeholder": "Que recherchez‑vous ? (livres, tutoriels, etc.)",
+        "groq_results": "Résultats",
+        "groq_open": "📖 Ouvrir",
+        "groq_close": "✖ Fermer",
+        "no_groq_results": "Aucune recommandation trouvée.",
+        "groq_api_key_missing": "⚠️ Clé API Groq manquante. Ajoutez GROQ_API_KEY à vos secrets.",
+        "youtube_not_supported": "⚠️ Les liens YouTube ne sont pas pris en charge dans cette recherche. Recherchez des livres ou autres vidéos.",
+        "albums": "📸 Albums photo",
+        "create_album": "Créer un album",
+        "album_title": "Titre de l'album",
+        "album_description": "Description",
+        "album_visibility": "Visibilité",
+        "album_public": "Public",
+        "album_private": "Privé",
+        "upload_photos": "Télécharger des photos",
+        "no_albums": "Aucun album.",
+        "view_album": "Voir l'album",
+        "delete_album": "Supprimer l'album",
+        "album_created": "Album créé avec succès !",
+        "photos_uploaded": "Photos téléchargées avec succès !",
+        "album_deleted": "Album supprimé.",
+        "cover_photo": "Photo de couverture",
+        "owner_albums": "Tous les albums (vue propriétaire)",
+        "paste_video_link_hint": "💡 Pour les liens YouTube, Vimeo ou autres, collez simplement l'URL dans la légende ci‑dessus. Le téléchargeur de fichiers est pour les fichiers vidéo/image de votre appareil.",
+        "open_in_new_tab": "Ouvrir dans un nouvel onglet",
+        "profile_visibility": "Visibilité du profil",
+        "whatsapp_phone": "Numéro WhatsApp (avec indicatif, ex. 50947385663)",
+        "call_unavailable": "L'utilisateur n'est pas disponible ou hors ligne. Veuillez réessayer plus tard.",
+        "calling": "📞 Appel en cours... Sonnerie...",
+        "ringing": "🔔 Sonnerie... en attente de réponse.",
+        "email_user": "📧 E-mail",
+        "whatsapp": "💬 WhatsApp",
+        "call_now": "📞 Appeler maintenant",
+        "private_profile": "🔒 Ce profil est privé. Envoyez une demande d'ami pour voir ses publications et albums.",
+        "search_posts": "🔍 Rechercher dans les publications...",
+        "refresh_feed": "🔄 Rafraîchir le fil",
     },
     "es": {},
     "ht": {}
@@ -453,7 +662,7 @@ LANG = {
 def t(key):
     return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
 
-# ====== COOKIE HELPERS ======
+# ====== COOKIE HELPERS (optimised) ======
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -472,14 +681,13 @@ def set_cookie(name, value, days=30):
     st.components.v1.html(js, height=0)
 
 def get_cookie(name):
-    cookie_val = None
-    try:
-        params = st.query_params
-        if f"cookie_{name}" in params:
-            cookie_val = params[f"cookie_{name}"][0]
-    except:
-        pass
-    return cookie_val
+    # Read from query params set by JS, then delete to avoid loops
+    param_name = f"cookie_{name}"
+    if param_name in st.query_params:
+        val = st.query_params[param_name]
+        del st.query_params[param_name]
+        return val
+    return None
 
 def inject_cookie_reader():
     js = """
@@ -529,8 +737,9 @@ def refresh_supabase_session():
         st.session_state.last_error = f"Token refresh failed: {e}"
         return False
 
-# --- Restore session ---
-if not st.session_state.logged_in and supabase:
+# --- Restore session (runs only once) ---
+if not st.session_state._session_restored and supabase:
+    st.session_state._session_restored = True
     inject_cookie_reader()
     refresh_token = get_cookie("sb_refresh_token")
     if refresh_token:
@@ -556,30 +765,33 @@ if not st.session_state.logged_in and supabase:
             else:
                 set_cookie("sb_refresh_token", "", -1)
                 st.warning("Session expired. Please log in again.")
-        except Exception:
+        except Exception as e:
             set_cookie("sb_refresh_token", "", -1)
             st.warning("Could not restore session. Please log in again.")
             st.session_state.last_error = str(e)
 
+# --- Lazy token refresh (only if more than 1 hour has passed) ---
 if st.session_state.logged_in and supabase and st.session_state.refresh_token:
-    try:
-        new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
-        if new_session and new_session.user:
-            st.session_state.user = new_session.user
-            st.session_state.refresh_token = new_session.session.refresh_token
-            profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone, new_session.user.email)
-            if profile and profile.get("is_banned"):
-                st.session_state.logged_in = False
-                st.session_state.user = None
-                st.session_state.profile = None
-                st.session_state.refresh_token = None
-                st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
-                st.stop()
-            st.session_state.profile = profile
-    except Exception:
-        pass
+    if time.time() - st.session_state._last_token_refresh > 3600:
+        try:
+            new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
+            if new_session and new_session.user:
+                st.session_state.user = new_session.user
+                st.session_state.refresh_token = new_session.session.refresh_token
+                st.session_state._last_token_refresh = time.time()
+                profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone, new_session.user.email)
+                if profile and profile.get("is_banned"):
+                    st.session_state.logged_in = False
+                    st.session_state.user = None
+                    st.session_state.profile = None
+                    st.session_state.refresh_token = None
+                    st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
+                    st.stop()
+                st.session_state.profile = profile
+        except Exception:
+            pass
 
-# ====== STARFIELD ======
+# ====== STARFIELD (lightweight, auto‑pauses on mobile / hidden tab) ======
 st.components.v1.html("""
 <canvas id="starfield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-2; pointer-events:none;"></canvas>
 <script>
@@ -594,24 +806,22 @@ st.components.v1.html("""
         height = canvas.height = window.innerHeight;
         initStars();
     });
-
     const stars = [];
-    const NUM_STARS = 300;
-
+    const NUM_STARS = 150;  // reduced for performance
     function initStars() {
         stars.length = 0;
         for (let i = 0; i < NUM_STARS; i++) {
             stars.push({
                 x: Math.random() * width,
                 y: Math.random() * height,
-                radius: Math.random() * 2.0 + 0.5,
+                radius: Math.random() * 1.5 + 0.5,
                 twinkleSpeed: 0.02 + Math.random() * 0.04,
                 phase: Math.random() * Math.PI * 2
             });
         }
     }
     initStars();
-
+    let frameId = null;
     function drawStars(time) {
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
@@ -623,9 +833,18 @@ st.components.v1.html("""
             ctx.fill();
         }
         ctx.globalAlpha = 1.0;
-        requestAnimationFrame(drawStars);
+        frameId = requestAnimationFrame(drawStars);
     }
-    requestAnimationFrame(drawStars);
+    drawStars(0);
+    // Pause when tab is hidden to save CPU
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && frameId) {
+            cancelAnimationFrame(frameId);
+            frameId = null;
+        } else if (!document.hidden && !frameId) {
+            drawStars(0);
+        }
+    });
 })();
 </script>
 """, height=0)
@@ -889,7 +1108,7 @@ def get_or_create_profile(user_id, identifier, email=None):
                 "moncash_phone": None,
                 "natcash_phone": None,
                 "email": email if email else "",
-                "profile_visibility": "public",  # default public
+                "profile_visibility": "public",
                 "whatsapp_phone": None,
                 "join_date": datetime.now().isoformat(),
                 "is_banned": False,
@@ -955,10 +1174,6 @@ def unban_user(user_id):
 
 # ====== RESILIENT QUERY HELPERS ======
 def safe_select_profiles(fields=None, **filters):
-    """
-    Try to select profiles with optional extra fields (profile_visibility, email, whatsapp_phone).
-    If those columns don't exist, fall back to basic fields.
-    """
     if supabase is None:
         return []
     if fields is None:
@@ -970,10 +1185,8 @@ def safe_select_profiles(fields=None, **filters):
         resp = query.execute()
         return resp.data if resp.data else []
     except Exception as e:
-        # If column error (42703), try without extra fields
         if "42703" in str(e):
             base_fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active"]
-            # Also include moncash and natcash if they exist, but we'll just use basic
             query = supabase.table("profiles").select(",".join(base_fields))
             for col, val in filters.items():
                 query = query.eq(col, val)
@@ -983,15 +1196,12 @@ def safe_select_profiles(fields=None, **filters):
             raise
 
 def get_all_users():
-    """Get all users, safely handling missing columns."""
     if supabase is None:
         return []
     try:
-        # Try with extra fields first
         fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active", "profile_visibility", "email", "whatsapp_phone"]
         return safe_select_profiles(fields=fields)
     except Exception:
-        # Fallback to basic fields
         return safe_select_profiles()
 
 def search_users(query):
@@ -1004,7 +1214,6 @@ def search_users(query):
         return resp.data if resp.data else []
     except Exception as e:
         if "42703" in str(e):
-            # Fallback: without extra fields
             fields = ["id", "full_name", "avatar_url", "last_active"]
             query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
             resp = query_builder.execute()
@@ -1134,6 +1343,8 @@ def delete_post(post_id):
         return False
     try:
         supabase.table("posts").delete().eq("id", post_id).execute()
+        st.cache_data.clear()
+        st.session_state.posts = load_posts()
         return True
     except Exception as e:
         st.session_state.last_error = f"Error deleting post: {e}"
@@ -1192,7 +1403,6 @@ def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     else:
         st.markdown(f'<div class="profile-avatar" style="width:{size}px; height:{size}px; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:{size*0.6}px;">👤</div>', unsafe_allow_html=True)
     st.markdown(dot_html, unsafe_allow_html=True)
-    # Always show 1KFollowers for every user
     st.caption("1KFollowers")
 
 def get_user_post_count(user_id, public_only=False):
@@ -1265,24 +1475,18 @@ def load_posts_cached(user_id=None, author_id=None, include_private=False):
 
 # ---- NEW: Shuffle feed like a cord ----
 def shuffle_feed_posts(posts):
-    """Interleave posts from different users so that each user's content gets visibility."""
     if not posts:
         return []
     from collections import defaultdict
     groups = defaultdict(list)
     for p in posts:
         groups[p['user_id']].append(p)
-    # Sort each user's posts by created_at (most recent first)
     for uid in groups:
         groups[uid].sort(key=lambda x: x['created_at'], reverse=True)
     result = []
-    # While there are any posts left
     while any(groups.values()):
-        # Get active user IDs (those with remaining posts)
         active_users = [uid for uid, lst in groups.items() if lst]
-        # Shuffle the order of users each round
         random.shuffle(active_users)
-        # Take one post from each user in the shuffled order
         for uid in active_users:
             if groups[uid]:
                 result.append(groups[uid].pop(0))
@@ -1542,7 +1746,6 @@ def create_live_session(title, platform, method='external'):
             st.session_state.live_sessions = load_live_sessions()
             st.session_state.stream_key = stream_key
             st.session_state.selected_platform = platform if method == 'external' else 'inapp'
-            # Create a post on feed about the live session (no post_type)
             create_post(st.session_state.user.id, f"🔴 I'm live: {title}", is_public=True)
             return result.data[0]["id"]
         else:
@@ -1721,7 +1924,6 @@ def respond_friend_request(request_id, accept):
                 }).execute()
             except Exception:
                 pass
-            # Force reload of friend data to update the list
             load_friend_data()
         return True, f"Request {new_status}"
     except Exception as e:
@@ -1729,17 +1931,15 @@ def respond_friend_request(request_id, accept):
 
 # ====== FIXED load_friend_data with retry and error handling ======
 def load_friend_data():
-    """Load friend requests and friends with retry and error handling."""
     if supabase is None or not st.session_state.user:
         return
 
     user_id = st.session_state.user.id
     max_retries = 3
-    retry_delay = 1  # seconds
+    retry_delay = 1
 
     for attempt in range(max_retries):
         try:
-            # Fetch pending friend requests (received)
             pending_resp = supabase.table("friend_requests") \
                 .select("id, sender_id, receiver_id, status, created_at") \
                 .eq("receiver_id", user_id) \
@@ -1747,13 +1947,11 @@ def load_friend_data():
                 .execute()
             pending_raw = pending_resp.data or []
 
-            # Fetch accepted friend requests (sent by user)
             sent_resp = supabase.table("friend_requests") \
                 .select("id, sender_id, receiver_id, status, created_at") \
                 .eq("sender_id", user_id) \
                 .eq("status", "accepted") \
                 .execute()
-            # Fetch accepted friend requests (received by user)
             received_resp = supabase.table("friend_requests") \
                 .select("id, sender_id, receiver_id, status, created_at") \
                 .eq("receiver_id", user_id) \
@@ -1762,7 +1960,6 @@ def load_friend_data():
 
             accepted_raw = (sent_resp.data or []) + (received_resp.data or [])
 
-            # Collect all user IDs to fetch profiles
             user_ids = set()
             for req in pending_raw:
                 user_ids.add(req["sender_id"])
@@ -1771,11 +1968,9 @@ def load_friend_data():
                 user_ids.add(req["receiver_id"])
             user_ids.discard(user_id)
 
-            # Fetch profiles for those users safely (with fallback for missing columns)
             profiles = {}
             if user_ids:
                 try:
-                    # Try to get extra fields
                     fields = ["id", "full_name", "avatar_url", "last_active", "profile_visibility", "email", "whatsapp_phone"]
                     profiles_resp = supabase.table("profiles") \
                         .select(",".join(fields)) \
@@ -1785,14 +1980,12 @@ def load_friend_data():
                         profiles[p["id"]] = p
                 except Exception as e:
                     if "42703" in str(e):
-                        # Fallback: without extra fields
                         fields = ["id", "full_name", "avatar_url", "last_active"]
                         profiles_resp = supabase.table("profiles") \
                             .select(",".join(fields)) \
                             .in_("id", list(user_ids)) \
                             .execute()
                         for p in profiles_resp.data or []:
-                            # add default values for missing fields
                             p["profile_visibility"] = "public"
                             p["email"] = None
                             p["whatsapp_phone"] = None
@@ -1800,7 +1993,6 @@ def load_friend_data():
                     else:
                         raise
 
-            # Build pending requests list
             pending_requests = []
             for req in pending_raw:
                 sender_id = req["sender_id"]
@@ -1819,7 +2011,6 @@ def load_friend_data():
                 })
             st.session_state.friend_requests = pending_requests
 
-            # Build friends list
             friends = []
             seen = set()
             for req in accepted_raw:
@@ -1860,7 +2051,6 @@ def search_users(query):
         query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
         resp = query_builder.execute()
         results = resp.data if resp.data else []
-        # Ensure default values for missing fields
         for r in results:
             r.setdefault("profile_visibility", "public")
             r.setdefault("email", None)
@@ -1868,7 +2058,6 @@ def search_users(query):
         return results
     except Exception as e:
         if "42703" in str(e):
-            # Fallback: without extra fields
             fields = ["id", "full_name", "avatar_url", "last_active"]
             query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
             resp = query_builder.execute()
@@ -1883,7 +2072,6 @@ def search_users(query):
             return []
 
 def get_all_users():
-    """Get all users, safely handling missing columns."""
     if supabase is None:
         return []
     try:
@@ -1961,7 +2149,6 @@ def start_call(room_id=None):
         room_id = hashlib.md5(f"{st.session_state.user.id}_{time.time()}".encode()).hexdigest()[:10]
     st.session_state.call_room = room_id
     st.session_state.in_call = True
-    # Log the call in video_calls table for Owner monitoring
     if supabase:
         try:
             supabase.table("video_calls").insert({
@@ -1975,7 +2162,6 @@ def start_call(room_id=None):
 
 def end_call():
     if st.session_state.in_call and st.session_state.call_room:
-        # Update video_calls record
         if supabase:
             try:
                 supabase.table("video_calls").update({"ended_at": datetime.now().isoformat(), "is_active": False}).eq("room", st.session_state.call_room).eq("is_active", True).execute()
@@ -1986,14 +2172,11 @@ def end_call():
     st.session_state.call_ringing = False
     st.session_state.call_initiated_time = None
 
-# ---- NEW: Initiate a call with ring simulation ----
 def initiate_call(target_user_id):
-    """Initiate a call to another user, create room, send notification, and start ringing."""
     if st.session_state.call_ringing:
         st.warning("You already have an ongoing call or ringing.")
         return
     room = hashlib.md5(f"{st.session_state.user.id}_{target_user_id}_{time.time()}".encode()).hexdigest()[:10]
-    # Send a notification to the target user
     try:
         supabase.table("notifications").insert({
             "user_id": target_user_id,
@@ -2005,7 +2188,6 @@ def initiate_call(target_user_id):
     except Exception as e:
         st.error(f"Failed to send call notification: {e}")
         return
-    # Start the call for the current user (they will join the room)
     start_call(room)
     st.session_state.call_target_user = target_user_id
     st.session_state.call_ringing = True
@@ -2013,14 +2195,11 @@ def initiate_call(target_user_id):
     st.rerun()
 
 def check_call_status():
-    """Check if the call has been ringing for more than 30 seconds and simulate 'unavailable'."""
     if st.session_state.call_ringing and st.session_state.call_initiated_time:
         elapsed = time.time() - st.session_state.call_initiated_time
-        if elapsed > 30:  # 30 seconds = 5 rings (approx 6 sec per ring)
-            # Mark as unavailable
+        if elapsed > 30:
             st.session_state.call_ringing = False
             st.session_state.call_initiated_time = None
-            # End the call room
             end_call()
             st.warning(t("call_unavailable"))
             st.rerun()
@@ -2111,7 +2290,6 @@ def create_album(user_id, title, description, visibility='public'):
         }
         result = supabase.table("photo_albums").insert(album_data).execute()
         if result.data:
-            # Create a post about the album (no post_type)
             album_id = result.data[0]["id"]
             content = f"📸 New album: {title}"
             if visibility == 'public':
@@ -2129,7 +2307,6 @@ def upload_album_photos(album_id, files):
         return False
     try:
         for file in files:
-            # Upload to album_photos bucket (we'll create a dedicated bucket)
             content_type = file.type
             if content_type.startswith('image'):
                 original_bytes = file.getvalue()
@@ -2141,9 +2318,7 @@ def upload_album_photos(album_id, files):
             timestamp = int(time.time())
             random_hash = hashlib.md5(file.name.encode()).hexdigest()[:8]
             file_name = f"album_{album_id}_{timestamp}_{random_hash}.{ext}"
-            # Ensure bucket exists (we'll assume 'album_photos' bucket is created)
             if not ensure_bucket_exists("album_photos"):
-                # fallback: store in post_media bucket
                 bucket = "post_media"
             else:
                 bucket = "album_photos"
@@ -2153,7 +2328,6 @@ def upload_album_photos(album_id, files):
                 {"content-type": content_type}
             )
             public_url = supabase.storage.from_(bucket).get_public_url(file_name)
-            # Insert record
             supabase.table("album_photos").insert({
                 "album_id": album_id,
                 "photo_url": public_url,
@@ -2172,7 +2346,6 @@ def get_user_albums(user_id, include_private=False):
         if not include_private:
             query = query.eq("visibility", "public")
         albums = query.order("created_at", desc=True).execute().data or []
-        # For each album, get cover photo (first photo)
         for album in albums:
             photos = supabase.table("album_photos").select("photo_url").eq("album_id", album["id"]).limit(1).execute().data or []
             album["cover_photo"] = photos[0]["photo_url"] if photos else None
@@ -2195,11 +2368,9 @@ def delete_album(album_id):
     if supabase is None:
         return False
     try:
-        # Delete photos first
         photos = supabase.table("album_photos").select("id").eq("album_id", album_id).execute().data or []
         for p in photos:
             supabase.table("album_photos").delete().eq("id", p["id"]).execute()
-        # Delete album
         supabase.table("photo_albums").delete().eq("id", album_id).execute()
         return True
     except Exception as e:
@@ -2217,12 +2388,10 @@ def toggle_album_visibility(album_id, visibility):
         return False
 
 def get_all_albums(include_private=True):
-    """For OwnerSpace: get all albums (public and private)."""
     if supabase is None:
         return []
     try:
         albums = supabase.table("photo_albums").select("*").order("created_at", desc=True).execute().data or []
-        # Get user info
         user_ids = set(a["user_id"] for a in albums)
         profiles = {}
         if user_ids:
@@ -2558,13 +2727,11 @@ def display_media_item(media):
 
 # ====== GROQ SEARCH FUNCTION ======
 def groq_search(query):
-    """Use Groq API to recommend books/videos (not YouTube) based on the query."""
     api_key = st.secrets.get("GROQ_API_KEY")
     if not api_key:
         st.error("Groq API key not set. Add GROQ_API_KEY to your secrets.")
         return []
 
-    # Detect YouTube links
     if "youtube.com" in query.lower() or "youtu.be" in query.lower():
         st.warning(t("youtube_not_supported"))
         return []
@@ -2616,21 +2783,17 @@ def groq_search(query):
 
 # ====== RENDER DISCOVER NEW PEOPLE SECTION ======
 def render_discover_section():
-    """Display the 'Discover New People' grid."""
     if supabase is None:
         st.info("Unable to load users – database not connected.")
         return
     try:
         current_user_id = st.session_state.user.id
-        # Get all users except current
         all_users = get_all_users()
         if not all_users:
             st.info("No other users found.")
             return
 
-        # Get current friends IDs
         friends_ids = {f["id"] for f in st.session_state.friends}
-        # Get pending friend requests (both sent and received)
         req_resp = supabase.table("friend_requests").select("*").eq("status", "pending").execute()
         pending_requests = req_resp.data or []
         sent_dict = {}
@@ -2641,7 +2804,6 @@ def render_discover_section():
             if req["receiver_id"] == current_user_id:
                 received_dict[req["sender_id"]] = req["id"]
 
-        # Build a list of users to display (not friends, not self)
         non_friends = []
         for u in all_users:
             uid = u["id"]
@@ -2649,7 +2811,6 @@ def render_discover_section():
                 continue
             if uid in friends_ids:
                 continue
-            # Determine status
             if uid in sent_dict:
                 status = "sent"
                 request_id = sent_dict[uid]
@@ -2659,7 +2820,6 @@ def render_discover_section():
             else:
                 status = "none"
                 request_id = None
-            # Ensure default visibility
             u.setdefault("profile_visibility", "public")
             non_friends.append({**u, "status": status, "request_id": request_id})
 
@@ -2667,18 +2827,15 @@ def render_discover_section():
             st.info("🎉 You are already friends with everyone on the platform!")
             return
 
-        # Display in a grid-like layout using columns
         cols = st.columns(3)
         for idx, user in enumerate(non_friends):
             with cols[idx % 3]:
                 with st.container():
                     st.markdown('<div class="discover-card">', unsafe_allow_html=True)
-                    # Avatar and name
                     col_av, col_name = st.columns([1, 3])
                     with col_av:
                         display_avatar_and_followers(user.get("avatar_url"), user["id"], size=70, profile=user)
                     with col_name:
-                        # Make name clickable to view profile
                         if st.button(user['full_name'], key=f"discover_name_{user['id']}"):
                             st.session_state.viewing_profile = user['id']
                             st.rerun()
@@ -2687,7 +2844,6 @@ def render_discover_section():
                         else:
                             st.caption("📌 " + user.get("location", ""))
 
-                    # Action buttons
                     if user.get("is_banned"):
                         st.info("User banned")
                     elif user["status"] == "none":
@@ -2723,7 +2879,6 @@ def render_discover_section():
                         st.button("👥 Friends", key=f"fr_friend_{user['id']}", disabled=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        # Refresh button
         if st.button("🔄 Refresh friends list"):
             load_friend_data()
             st.rerun()
@@ -2784,7 +2939,7 @@ def render_feed():
 
     # ---- Create a post ----
     st.markdown(f"### {t('create_post')}")
-    st.info(t("paste_video_link_hint"))  # <-- NEW HINT
+    st.info(t("paste_video_link_hint"))
     with st.form("new_post", clear_on_submit=True):
         col_avatar, col_input = st.columns([1, 8])
         with col_avatar:
@@ -2881,7 +3036,7 @@ def render_feed():
     render_discover_section()
     st.divider()
 
-    # ====== FEED SEARCH AND REFRESH ======
+    # ====== FEED SEARCH AND REFRESH (optimised) ======
     st.markdown("#### 📋 Feed")
     search_col, refresh_col = st.columns([3, 1])
     with search_col:
@@ -2892,10 +3047,10 @@ def render_feed():
             placeholder=t("search_posts"),
             label_visibility="collapsed"
         )
-        # If the search term changed, update session state and re-run to filter
+        # Update session state without forcing a rerun – Streamlit will rerun naturally
         if search_term != st.session_state.feed_search_term:
             st.session_state.feed_search_term = search_term
-            st.rerun()
+            # No explicit st.rerun() – avoids extra refresh on each keystroke
     with refresh_col:
         if st.button(t("refresh_feed"), use_container_width=True):
             st.cache_data.clear()
@@ -2952,9 +3107,7 @@ def render_feed():
                         st.markdown(f"<span class='green-dot'></span>", unsafe_allow_html=True)
                     if not post.get("is_public", True):
                         st.markdown("<span class='private-badge'>Private</span>", unsafe_allow_html=True)
-                    # Check if it's a live post (by content, not by column)
                     if post['content'].startswith("🔴 I'm live:"):
-                        # Check if live session is still active
                         live_session = None
                         if supabase:
                             try:
@@ -2981,7 +3134,6 @@ def render_feed():
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
                             st.rerun()
 
-                # EDIT FORM (shown only when editing this post)
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -2999,24 +3151,19 @@ def render_feed():
                                 st.rerun()
                     st.divider()
 
-                # Normal post: display media files first
                 media_urls = post.get("media_urls", [])
                 if media_urls:
                     for media in media_urls:
                         display_media_item(media)
 
-                # Then display post content and embed any video links (YouTube etc.)
                 if post['content']:
                     clickable_content = make_clickable(post['content'])
                     st.markdown(f"<div class='post-card'>{clickable_content}</div>", unsafe_allow_html=True)
-                    # Find URLs in content and embed them
                     urls = re.findall(r'(https?://[^\s]+)', post['content'])
                     for url in urls:
-                        # Try to embed (YouTube, Vimeo, etc.)
                         try:
                             embed_video_from_url(url)
-                        except Exception as e:
-                            # If embedding fails, just show the link as plain text
+                        except Exception:
                             st.markdown(f"[Link]({url})")
 
                 emojis = ["👍","👎","❤️","😂","😮","😢","👏"]
@@ -3177,22 +3324,17 @@ def render_user_profile(user_id, show_back_button=True):
         st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
         st.markdown(f"**{t('profile_visibility')}:** {profile.get('profile_visibility', 'public').capitalize()}")
 
-        # --- Interaction Buttons ---
         is_own_profile = (user_id == st.session_state.user.id)
         if not is_own_profile:
-            # Call button
             if st.button(t("call_now"), key=f"call_{user_id}"):
                 initiate_call(user_id)
                 st.rerun()
-            # Chat button
             if st.button(t("chat"), key=f"chat_{user_id}"):
                 st.session_state.selected_chat = user_id
                 st.session_state.viewing_profile = None
                 st.rerun()
-            # Email button (if email exists)
             if profile.get("email"):
                 st.markdown(f'<a href="mailto:{profile["email"]}" target="_blank" style="display:inline-block; margin-top:5px; background:#0080ff; color:white; padding:6px 12px; border-radius:20px; text-decoration:none; font-weight:bold;">📧 {t("email_user")}</a>', unsafe_allow_html=True)
-            # WhatsApp button (if whatsapp_phone exists)
             if profile.get("whatsapp_phone"):
                 wa_number = profile["whatsapp_phone"].replace("+", "").strip()
                 st.markdown(f'<a href="https://wa.me/{wa_number}" target="_blank" style="display:inline-block; margin-top:5px; background:#25D366; color:white; padding:6px 12px; border-radius:20px; text-decoration:none; font-weight:bold;">💬 {t("whatsapp")}</a>', unsafe_allow_html=True)
@@ -3202,7 +3344,6 @@ def render_user_profile(user_id, show_back_button=True):
                 st.rerun()
 
     with col2:
-        # Check visibility and friendship
         is_friend = any(f['id'] == user_id for f in st.session_state.friends)
         can_view_content = is_own_profile or is_friend or profile.get('profile_visibility', 'public') == 'public'
 
@@ -3259,7 +3400,6 @@ def render_user_profile(user_id, show_back_button=True):
             else:
                 st.info(t("private_profile"))
 
-    # If viewing an album
     if st.session_state.viewing_album:
         album_id = st.session_state.viewing_album
         album_data = supabase.table("photo_albums").select("*").eq("id", album_id).execute().data
@@ -3290,10 +3430,8 @@ def render_user_profile(user_id, show_back_button=True):
         st.metric("Followers", "1KFollowers")
     st.divider()
 
-    # --- Handle call ringing state ---
     if st.session_state.call_ringing and st.session_state.call_target_user == user_id:
         st.info(t("ringing"))
-        # Auto-check after 30 seconds (handled by check_call_status)
         check_call_status()
 
 # ====== render_friends_page ======
@@ -3411,7 +3549,6 @@ def render_friends_page():
                 with cols[0]:
                     display_avatar_and_followers(friend.get('avatar_url'), friend['id'], size=60, profile=friend)
                 with cols[1]:
-                    # Make name clickable to view profile
                     if st.button(friend['full_name'], key=f"friend_name_{friend['id']}"):
                         st.session_state.viewing_profile = friend['id']
                         st.rerun()
@@ -4001,7 +4138,6 @@ def owner_space():
                     st.error("Invalid password")
         return
 
-    # ====== OWNER DASHBOARD CONTENT (with full error handling) ======
     try:
         last_seen = get_last_seen_signup()
         new_users = get_new_users(last_seen)
@@ -4377,7 +4513,6 @@ def owner_space():
                             user_name = call.get('profiles', {}).get('full_name', 'Unknown')
                             st.markdown(f"**User:** {user_name}")
                         with cols[2]:
-                            # Join as Monitor - we can provide the room link
                             room = call['room']
                             domain = JITSI_DOMAIN
                             monitor_url = f"https://{domain}/{room}"
@@ -4390,7 +4525,6 @@ def owner_space():
             st.error(f"Error in Live Monitoring tab: {e}")
             st.exception(e)
 
-    # ---- Footer ----
     st.divider()
     st.markdown(f"### {t('contact_support')}")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
@@ -4749,7 +4883,6 @@ PAGE_TITLES = {key: t(key) for key in PAGE_KEYS}
 
 # ========== MAIN APP ==========
 def main_app():
-    # Check for any lingering call status (auto-end after 30 sec)
     if st.session_state.call_ringing and st.session_state.call_initiated_time:
         elapsed = time.time() - st.session_state.call_initiated_time
         if elapsed > 30:
@@ -4841,7 +4974,6 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
-        # NEW: Haiti Bus Race Game
         st.markdown(
             """
             <a href="https://haiti-bus-game-2026-gmoxzgjx8jqcuiarbg9mab.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#e67e22; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
@@ -4850,7 +4982,6 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
-        # NEW: Haiti Helicopter War Game
         st.markdown(
             """
             <a href="https://helicopter-game-47ahqciazjk4appwt6jvrsr.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#1a5276; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
@@ -5002,7 +5133,6 @@ def main_app():
             st.rerun()
 
         st.divider()
-        # ---- Small Owner Space unlock in sidebar ----
         st.markdown("### 🕊️ Owner Space")
         if st.session_state.owner_space_access:
             st.success("✅ Access granted")
@@ -5017,7 +5147,6 @@ def main_app():
                     else:
                         st.error("Invalid password")
 
-    # Render the selected page
     page_functions = {
         "feed": render_feed,
         "friends_chat": render_friends_page,
