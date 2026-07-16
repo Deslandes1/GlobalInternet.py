@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.28.1 (Mobile‑stabilized)
+# Version: 78.28.2 (Professional profile pictures)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -681,7 +681,6 @@ def set_cookie(name, value, days=30):
     st.components.v1.html(js, height=0)
 
 def get_cookie(name):
-    # Read from query params set by JS, then delete to avoid loops
     param_name = f"cookie_{name}"
     if param_name in st.query_params:
         val = st.query_params[param_name]
@@ -807,7 +806,7 @@ st.components.v1.html("""
         initStars();
     });
     const stars = [];
-    const NUM_STARS = 150;  // reduced for performance
+    const NUM_STARS = 150;
     function initStars() {
         stars.length = 0;
         for (let i = 0; i < NUM_STARS; i++) {
@@ -836,7 +835,6 @@ st.components.v1.html("""
         frameId = requestAnimationFrame(drawStars);
     }
     drawStars(0);
-    // Pause when tab is hidden to save CPU
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && frameId) {
             cancelAnimationFrame(frameId);
@@ -890,8 +888,9 @@ st.markdown("""
     .friend-count { font-size: 1.2rem; font-weight: bold; color: #0a2a44; }
     .online-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #00ff88; border: 2px solid white; margin-left: 2px; vertical-align: middle; animation: pulse 2s infinite; }
     .offline-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #888; border: 2px solid white; margin-left: 2px; vertical-align: middle; }
-    .profile-avatar { width: 150px; height: 150px; object-fit: cover; border-radius: 10px; border: 2px solid #00209F; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    @media (max-width: 768px) { ... }
+    .profile-avatar { border-radius: 50%; border: 3px solid #00209F; box-shadow: 0 4px 12px rgba(0,0,0,0.15); object-fit: cover; }
+    .profile-avatar-large { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #00209F; box-shadow: 0 8px 25px rgba(0,0,0,0.2); object-fit: cover; }
+    @media (max-width: 768px) { .profile-avatar-large { width: 200px; height: 200px; } }
     .stTextInput > div > div > input { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 40px !important; padding: 10px 20px !important; }
     .stTextArea > div > textarea { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 20px !important; }
     .stRadio > div { color: #1e2a3a !important; }
@@ -1389,8 +1388,12 @@ def is_user_online(last_active_str, threshold_minutes=5):
     except Exception:
         return False
 
-# ====== MODIFIED display_avatar_and_followers ======
-def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
+# ====== PROFESSIONAL AVATAR DISPLAY ======
+def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None, large=False):
+    """
+    Display a circular avatar with online dot and follower count.
+    If large=True, use a bigger style with double border.
+    """
     online = False
     if profile is not None:
         online = is_user_online(profile.get('last_active'))
@@ -1398,13 +1401,25 @@ def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
         online = is_user_online(st.session_state.profile.get('last_active')) if st.session_state.profile else False
     dot_class = "online-indicator" if online else "offline-indicator"
     dot_html = f'<span class="{dot_class}"></span>'
-    if avatar_url:
-        st.markdown(f'<img src="{avatar_url}" class="profile-avatar" style="width:{size}px; height:{size}px;" />', unsafe_allow_html=True)
+    
+    if large:
+        # Professional large avatar (profile page)
+        if avatar_url:
+            st.markdown(f'<img src="{avatar_url}" class="profile-avatar-large" />', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="profile-avatar-large" style="background:#ccc; display:flex; align-items:center; justify-content:center; font-size:100px; color:#555;">👤</div>', unsafe_allow_html=True)
+        st.markdown(dot_html, unsafe_allow_html=True)
+        st.caption("1KFollowers")
     else:
-        st.markdown(f'<div class="profile-avatar" style="width:{size}px; height:{size}px; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:{size*0.6}px;">👤</div>', unsafe_allow_html=True)
-    st.markdown(dot_html, unsafe_allow_html=True)
-    st.caption("1KFollowers")
+        # Standard avatar (feed, comments, friends)
+        if avatar_url:
+            st.markdown(f'<img src="{avatar_url}" class="profile-avatar" style="width:{size}px; height:{size}px;" />', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="profile-avatar" style="width:{size}px; height:{size}px; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:{size*0.6}px; color:#555;">👤</div>', unsafe_allow_html=True)
+        st.markdown(dot_html, unsafe_allow_html=True)
+        st.caption("1KFollowers")
 
+# ====== USER POST COUNT ======
 def get_user_post_count(user_id, public_only=False):
     if supabase is None:
         return 0
@@ -3047,18 +3062,15 @@ def render_feed():
             placeholder=t("search_posts"),
             label_visibility="collapsed"
         )
-        # Update session state without forcing a rerun – Streamlit will rerun naturally
         if search_term != st.session_state.feed_search_term:
             st.session_state.feed_search_term = search_term
-            # No explicit st.rerun() – avoids extra refresh on each keystroke
     with refresh_col:
         if st.button(t("refresh_feed"), use_container_width=True):
             st.cache_data.clear()
             st.session_state.posts = load_posts()
-            st.session_state.feed_search_term = ""  # clear search on refresh
+            st.session_state.feed_search_term = ""
             st.rerun()
 
-    # ---- Filter posts based on search term ----
     all_posts = st.session_state.posts
     search_term_lower = st.session_state.feed_search_term.lower().strip()
     if search_term_lower:
@@ -3066,7 +3078,6 @@ def render_feed():
     else:
         filtered_posts = all_posts
 
-    # ---- Display posts ----
     if st.session_state.delete_confirm:
         post_id, _ = st.session_state.delete_confirm
         st.warning("Are you sure you want to delete this post?")
@@ -3094,7 +3105,7 @@ def render_feed():
             with st.container():
                 col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
                 with col_a:
-                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40, profile=post["profiles"])
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=50, profile=post["profiles"])
                 with col_b:
                     name = post['profiles']['full_name']
                     if post['user_id'] != st.session_state.user.id:
@@ -3316,7 +3327,8 @@ def render_user_profile(user_id, show_back_button=True):
     st.header(f"👤 {profile['full_name']}'s Profile")
     col1, col2 = st.columns([1,2])
     with col1:
-        display_avatar_and_followers(profile.get("avatar_url"), user_id, size=150, profile=profile)
+        # Professional large avatar
+        display_avatar_and_followers(profile.get("avatar_url"), user_id, large=True, profile=profile)
         st.markdown(f"**{t('bio')}:** {profile.get('bio', 'No bio')}")
         st.markdown(f"**{t('location')}:** {profile.get('location', 'Unknown')}")
         st.markdown(f"**{t('moncash_phone')}:** {profile.get('moncash_phone', 'Not set')}")
@@ -3840,7 +3852,8 @@ def render_profile():
     profile = st.session_state.profile
     col1, col2 = st.columns([1,2])
     with col1:
-        display_avatar_and_followers(profile.get("avatar_url"), st.session_state.user.id, size=200, profile=profile)
+        # Professional large avatar
+        display_avatar_and_followers(profile.get("avatar_url"), st.session_state.user.id, large=True, profile=profile)
         uploaded = st.file_uploader(t("change_picture"), type=["png","jpg","jpeg","gif"], label_visibility="collapsed")
         if uploaded:
             url = upload_avatar(st.session_state.user.id, uploaded)
@@ -3988,7 +4001,7 @@ def render_profile():
             with st.container():
                 col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
                 with col_a:
-                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=40, profile=st.session_state.profile)
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=50, profile=st.session_state.profile)
                 with col_b:
                     st.markdown(f"**{post['profiles']['full_name']}**")
                     if post.get("profiles", {}).get("is_live"):
