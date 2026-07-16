@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.25.0 (Profile visibility, call, email, WhatsApp, clickable profiles)
+# Version: 78.26.0 (Resilient column handling for profile visibility & contacts)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -947,15 +947,65 @@ def unban_user(user_id):
     except Exception as e:
         return False, str(e)
 
+# ====== RESILIENT QUERY HELPERS ======
+def safe_select_profiles(fields=None, **filters):
+    """
+    Try to select profiles with optional extra fields (profile_visibility, email, whatsapp_phone).
+    If those columns don't exist, fall back to basic fields.
+    """
+    if supabase is None:
+        return []
+    if fields is None:
+        fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active"]
+    try:
+        query = supabase.table("profiles").select(",".join(fields))
+        for col, val in filters.items():
+            query = query.eq(col, val)
+        resp = query.execute()
+        return resp.data if resp.data else []
+    except Exception as e:
+        # If column error (42703), try without extra fields
+        if "42703" in str(e):
+            base_fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active"]
+            # Also include moncash and natcash if they exist, but we'll just use basic
+            query = supabase.table("profiles").select(",".join(base_fields))
+            for col, val in filters.items():
+                query = query.eq(col, val)
+            resp = query.execute()
+            return resp.data if resp.data else []
+        else:
+            raise
+
 def get_all_users():
+    """Get all users, safely handling missing columns."""
     if supabase is None:
         return []
     try:
-        resp = supabase.table("profiles").select("id, full_name, avatar_url, is_banned, ban_reason, join_date, last_active, profile_visibility, email, whatsapp_phone").order("full_name").execute()
+        # Try with extra fields first
+        fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active", "profile_visibility", "email", "whatsapp_phone"]
+        return safe_select_profiles(fields=fields)
+    except Exception:
+        # Fallback to basic fields
+        return safe_select_profiles()
+
+def search_users(query):
+    if supabase is None or not st.session_state.user:
+        return []
+    try:
+        fields = ["id", "full_name", "avatar_url", "last_active", "profile_visibility", "email", "whatsapp_phone"]
+        query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
+        resp = query_builder.execute()
         return resp.data if resp.data else []
     except Exception as e:
-        st.session_state.last_error = f"Error loading users: {e}"
-        return []
+        if "42703" in str(e):
+            # Fallback: without extra fields
+            fields = ["id", "full_name", "avatar_url", "last_active"]
+            query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
+            resp = query_builder.execute()
+            return resp.data if resp.data else []
+        else:
+            st.session_state.last_error = f"Search failed: {e}"
+            return []
 
 # ---- Uploads with compression ----
 def compress_image(file_bytes, max_size_kb=200, quality=70, max_width=1024):
@@ -1716,15 +1766,34 @@ def load_friend_data():
                 user_ids.add(req["receiver_id"])
             user_ids.discard(user_id)
 
-            # Fetch profiles for those users
+            # Fetch profiles for those users safely (with fallback for missing columns)
             profiles = {}
             if user_ids:
-                profiles_resp = supabase.table("profiles") \
-                    .select("id, full_name, avatar_url, last_active, profile_visibility, email, whatsapp_phone") \
-                    .in_("id", list(user_ids)) \
-                    .execute()
-                for p in profiles_resp.data or []:
-                    profiles[p["id"]] = p
+                try:
+                    # Try to get extra fields
+                    fields = ["id", "full_name", "avatar_url", "last_active", "profile_visibility", "email", "whatsapp_phone"]
+                    profiles_resp = supabase.table("profiles") \
+                        .select(",".join(fields)) \
+                        .in_("id", list(user_ids)) \
+                        .execute()
+                    for p in profiles_resp.data or []:
+                        profiles[p["id"]] = p
+                except Exception as e:
+                    if "42703" in str(e):
+                        # Fallback: without extra fields
+                        fields = ["id", "full_name", "avatar_url", "last_active"]
+                        profiles_resp = supabase.table("profiles") \
+                            .select(",".join(fields)) \
+                            .in_("id", list(user_ids)) \
+                            .execute()
+                        for p in profiles_resp.data or []:
+                            # add default values for missing fields
+                            p["profile_visibility"] = "public"
+                            p["email"] = None
+                            p["whatsapp_phone"] = None
+                            profiles[p["id"]] = p
+                    else:
+                        raise
 
             # Build pending requests list
             pending_requests = []
@@ -1777,15 +1846,63 @@ def load_friend_data():
                 st.session_state.last_error = f"Failed to load friend data after {max_retries} attempts: {e}"
                 st.warning("Could not load friends data. Please refresh the page.")
 
+# ---- Search users ----
 def search_users(query):
     if supabase is None or not st.session_state.user:
         return []
     try:
-        result = supabase.table("profiles").select("id, full_name, avatar_url, moncash_phone, natcash_phone, last_active, profile_visibility, email, whatsapp_phone").neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50).execute()
-        return result.data
+        fields = ["id", "full_name", "avatar_url", "last_active", "profile_visibility", "email", "whatsapp_phone"]
+        query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
+        resp = query_builder.execute()
+        results = resp.data if resp.data else []
+        # Ensure default values for missing fields
+        for r in results:
+            r.setdefault("profile_visibility", "public")
+            r.setdefault("email", None)
+            r.setdefault("whatsapp_phone", None)
+        return results
     except Exception as e:
-        st.session_state.last_error = f"Search failed: {e}"
+        if "42703" in str(e):
+            # Fallback: without extra fields
+            fields = ["id", "full_name", "avatar_url", "last_active"]
+            query_builder = supabase.table("profiles").select(",".join(fields)).neq("id", st.session_state.user.id).ilike("full_name", f"%{query}%").limit(50)
+            resp = query_builder.execute()
+            results = resp.data if resp.data else []
+            for r in results:
+                r["profile_visibility"] = "public"
+                r["email"] = None
+                r["whatsapp_phone"] = None
+            return results
+        else:
+            st.session_state.last_error = f"Search failed: {e}"
+            return []
+
+def get_all_users():
+    """Get all users, safely handling missing columns."""
+    if supabase is None:
         return []
+    try:
+        fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active", "profile_visibility", "email", "whatsapp_phone"]
+        resp = supabase.table("profiles").select(",".join(fields)).order("full_name").execute()
+        results = resp.data if resp.data else []
+        for r in results:
+            r.setdefault("profile_visibility", "public")
+            r.setdefault("email", None)
+            r.setdefault("whatsapp_phone", None)
+        return results
+    except Exception as e:
+        if "42703" in str(e):
+            fields = ["id", "full_name", "avatar_url", "is_banned", "ban_reason", "join_date", "last_active"]
+            resp = supabase.table("profiles").select(",".join(fields)).order("full_name").execute()
+            results = resp.data if resp.data else []
+            for r in results:
+                r["profile_visibility"] = "public"
+                r["email"] = None
+                r["whatsapp_phone"] = None
+            return results
+        else:
+            st.session_state.last_error = f"Error loading users: {e}"
+            return []
 
 def send_message(sender_id, receiver_id, content, media_file=None):
     if supabase is None:
@@ -2537,6 +2654,8 @@ def render_discover_section():
             else:
                 status = "none"
                 request_id = None
+            # Ensure default visibility
+            u.setdefault("profile_visibility", "public")
             non_friends.append({**u, "status": status, "request_id": request_id})
 
         if not non_friends:
