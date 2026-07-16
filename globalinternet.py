@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - no post_type column) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.27.0 (Added Helicopter War Game to sidebar)
+# Version: 78.28.0 (Consistent 1KFollowers on all avatars)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1172,6 +1172,7 @@ def is_user_online(last_active_str, threshold_minutes=5):
     except Exception:
         return False
 
+# ====== MODIFIED display_avatar_and_followers ======
 def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     online = False
     if profile is not None:
@@ -1185,10 +1186,8 @@ def display_avatar_and_followers(avatar_url, user_id, size=50, profile=None):
     else:
         st.markdown(f'<div class="profile-avatar" style="width:{size}px; height:{size}px; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:{size*0.6}px;">👤</div>', unsafe_allow_html=True)
     st.markdown(dot_html, unsafe_allow_html=True)
-    if user_id == st.session_state.user.id:
-        st.caption("1miFollowers")
-    else:
-        st.caption("1kFollowers")
+    # Always show 1KFollowers for every user
+    st.caption("1KFollowers")
 
 def get_user_post_count(user_id, public_only=False):
     if supabase is None:
