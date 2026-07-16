@@ -221,6 +221,9 @@ if "call_ringing" not in st.session_state:
 # ---- Navigation page ----
 if "current_page" not in st.session_state:
     st.session_state.current_page = "feed"
+# ---- Feed search term ----
+if "feed_search_term" not in st.session_state:
+    st.session_state.feed_search_term = ""
 
 # ---- NAVIGATION FROM QUERY PARAMS ----
 if "page" in st.query_params:
@@ -435,7 +438,10 @@ LANG = {
         "email_user": "📧 Email",
         "whatsapp": "💬 WhatsApp",
         "call_now": "📞 Call Now",
-        "private_profile": "🔒 This profile is private. Send a friend request to see their posts and albums."
+        "private_profile": "🔒 This profile is private. Send a friend request to see their posts and albums.",
+        # Feed search and refresh
+        "search_posts": "🔍 Search posts...",
+        "refresh_feed": "🔄 Refresh Feed",
     },
     "fr": {
         # ... (similar translations, but for brevity we can copy from previous version)
@@ -2875,7 +2881,37 @@ def render_feed():
     render_discover_section()
     st.divider()
 
-    # ---- Feed posts ----
+    # ====== FEED SEARCH AND REFRESH ======
+    st.markdown("#### 📋 Feed")
+    search_col, refresh_col = st.columns([3, 1])
+    with search_col:
+        search_term = st.text_input(
+            t("search_posts"),
+            value=st.session_state.feed_search_term,
+            key="feed_search_input",
+            placeholder=t("search_posts"),
+            label_visibility="collapsed"
+        )
+        # If the search term changed, update session state and re-run to filter
+        if search_term != st.session_state.feed_search_term:
+            st.session_state.feed_search_term = search_term
+            st.rerun()
+    with refresh_col:
+        if st.button(t("refresh_feed"), use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.posts = load_posts()
+            st.session_state.feed_search_term = ""  # clear search on refresh
+            st.rerun()
+
+    # ---- Filter posts based on search term ----
+    all_posts = st.session_state.posts
+    search_term_lower = st.session_state.feed_search_term.lower().strip()
+    if search_term_lower:
+        filtered_posts = [p for p in all_posts if search_term_lower in p.get('content', '').lower()]
+    else:
+        filtered_posts = all_posts
+
+    # ---- Display posts ----
     if st.session_state.delete_confirm:
         post_id, _ = st.session_state.delete_confirm
         st.warning("Are you sure you want to delete this post?")
@@ -2893,10 +2929,13 @@ def render_feed():
                 st.rerun()
         st.divider()
 
-    if not st.session_state.posts:
-        st.info("No posts yet. Be the first to create one!")
+    if not filtered_posts:
+        if st.session_state.feed_search_term:
+            st.info("No posts match your search. Try a different term.")
+        else:
+            st.info("No posts yet. Be the first to create one!")
     else:
-        for post in st.session_state.posts:
+        for post in filtered_posts:
             with st.container():
                 col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
                 with col_a:
