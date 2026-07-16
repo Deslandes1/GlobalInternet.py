@@ -613,7 +613,7 @@ LANG = {
         "live_status_live": "🔴 EN DIRECT",
         "live_status_ended": "Terminé",
         "video_call": "📞 Appel vidéo (démo Jitsi)",
-        "demo_note": "ℹ️ Ceci est une démo utilisant Jitsi Meet – gratuit et open‑source. Vous pouvez démarrer un appel et partager le lien de la salle avec n'importe qui.",
+        "demo_note": "ℹ️ Ceci est une demo utilisant Jitsi Meet – gratuit et open‑source. Vous pouvez démarrer un appel et partager le lien de la salle avec n'importe qui.",
         "copy_link": "📋 Copier le lien de la salle",
         "room_link_copied": "✅ Lien de la salle copié dans le presse‑papiers !",
         "start_video_call": "Démarrer un appel vidéo",
@@ -4603,7 +4603,7 @@ def render_profile():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== OWNER SPACE ======
+# ====== OWNER SPACE (UPDATED WITH BANK TRANSFER INFO TAB) ======
 def owner_space():
     st.header(t("owner_space"))
     if not st.session_state.owner_space_access:
@@ -4627,10 +4627,11 @@ def owner_space():
         st.warning(f"⚠️ Could not load new users: {e}")
         new_users = []
 
+    # ---- UPDATED TABS LIST (includes "💳 Bank Transfer Info") ----
     tabs = st.tabs([
         t("dashboard"), t("new_users"), t("post_moderation"),
         t("client_payments"), t("gift_management"), t("user_management"),
-        "📸 Albums", "🕵️ Live Monitoring"
+        "📸 Albums", "🕵️ Live Monitoring", "💳 Bank Transfer Info"
     ])
 
     # ---- TAB 1: Dashboard ----
@@ -5004,6 +5005,124 @@ def owner_space():
             st.error(f"Error in Live Monitoring tab: {e}")
             st.exception(e)
 
+    # ---- TAB 9: 💳 Bank Transfer Info (SECRETS‑BASED) ----
+    with tabs[8]:
+        st.subheader("💳 UNIBANK Wire Transfer Instructions")
+        st.markdown("""
+        Use the information below to receive international wire transfers in **USD** or **HTG**.
+        All routing details are public – your **account numbers** are kept secret and loaded from secure secrets.
+        """)
+
+        # ----- Read account numbers from secrets (never hardcoded!) -----
+        usd_account = st.secrets.get("UNIBANK_USD_ACCOUNT", "⚠️ NOT SET in secrets")
+        htg_account = st.secrets.get("UNIBANK_HTG_ACCOUNT", "⚠️ NOT SET in secrets")
+
+        # ----- Build the full instruction text for download -----
+        instructions = f"""
+        ============================================================
+        UNIBANK WIRE TRANSFER INSTRUCTIONS
+        (for receiving funds from abroad)
+        ============================================================
+
+        BANK: UNIBANK S.A.
+        ADDRESS: IMMEUBLE RIVOLI, 157, RUE FLAUBERT, PETION-VILLE, HAITI
+        SWIFT/BIC: UBNKHTPPXXX
+
+        ------------------------------------------------------------
+        FOR USD TRANSFERS (from USA)
+        ------------------------------------------------------------
+        Beneficiary Bank: UNIBANK S.A., Haiti
+        SWIFT: UBNKHTPPXXX
+        Beneficiary Account Number: {usd_account}
+        Beneficiary Name: [Your full business/personal name as registered with UNIBANK]
+
+        Choose ONE of the following intermediary banks:
+
+        1) Bank of America, Miami, FL
+           SWIFT: BOFAUS3M
+           ABA: 026009593
+           Account: 1901892336
+
+        2) Bank of New York, New York, NY
+           SWIFT: IRVTUS3N
+           ABA: 021000018
+           Account: 8900570881
+
+        3) Citibank N.A., New York, NY
+           SWIFT: CITIUS33
+           ABA: 021000089
+           Account: 36338572
+
+        ------------------------------------------------------------
+        FOR USD TRANSFERS (from Europe)
+        ------------------------------------------------------------
+        Intermediary Bank: Bank of America, London, England
+        SWIFT: BOFAGB22
+        IBAN (for EUR SEPA): GB33BOFA16505023805023
+        Account: 600823805023
+
+        Beneficiary Bank: UNIBANK S.A., Haiti
+        SWIFT: UBNKHTPPXXX
+        Beneficiary Account Number: {usd_account}
+        Beneficiary Name: [Your full business/personal name]
+
+        ------------------------------------------------------------
+        FOR HTG TRANSFERS (from abroad)
+        ------------------------------------------------------------
+        HTG transfers from outside Haiti typically use the same USD routing.
+        The funds are sent in USD via one of the intermediary banks above,
+        and UNIBANK will automatically convert them to HTG at the prevailing
+        exchange rate upon arrival.
+
+        Beneficiary Account Number (HTG): {htg_account}
+        Beneficiary Name: [Your full business/personal name]
+
+        For domestic HTG transfers inside Haiti, use the SPIH system (no SWIFT).
+
+        ------------------------------------------------------------
+        IMPORTANT NOTES
+        ------------------------------------------------------------
+        - Always double‑check the beneficiary name and account number.
+        - Transfers usually arrive within 24‑48 hours, but can take 3‑5 business days.
+        - Contact UNIBANK directly if you need the latest intermediary bank list.
+        - For large amounts, consider using a test transaction first.
+
+        For assistance, contact us:
+        Phone: (509) 4738-5663
+        Email: deslandes78@gmail.com
+        WhatsApp: +50947385663
+
+        ============================================================
+        """
+
+        # ----- Display the info on screen -----
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 🇺🇸 USD Account")
+            st.code(f"Account: {usd_account}", language="text")
+            st.markdown("**SWIFT:** `UBNKHTPPXXX`")
+            st.markdown("**Intermediary banks:** Bank of America / BNY / Citibank (USA) or Bank of America London (Europe)")
+        with col2:
+            st.markdown("#### 🇭🇹 HTG Account")
+            st.code(f"Account: {htg_account}", language="text")
+            st.markdown("**Routing:** Same as USD – converted to HTG on arrival")
+            st.markdown("**Domestic:** SPIH system (no SWIFT)")
+
+        st.divider()
+        st.markdown("#### 📥 Download Full Instructions")
+        st.download_button(
+            label="📄 Download Wire Transfer Instructions (TXT)",
+            data=instructions,
+            file_name=f"UNIBANK_wire_instructions_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+        st.info("✅ The account numbers are read from `st.secrets` – they are **not** stored in the source code.")
+        if "⚠️ NOT SET" in usd_account or "⚠️ NOT SET" in htg_account:
+            st.warning("⚠️ One or both account numbers are missing from secrets. Please set `UNIBANK_USD_ACCOUNT` and `UNIBANK_HTG_ACCOUNT` in your Streamlit Cloud secrets.")
+
+    # ---- End of tabs ----
     st.divider()
     st.markdown(f"### {t('contact_support')}")
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
