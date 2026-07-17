@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - Multilingual with Golden Stars) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 78.32.0 (Full translations: EN, FR, ES, HT)
+# Version: 79.0.0 (User Bank Transfer Instructions on Private Profile)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -450,7 +450,10 @@ LANG = {
         "search_posts": "🔍 Search posts...",
         "refresh_feed": "🔄 Refresh Feed",
         "security_badge": "🛡️ Security Badge",
-        "security_caption": "🔒 End-to-end encrypted connection"
+        "security_caption": "🔒 End-to-end encrypted connection",
+        "unibank_usd_account": "UNIBANK USD Account Number",
+        "unibank_htg_account": "UNIBANK HTG Account Number",
+        "cin_number": "CIN Card Number"
     },
     "fr": {
         "login_title": "Connexion",
@@ -657,7 +660,10 @@ LANG = {
         "search_posts": "🔍 Rechercher dans les publications...",
         "refresh_feed": "🔄 Rafraîchir le fil",
         "security_badge": "🛡️ Badge de sécurité",
-        "security_caption": "🔒 Connexion chiffrée de bout en bout"
+        "security_caption": "🔒 Connexion chiffrée de bout en bout",
+        "unibank_usd_account": "Numéro de compte UNIBANK USD",
+        "unibank_htg_account": "Numéro de compte UNIBANK HTG",
+        "cin_number": "Numéro de carte CIN"
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -864,7 +870,10 @@ LANG = {
         "search_posts": "🔍 Buscar publicaciones...",
         "refresh_feed": "🔄 Actualizar feed",
         "security_badge": "🛡️ Insignia de seguridad",
-        "security_caption": "🔒 Conexión cifrada de extremo a extremo"
+        "security_caption": "🔒 Conexión cifrada de extremo a extremo",
+        "unibank_usd_account": "Número de cuenta UNIBANK USD",
+        "unibank_htg_account": "Número de cuenta UNIBANK HTG",
+        "cin_number": "Número de CIN"
     },
     "ht": {
         "login_title": "Konekte",
@@ -1071,7 +1080,10 @@ LANG = {
         "search_posts": "🔍 Chèche pòs...",
         "refresh_feed": "🔄 Rafrechi feed",
         "security_badge": "🛡️ Badge sekirite",
-        "security_caption": "🔒 Koneksyon chifre bout nan bout"
+        "security_caption": "🔒 Koneksyon chifre bout nan bout",
+        "unibank_usd_account": "Nimewo kont UNIBANK USD",
+        "unibank_htg_account": "Nimewo kont UNIBANK HTG",
+        "cin_number": "Nimewo kat CIN"
     }
 }
 
@@ -1580,7 +1592,10 @@ def get_or_create_profile(user_id, identifier, email=None):
                 "join_date": datetime.now().isoformat(),
                 "is_banned": False,
                 "ban_reason": None,
-                "last_active": datetime.now().isoformat()
+                "last_active": datetime.now().isoformat(),
+                "unibank_usd_account": None,
+                "unibank_htg_account": None,
+                "cin_number": None
             }
             insert_response = supabase.table("profiles").insert(new_profile).execute()
             if insert_response.data:
@@ -3805,6 +3820,9 @@ def render_user_profile(user_id, show_back_button=True):
         st.markdown(f"**{t('natcash_phone')}:** {profile.get('natcash_phone', 'Not set')}")
         st.markdown(f"**{t('member_since')}:** {profile.get('join_date', '')[:10]}")
         st.markdown(f"**{t('profile_visibility')}:** {profile.get('profile_visibility', 'public').capitalize()}")
+        st.markdown(f"**{t('unibank_usd_account')}:** {profile.get('unibank_usd_account', 'Not set')}")
+        st.markdown(f"**{t('unibank_htg_account')}:** {profile.get('unibank_htg_account', 'Not set')}")
+        st.markdown(f"**{t('cin_number')}:** {profile.get('cin_number', 'Not set')}")
 
         is_own_profile = (user_id == st.session_state.user.id)
         if not is_own_profile:
@@ -3881,6 +3899,225 @@ def render_user_profile(user_id, show_back_button=True):
                                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info(t("private_profile"))
+
+        # ---- 💳 BANK TRANSFER INSTRUCTIONS (ONLY ON OWN PRIVATE PROFILE) ----
+        if is_own_profile:
+            st.divider()
+            st.subheader("💳 My Bank Transfer Instructions")
+            st.markdown("""
+            Download your personal UNIBANK wire transfer instructions.
+            These documents include your personal account numbers and CIN.
+            """)
+
+            # Get user's personal banking details
+            usd_account = profile.get('unibank_usd_account', 'Not set')
+            htg_account = profile.get('unibank_htg_account', 'Not set')
+            cin_number = profile.get('cin_number', 'Not set')
+            full_name = profile.get('full_name', 'User')
+            moncash_phone = profile.get('moncash_phone', 'Not set')
+            natcash_phone = profile.get('natcash_phone', 'Not set')
+
+            # ---- ENGLISH VERSION (Personalized) ----
+            instructions_en = f"""
+            ============================================================
+            UNIBANK WIRE TRANSFER INSTRUCTIONS
+            (for receiving funds from abroad)
+            ============================================================
+
+            BANK: UNIBANK S.A.
+            ADDRESS: IMMEUBLE RIVOLI, 157, RUE FLAUBERT, PETION-VILLE, HAITI
+            SWIFT/BIC: UBNKHTPPXXX
+
+            CIN CARD NUMBER : {cin_number}
+            BENEFICIARY NAME : {full_name}
+
+            ------------------------------------------------------------
+            FOR USD TRANSFERS (from USA)
+            ------------------------------------------------------------
+            Beneficiary Bank: UNIBANK S.A., Haiti
+            SWIFT: UBNKHTPPXXX
+            Beneficiary Account Number: {usd_account}
+            Beneficiary Name: {full_name}
+
+            Choose ONE of the following intermediary banks:
+
+            1) Bank of America, Miami, FL
+               SWIFT: BOFAUS3M
+               ABA: 026009593
+               Account: 1901892336
+
+            2) Bank of New York, New York, NY
+               SWIFT: IRVTUS3N
+               ABA: 021000018
+               Account: 8900570881
+
+            3) Citibank N.A., New York, NY
+               SWIFT: CITIUS33
+               ABA: 021000089
+               Account: 36338572
+
+            ------------------------------------------------------------
+            FOR USD TRANSFERS (from Europe)
+            ------------------------------------------------------------
+            Intermediary Bank: Bank of America, London, England
+            SWIFT: BOFAGB22
+            IBAN (for EUR SEPA): GB33BOFA16505023805023
+            Account: 600823805023
+
+            Beneficiary Bank: UNIBANK S.A., Haiti
+            SWIFT: UBNKHTPPXXX
+            Beneficiary Account Number: {usd_account}
+            Beneficiary Name: {full_name}
+
+            ------------------------------------------------------------
+            FOR HTG TRANSFERS (from abroad)
+            ------------------------------------------------------------
+            HTG transfers from outside Haiti typically use the same USD routing.
+            The funds are sent in USD via one of the intermediary banks above,
+            and UNIBANK will automatically convert them to HTG at the prevailing
+            exchange rate upon arrival.
+
+            Beneficiary Account Number (HTG): {htg_account}
+            Beneficiary Name: {full_name}
+
+            For domestic HTG transfers inside Haiti, use the SPIH system (no SWIFT).
+
+            ------------------------------------------------------------
+            PRISME TRANSFER – WORLDWIDE QUICK & INSTANT TRANSACTIONS
+            ------------------------------------------------------------
+            For fast and easy payments, you can also use Prisme Transfer via:
+            - Digicel MonCash: {moncash_phone}
+            - Natcom Natcash: {natcash_phone}
+
+            This method is ideal for quick, small to medium amounts and works globally.
+            Contact the recipient to confirm their mobile money details before sending.
+
+            ------------------------------------------------------------
+            IMPORTANT NOTES
+            ------------------------------------------------------------
+            - Always double‑check the beneficiary name and account number.
+            - Transfers usually arrive within 24‑48 hours, but can take 3‑5 business days.
+            - Contact UNIBANK directly if you need the latest intermediary bank list.
+            - For large amounts, consider using a test transaction first.
+
+            CIN CARD NUMBER : {cin_number}
+
+            ============================================================
+            """
+
+            # ---- FRENCH VERSION (Personalized) ----
+            instructions_fr = f"""
+            ============================================================
+            INSTRUCTIONS DE VIREMENT BANCAIRE UNIBANK
+            (pour recevoir des fonds de l'étranger)
+            ============================================================
+
+            BANQUE : UNIBANK S.A.
+            ADRESSE : IMMEUBLE RIVOLI, 157, RUE FLAUBERT, PETION-VILLE, HAÏTI
+            SWIFT/BIC : UBNKHTPPXXX
+
+            CIN CARD NUMBER : {cin_number}
+            NOM DU BÉNÉFICIAIRE : {full_name}
+
+            ------------------------------------------------------------
+            POUR LES TRANSFERTS EN USD (depuis les États-Unis)
+            ------------------------------------------------------------
+            Banque bénéficiaire : UNIBANK S.A., Haïti
+            SWIFT : UBNKHTPPXXX
+            Numéro de compte du bénéficiaire : {usd_account}
+            Nom du bénéficiaire : {full_name}
+
+            Choisissez UNE des banques intermédiaires suivantes :
+
+            1) Bank of America, Miami, FL
+               SWIFT : BOFAUS3M
+               ABA : 026009593
+               Compte : 1901892336
+
+            2) Bank of New York, New York, NY
+               SWIFT : IRVTUS3N
+               ABA : 021000018
+               Compte : 8900570881
+
+            3) Citibank N.A., New York, NY
+               SWIFT : CITIUS33
+               ABA : 021000089
+               Compte : 36338572
+
+            ------------------------------------------------------------
+            POUR LES TRANSFERTS EN USD (depuis l'Europe)
+            ------------------------------------------------------------
+            Banque intermédiaire : Bank of America, Londres, Angleterre
+            SWIFT : BOFAGB22
+            IBAN (pour virement SEPA en EUR) : GB33BOFA16505023805023
+            Compte : 600823805023
+
+            Banque bénéficiaire : UNIBANK S.A., Haïti
+            SWIFT : UBNKHTPPXXX
+            Numéro de compte du bénéficiaire : {usd_account}
+            Nom du bénéficiaire : {full_name}
+
+            ------------------------------------------------------------
+            POUR LES TRANSFERTS EN HTG (depuis l'étranger)
+            ------------------------------------------------------------
+            Les transferts en HTG depuis l'extérieur d'Haïti utilisent généralement le même
+            routage que les USD. Les fonds sont envoyés en USD via l'une des banques
+            intermédiaires ci-dessus, et UNIBANK les convertit automatiquement en HTG
+            au taux de change en vigueur à l'arrivée.
+
+            Numéro de compte du bénéficiaire (HTG) : {htg_account}
+            Nom du bénéficiaire : {full_name}
+
+            Pour les transferts HTG nationaux à l'intérieur d'Haïti, utilisez le système SPIH
+            (pas de SWIFT).
+
+            ------------------------------------------------------------
+            PRISME TRANSFER – TRANSACTIONS RAPIDES ET INSTANTANÉES DANS LE MONDE
+            ------------------------------------------------------------
+            Pour des paiements rapides et faciles, vous pouvez également utiliser Prisme Transfer via :
+            - Digicel MonCash : {moncash_phone}
+            - Natcom Natcash : {natcash_phone}
+
+            Cette méthode est idéale pour des montants petits à moyens, et fonctionne à l'échelle mondiale.
+            Contactez le bénéficiaire pour confirmer ses coordonnées avant d'envoyer.
+
+            ------------------------------------------------------------
+            REMARQUES IMPORTANTES
+            ------------------------------------------------------------
+            - Vérifiez toujours le nom du bénéficiaire et le numéro de compte.
+            - Les virements arrivent généralement sous 24 à 48 heures, mais peuvent
+              prendre 3 à 5 jours ouvrables.
+            - Contactez directement UNIBANK pour obtenir la liste la plus récente
+              des banques intermédiaires.
+            - Pour les montants importants, envisagez d'effectuer un test de transfert
+              au préalable.
+
+            CIN CARD NUMBER : {cin_number}
+
+            ============================================================
+            """
+
+            # ---- Download buttons side by side ----
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                st.download_button(
+                    label="🇬🇧 Download Instructions (English)",
+                    data=instructions_en,
+                    file_name=f"UNIBANK_instructions_{full_name.replace(' ', '_')}_EN_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            with col_btn2:
+                st.download_button(
+                    label="🇫🇷 Télécharger les instructions (Français)",
+                    data=instructions_fr,
+                    file_name=f"UNIBANK_instructions_{full_name.replace(' ', '_')}_FR_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+            if usd_account == 'Not set' or htg_account == 'Not set':
+                st.warning("⚠️ Please add your UNIBANK account numbers in your profile settings to generate personalized instructions.")
 
     if st.session_state.viewing_album:
         album_id = st.session_state.viewing_album
@@ -4342,6 +4579,13 @@ def render_profile():
             email = st.text_input("Email (visible to friends)", value=profile.get("email", ""))
             whatsapp_phone = st.text_input(t("whatsapp_phone"), value=profile.get("whatsapp_phone", ""))
             profile_visibility = st.radio(t("profile_visibility"), ["public", "private"], index=0 if profile.get("profile_visibility", "public") == "public" else 1)
+
+            # ---- NEW BANKING FIELDS ----
+            st.markdown("#### 💳 Banking Information")
+            unibank_usd_account = st.text_input(t("unibank_usd_account"), value=profile.get("unibank_usd_account", ""))
+            unibank_htg_account = st.text_input(t("unibank_htg_account"), value=profile.get("unibank_htg_account", ""))
+            cin_number = st.text_input(t("cin_number"), value=profile.get("cin_number", ""))
+
             if st.form_submit_button(t("save_changes"), use_container_width=True):
                 profile.update({
                     "full_name": full_name,
@@ -4351,7 +4595,10 @@ def render_profile():
                     "natcash_phone": natcash_phone,
                     "email": email,
                     "whatsapp_phone": whatsapp_phone,
-                    "profile_visibility": profile_visibility
+                    "profile_visibility": profile_visibility,
+                    "unibank_usd_account": unibank_usd_account,
+                    "unibank_htg_account": unibank_htg_account,
+                    "cin_number": cin_number
                 })
                 if update_profile(profile):
                     st.success(t("profile"))
