@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - Ultra-Fast with Call & Messaging) ======
+# ====== FULL app.py (Lakay se Lakay - Mobile Stable) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 90.0.0 (Phone Call on Profile, Message Inbox, Missed Calls, Speed Optimized)
+# Version: 91.0.0 (Mobile-optimized, debounced reruns, stable session)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -39,6 +39,17 @@ try:
         st.stop()
 except AttributeError:
     pass
+
+# ====== DEBOUNCE RERUN ======
+if "_last_rerun" not in st.session_state:
+    st.session_state._last_rerun = 0
+
+def safe_rerun():
+    """Prevent multiple reruns within 1 second to avoid mobile instability."""
+    now = time.time()
+    if now - st.session_state._last_rerun > 1.0:
+        st.session_state._last_rerun = now
+        st.rerun()
 
 # --- Supabase client ---
 @st.cache_resource
@@ -211,23 +222,24 @@ if "viewing_album" not in st.session_state:
     st.session_state.viewing_album = None
 if "creating_album" not in st.session_state:
     st.session_state.creating_album = False
-# ---- Call state for "ringing" simulation ----
+# ---- Call state ----
 if "call_initiated_time" not in st.session_state:
     st.session_state.call_initiated_time = None
 if "call_target_user" not in st.session_state:
     st.session_state.call_target_user = None
 if "call_ringing" not in st.session_state:
     st.session_state.call_ringing = False
-# ---- Audio-only call flag ----
 if "call_audio_only" not in st.session_state:
     st.session_state.call_audio_only = False
+if "current_call_id" not in st.session_state:
+    st.session_state.current_call_id = None
 # ---- Navigation page ----
 if "current_page" not in st.session_state:
     st.session_state.current_page = "feed"
 # ---- Feed search term ----
 if "feed_search_term" not in st.session_state:
     st.session_state.feed_search_term = ""
-# ---- Mobile optimization flags ----
+# ---- Mobile optimisation flags ----
 if "_session_restored" not in st.session_state:
     st.session_state._session_restored = False
 if "_last_token_refresh" not in st.session_state:
@@ -457,7 +469,7 @@ LANG = {
         "unibank_usd_account": "UNIBANK USD Account Number",
         "unibank_htg_account": "UNIBANK HTG Account Number",
         "cin_number": "CIN Card Number",
-        # New keys for call and messaging
+        # Call & messaging keys
         "missed_call": "Missed call from {name}",
         "call_back": "Call Back",
         "incoming_call": "📞 Incoming call from {name}",
@@ -682,7 +694,7 @@ LANG = {
         "unibank_usd_account": "Numéro de compte UNIBANK USD",
         "unibank_htg_account": "Numéro de compte UNIBANK HTG",
         "cin_number": "Numéro de carte CIN",
-        # New keys
+        # Call & messaging keys
         "missed_call": "Appel manqué de {name}",
         "call_back": "Rappeler",
         "incoming_call": "📞 Appel entrant de {name}",
@@ -907,7 +919,7 @@ LANG = {
         "unibank_usd_account": "Número de cuenta UNIBANK USD",
         "unibank_htg_account": "Número de cuenta UNIBANK HTG",
         "cin_number": "Número de CIN",
-        # New keys
+        # Call & messaging keys
         "missed_call": "Llamada perdida de {name}",
         "call_back": "Devolver llamada",
         "incoming_call": "📞 Llamada entrante de {name}",
@@ -1132,7 +1144,7 @@ LANG = {
         "unibank_usd_account": "Nimewo kont UNIBANK USD",
         "unibank_htg_account": "Nimewo kont UNIBANK HTG",
         "cin_number": "Nimewo kat CIN",
-        # New keys
+        # Call & messaging keys
         "missed_call": "Apèl manke de {name}",
         "call_back": "Rapèl",
         "incoming_call": "📞 Apèl antre de {name}",
@@ -1175,29 +1187,34 @@ def get_cookie(name):
     param_name = f"cookie_{name}"
     if param_name in st.query_params:
         val = st.query_params[param_name]
-        del st.query_params[param_name]
+        # Do not delete the param immediately to avoid resetting; we'll keep it.
         return val
     return None
 
 def inject_cookie_reader():
     js = """
     <script>
-    function getCookie(name) {
-        var nameEQ = name + "=";
-        var ca = document.cookie.split(';');
-        for(var i=0;i < ca.length;i++) {
-            var c = ca[i];
-            while (c.charAt(0)==' ') c = c.substring(1,c.length);
-            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+    (function() {
+        function getCookie(name) {
+            var nameEQ = name + "=";
+            var ca = document.cookie.split(';');
+            for(var i=0;i<ca.length;i++) {
+                var c = ca[i];
+                while (c.charAt(0)==' ') c = c.substring(1,c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+            }
+            return null;
         }
-        return null;
-    }
-    var refreshToken = getCookie("sb_refresh_token");
-    if (refreshToken) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('cookie_sb_refresh_token', refreshToken);
-        window.history.replaceState({}, '', url);
-    }
+        var refreshToken = getCookie("sb_refresh_token");
+        if (refreshToken) {
+            var url = new URL(window.location.href);
+            // Only set param if not already present to avoid infinite loop
+            if (!url.searchParams.has('cookie_sb_refresh_token')) {
+                url.searchParams.set('cookie_sb_refresh_token', refreshToken);
+                window.history.replaceState({}, '', url);
+            }
+        }
+    })();
     </script>
     """
     st.components.v1.html(js, height=0)
@@ -1217,7 +1234,7 @@ def refresh_supabase_session():
                 st.session_state.profile = None
                 st.session_state.refresh_token = None
                 st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
-                st.rerun()
+                safe_rerun()
                 return False
             st.session_state.profile = profile
             return True
@@ -1234,22 +1251,26 @@ if not st.session_state._session_restored and supabase:
     refresh_token = get_cookie("sb_refresh_token")
     if refresh_token:
         try:
-            user = supabase.auth.get_user(refresh_token)
-            if user.user:
-                profile = get_or_create_profile(user.user.id, user.user.email or user.user.phone, user.user.email)
+            # get_user expects a token, not refresh_token? Actually it expects a JWT token.
+            # We'll use the refresh token to get a new session using the client's auth API.
+            # Supabase client has a method to refresh session using refresh token.
+            # Let's use the refresh_session method directly.
+            new_session = supabase.auth.refresh_session(refresh_token)
+            if new_session and new_session.user:
+                profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone, new_session.user.email)
                 if profile and profile.get("is_banned"):
                     st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
                     st.stop()
                 st.session_state.logged_in = True
-                st.session_state.user = user.user
-                st.session_state.refresh_token = refresh_token
+                st.session_state.user = new_session.user
+                st.session_state.refresh_token = new_session.session.refresh_token
                 st.session_state.profile = profile
                 st.session_state.connection_time = time.time()
                 st.cache_data.clear()
                 st.session_state.posts = load_posts()
                 st.session_state.live_sessions = load_live_sessions()
                 load_friend_data()
-                st.session_state.notifications = load_notifications(user.user.id)
+                st.session_state.notifications = load_notifications(new_session.user.id)
                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
                 st.info("🔁 Session restored – you are still logged in.")
             else:
@@ -1528,7 +1549,6 @@ st.markdown("""
         transform: scale(1.02);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    /* ---- Big icon buttons for profile actions ---- */
     .big-icon-btn {
         display: inline-block;
         text-align: center;
@@ -1572,7 +1592,6 @@ st.markdown("""
     .big-icon-btn:hover .label {
         color: white;
     }
-    /* ---- New: Top action bar for profile ---- */
     .profile-action-bar {
         display: flex;
         justify-content: center;
@@ -1615,7 +1634,6 @@ st.markdown("""
         border-radius: 10px;
         margin: 10px 0;
     }
-    /* ---- Chat conversation list ---- */
     .conversation-item {
         background: rgba(255,255,255,0.7);
         padding: 10px 15px;
@@ -2596,7 +2614,7 @@ def respond_friend_request(request_id, accept):
     except Exception as e:
         return False, str(e)
 
-# ====== FIXED load_friend_data with retry and caching ======
+# ====== load_friend_data with retry and caching ======
 @st.cache_data(ttl=60)
 def load_friend_data_cached(user_id):
     """Cached version of friend data loading."""
@@ -2958,8 +2976,8 @@ def initiate_call(target_user_id, audio_only=False):
     st.session_state.call_target_user = target_user_id
     st.session_state.call_ringing = True
     st.session_state.call_initiated_time = time.time()
-    st.session_state.current_call_id = call_id  # store for later
-    st.rerun()
+    st.session_state.current_call_id = call_id
+    safe_rerun()
 
 def accept_call(notification):
     """Accept an incoming call: update call status, start Jitsi session."""
@@ -2974,8 +2992,8 @@ def accept_call(notification):
     if room:
         st.session_state.call_room = room
         st.session_state.in_call = True
-        st.session_state.call_audio_only = False  # could be audio-only but we'll let Jitsi handle
-        st.rerun()
+        st.session_state.call_audio_only = False
+        safe_rerun()
     else:
         st.error("Call room not found.")
 
@@ -2984,7 +3002,7 @@ def reject_call(notification):
     if call_id:
         update_call_status(call_id, "rejected", datetime.now().isoformat())
         st.success("Call rejected.")
-        st.rerun()
+        safe_rerun()
 
 def check_missed_calls():
     """Check for any call that has been ringing for more than 30s and mark as missed."""
@@ -3016,7 +3034,7 @@ def check_missed_calls():
 
 def render_incoming_call(notification):
     """Render Accept/Reject buttons for an incoming call."""
-    st.markdown(f"<div class='incoming-call-box'><b>{t('incoming_call', name=notification.get('message',''))}</b></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='incoming-call-box'><b>{notification['message']}</b></div>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         if st.button(t("accept_call"), key=f"accept_call_{notification['id']}"):
@@ -3046,7 +3064,7 @@ def render_missed_call(notification):
                         initiate_call(receiver_id, audio_only=True)
                 except:
                     pass
-        st.rerun()
+        safe_rerun()
 
 # ---- Video call functions ----
 def start_call(room_id=None, audio_only=False):
@@ -3093,7 +3111,7 @@ def check_call_status():
             st.session_state.call_audio_only = False
             end_call()
             st.warning(t("call_unavailable"))
-            st.rerun()
+            safe_rerun()
 
 # ---- Owner Space helpers ----
 def ensure_owner_state_table():
@@ -3426,7 +3444,7 @@ def verify_phone_otp(raw_phone, token, remember=False):
             st.session_state.temp_phone = ""
             if remember and session.session:
                 set_cookie("sb_refresh_token", session.session.refresh_token, 30)
-            st.rerun()
+            safe_rerun()
             return True
         else:
             st.error("Verification failed – no user returned.")
@@ -3466,7 +3484,7 @@ def logout():
     st.session_state.editing_post = None
     st.session_state.love_story_url = None
     st.session_state.show_love_story = False
-    st.rerun()
+    safe_rerun()
 
 # ====== AUDIO FUNCTION ======
 def generate_audio(text, voice):
@@ -3516,7 +3534,7 @@ def log_in_email(email, password, remember=False, show_debug=False):
             if remember and user.session:
                 set_cookie("sb_refresh_token", user.session.refresh_token, 30)
                 st.success("✅ Session saved – you’ll stay logged in for 30 days.")
-            st.rerun()
+            safe_rerun()
     except Exception as e:
         error_str = str(e)
         if show_debug:
@@ -3545,9 +3563,8 @@ def render_top_icons():
     unread_notifs = st.session_state.unread_count
     col1, col2, col3 = st.columns([1,1,1])
     with col1:
-        label = f"📞"  # Phone icon
+        label = f"📞"
         if st.button(label, key="top_call_icon", use_container_width=True):
-            # If viewing a profile, call that user; otherwise, maybe show a call prompt?
             if st.session_state.viewing_profile:
                 initiate_phone_call(st.session_state.viewing_profile)
             else:
@@ -3556,12 +3573,12 @@ def render_top_icons():
         label = f"💬 {unread_msgs}" if unread_msgs > 0 else "💬"
         if st.button(label, key="top_msg_icon", use_container_width=True):
             st.session_state.current_page = "friends_chat"
-            st.rerun()
+            safe_rerun()
     with col3:
         label = f"🔔 {unread_notifs}" if unread_notifs > 0 else "🔔"
         if st.button(label, key="top_notif_icon", use_container_width=True):
             st.session_state.current_page = "friends_chat"
-            st.rerun()
+            safe_rerun()
     st.divider()
 
 # ====== LOGIN INTERFACE ======
@@ -3737,7 +3754,7 @@ def render_discover_section():
                     with col_name:
                         if st.button(user['full_name'], key=f"discover_name_{user['id']}"):
                             st.session_state.viewing_profile = user['id']
-                            st.rerun()
+                            safe_rerun()
                         if user.get("is_banned"):
                             st.caption("🚫 Banned")
                         else:
@@ -3751,7 +3768,7 @@ def render_discover_section():
                             if success:
                                 st.success("Friend request sent!")
                                 load_friend_data()
-                                st.rerun()
+                                safe_rerun()
                             else:
                                 st.error(msg)
                     elif user["status"] == "sent":
@@ -3763,7 +3780,7 @@ def render_discover_section():
                                 success, msg = respond_friend_request(user["request_id"], True)
                                 if success:
                                     load_friend_data()
-                                    st.rerun()
+                                    safe_rerun()
                                 else:
                                     st.error(msg)
                         with col_rej:
@@ -3771,7 +3788,7 @@ def render_discover_section():
                                 success, msg = respond_friend_request(user["request_id"], False)
                                 if success:
                                     load_friend_data()
-                                    st.rerun()
+                                    safe_rerun()
                                 else:
                                     st.error(msg)
                     else:
@@ -3780,7 +3797,7 @@ def render_discover_section():
 
         if st.button("🔄 Refresh friends list"):
             load_friend_data()
-            st.rerun()
+            safe_rerun()
     except Exception as e:
         st.error(f"Could not load users: {e}")
 
@@ -3806,7 +3823,7 @@ def render_feed():
         if st.button("✖ Close and return to Feed"):
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
-            st.rerun()
+            safe_rerun()
         return
     # -------------------------------------------------
 
@@ -3819,7 +3836,7 @@ def render_feed():
         st.markdown(f"<div class='error-box'><b>❌ Error:</b>\n{st.session_state.last_error}</div>", unsafe_allow_html=True)
         if st.button(t("clear_error")):
             st.session_state.last_error = None
-            st.rerun()
+            safe_rerun()
 
     try:
         params = st.query_params
@@ -3857,7 +3874,7 @@ def render_feed():
                     st.warning("Please add a caption or media.")
                 else:
                     if create_post(st.session_state.user.id, content, media_files, is_public):
-                        st.rerun()
+                        safe_rerun()
 
     st.divider()
 
@@ -3882,7 +3899,7 @@ def render_feed():
                             st.session_state.groq_search_results = results
                             st.session_state.groq_selected_item = None
                             st.session_state.groq_search_query = search_query
-                            st.rerun()
+                            safe_rerun()
                 else:
                     st.warning("Please enter a search term.")
 
@@ -3898,7 +3915,7 @@ def render_feed():
                         if url:
                             if st.button(t("groq_open"), key=f"groq_open_{idx}"):
                                 st.session_state.groq_selected_item = url
-                                st.rerun()
+                                safe_rerun()
                         else:
                             st.button("📚 No link", disabled=True, key=f"groq_nolink_{idx}")
             if st.session_state.groq_selected_item:
@@ -3908,7 +3925,7 @@ def render_feed():
                 st.markdown(f'<a href="{st.session_state.groq_selected_item}" target="_blank">Open in new tab</a>', unsafe_allow_html=True)
                 if st.button(t("groq_close")):
                     st.session_state.groq_selected_item = None
-                    st.rerun()
+                    safe_rerun()
         elif st.session_state.groq_search_query and not st.session_state.groq_search_results:
             st.info(t("no_groq_results"))
 
@@ -3925,7 +3942,7 @@ def render_feed():
                     st.markdown(f"**{live['profiles']['full_name']}** is live: **{live['title']}**")
                     if st.button(t("join_live"), key=f"join_{live['id']}"):
                         st.session_state.viewing_live = live["id"]
-                        st.rerun()
+                        safe_rerun()
                 st.divider()
 
     # ====== DISCOVER NEW PEOPLE – placed prominently ======
@@ -3953,7 +3970,7 @@ def render_feed():
             st.cache_data.clear()
             st.session_state.posts = load_posts()
             st.session_state.feed_search_term = ""
-            st.rerun()
+            safe_rerun()
 
     all_posts = st.session_state.posts
     search_term_lower = st.session_state.feed_search_term.lower().strip()
@@ -3972,11 +3989,11 @@ def render_feed():
                 st.cache_data.clear()
                 st.session_state.posts = load_posts()
                 st.session_state.delete_confirm = None
-                st.rerun()
+                safe_rerun()
         with col2:
             if st.button("Cancel"):
                 st.session_state.delete_confirm = None
-                st.rerun()
+                safe_rerun()
         st.divider()
 
     if not filtered_posts:
@@ -3995,7 +4012,7 @@ def render_feed():
                     if post['user_id'] != st.session_state.user.id:
                         if st.button(name, key=f"view_profile_{post['id']}"):
                             st.session_state.viewing_profile = post['user_id']
-                            st.rerun()
+                            safe_rerun()
                     else:
                         st.markdown(f"**{name}**")
                     if post.get("profiles", {}).get("is_live"):
@@ -4015,19 +4032,19 @@ def render_feed():
                             st.markdown(f"<span class='live-badge'>🔴 LIVE NOW</span>", unsafe_allow_html=True)
                             if st.button("🎥 Join Live", key=f"join_live_post_{post['id']}"):
                                 st.session_state.viewing_live = live_session["id"]
-                                st.rerun()
+                                safe_rerun()
                 with col_c:
                     st.caption(post['created_at'][:16])
                 with col_d:
                     if st.session_state.user and post['user_id'] == st.session_state.user.id:
                         if st.button("✏️", key=f"edit_{post['id']}"):
                             st.session_state.editing_post = post['id']
-                            st.rerun()
+                            safe_rerun()
                 with col_e:
                     if st.session_state.user and post['user_id'] == st.session_state.user.id:
                         if st.button("🗑️", key=f"del_post_{post['id']}"):
                             st.session_state.delete_confirm = (post['id'], post['content'][:30])
-                            st.rerun()
+                            safe_rerun()
 
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
@@ -4039,11 +4056,11 @@ def render_feed():
                                 existing = post.get('media_urls', [])
                                 if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
                                     st.session_state.editing_post = None
-                                    st.rerun()
+                                    safe_rerun()
                         with col2:
                             if st.form_submit_button("❌ Cancel"):
                                 st.session_state.editing_post = None
-                                st.rerun()
+                                safe_rerun()
                     st.divider()
 
                 media_urls = post.get("media_urls", [])
@@ -4068,7 +4085,7 @@ def render_feed():
                 with col_react:
                     if st.button("👍 React", key=f"react_btn_{post['id']}"):
                         st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
-                        st.rerun()
+                        safe_rerun()
                     if st.session_state.get(f"show_reactions_{post['id']}", False):
                         st.markdown("**Choose reaction**")
                         for i in range(0, len(emojis), 3):
@@ -4078,7 +4095,7 @@ def render_feed():
                                     if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
                                         toggle_reaction(post['id'], st.session_state.user.id, emoji)
                                         st.session_state[f"show_reactions_{post['id']}"] = False
-                                        st.rerun()
+                                        safe_rerun()
                     if summary:
                         st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
                 with col_comments:
@@ -4086,7 +4103,7 @@ def render_feed():
                 with col_shares:
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
-                        st.rerun()
+                        safe_rerun()
 
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
@@ -4095,7 +4112,7 @@ def render_feed():
                     if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
-                            st.rerun()
+                            safe_rerun()
 
                 comments = load_comments(post['id'])
                 top_level = [c for c in comments if not c.get('parent_id')]
@@ -4115,16 +4132,16 @@ def render_feed():
                     with col2:
                         if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
                             like_comment(c['id'], increment=True)
-                            st.rerun()
+                            safe_rerun()
                     with col3:
                         if st.button(t("reply"), key=f"reply_{c['id']}"):
                             st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
-                            st.rerun()
+                            safe_rerun()
                     with col4:
                         if st.session_state.user and c['user_id'] == st.session_state.user.id:
                             if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
-                                st.rerun()
+                                safe_rerun()
 
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
@@ -4133,7 +4150,7 @@ def render_feed():
                                 if reply:
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
-                                    st.rerun()
+                                    safe_rerun()
 
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
@@ -4147,14 +4164,14 @@ def render_feed():
                         with colr2:
                             if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
                                 like_comment(r['id'], increment=True)
-                                st.rerun()
+                                safe_rerun()
                         with colr3:
                             pass
                         with colr4:
                             if st.session_state.user and r['user_id'] == st.session_state.user.id:
                                 if st.button("🗑️", key=f"del_comment_{r['id']}"):
                                     delete_comment(r['id'])
-                                    st.rerun()
+                                    safe_rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
@@ -4165,7 +4182,7 @@ def render_user_profile(user_id, show_back_button=True):
         st.error("Database not connected.")
         if st.button(t("back_to_feed")):
             st.session_state.viewing_profile = None
-            st.rerun()
+            safe_rerun()
         return
     render_top_icons()
     try:
@@ -4174,7 +4191,7 @@ def render_user_profile(user_id, show_back_button=True):
             st.error("User not found.")
             if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
-                st.rerun()
+                safe_rerun()
             return
         profile = profile_resp.data[0]
     except Exception as e:
@@ -4189,24 +4206,24 @@ def render_user_profile(user_id, show_back_button=True):
                         st.error("User not found.")
                         if st.button(t("back_to_feed")):
                             st.session_state.viewing_profile = None
-                            st.rerun()
+                            safe_rerun()
                         return
                 except Exception as retry_e:
                     st.error(f"Error loading profile after refresh: {retry_e}")
                     if st.button(t("back_to_feed")):
                         st.session_state.viewing_profile = None
-                        st.rerun()
+                        safe_rerun()
                     return
             else:
                 st.error("Session expired. Please log in again.")
                 logout()
-                st.rerun()
+                safe_rerun()
                 return
         else:
             st.error(f"Error loading profile: {error_str}")
             if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
-                st.rerun()
+                safe_rerun()
             return
 
     # ---- Top Action Bar: Phone, Message, Notification ----
@@ -4217,20 +4234,18 @@ def render_user_profile(user_id, show_back_button=True):
         with col_phone:
             if st.button("📞", key=f"top_call_{user_id}", help="Call this user"):
                 initiate_phone_call(user_id)
-                st.rerun()
+                safe_rerun()
             st.caption("Call")
         with col_msg:
             if st.button("💬", key=f"top_msg_{user_id}", help="Send a message"):
                 st.session_state.selected_chat = user_id
                 st.session_state.current_page = "friends_chat"
-                st.rerun()
+                safe_rerun()
             st.caption("Message")
         with col_notif:
-            # This could be a bell icon, but we already have a global notification icon.
-            # We'll just show a bell that goes to notifications page.
             if st.button("🔔", key=f"top_notif_{user_id}", help="Notifications"):
                 st.session_state.current_page = "friends_chat"
-                st.rerun()
+                safe_rerun()
             st.caption("Notifications")
         st.markdown('</div>', unsafe_allow_html=True)
         st.divider()
@@ -4253,17 +4268,16 @@ def render_user_profile(user_id, show_back_button=True):
             # ---- BIG ICON ROW: Phone, Chat, Email, WhatsApp ----
             st.markdown('<div class="big-icon-row">', unsafe_allow_html=True)
 
-            # Phone icon (audio-only call)
             col_phone, col_chat, col_email, col_wa = st.columns(4)
             with col_phone:
                 if st.button("📞\nCall", key=f"phone_call_{user_id}", use_container_width=True):
                     initiate_phone_call(user_id)
-                    st.rerun()
+                    safe_rerun()
             with col_chat:
                 if st.button("💬\nChat", key=f"chat_{user_id}_big", use_container_width=True):
                     st.session_state.selected_chat = user_id
                     st.session_state.viewing_profile = None
-                    st.rerun()
+                    safe_rerun()
             with col_email:
                 if profile.get("email"):
                     st.markdown(f'<a href="mailto:{profile["email"]}" target="_blank" style="display:block; text-align:center; background:#f0f7ff; border:2px solid #0080ff; border-radius:50%; width:70px; height:70px; line-height:70px; font-size:2.2rem; text-decoration:none; color:#0080ff; margin:0 auto; box-shadow:0 4px 8px rgba(0,0,0,0.05);"><i>📧</i><span style="display:block; font-size:0.65rem; line-height:1.2; margin-top:-10px; color:inherit; font-weight:600;">Email</span></a>', unsafe_allow_html=True)
@@ -4281,7 +4295,7 @@ def render_user_profile(user_id, show_back_button=True):
         if show_back_button:
             if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
-                st.rerun()
+                safe_rerun()
 
     with col2:
         is_friend = any(f['id'] == user_id for f in st.session_state.friends)
@@ -4330,12 +4344,12 @@ def render_user_profile(user_id, show_back_button=True):
                                 st.markdown(f"<div class='album-meta'>Visibility: {'Public' if album['visibility']=='public' else 'Private'}</div>", unsafe_allow_html=True)
                                 if st.button(t("view_album"), key=f"view_album_{album['id']}"):
                                     st.session_state.viewing_album = album['id']
-                                    st.rerun()
+                                    safe_rerun()
                                 if is_own_profile:
                                     if st.button(t("delete_album"), key=f"del_album_{album['id']}"):
                                         if delete_album(album['id']):
                                             st.success(t("album_deleted"))
-                                            st.rerun()
+                                            safe_rerun()
                                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info(t("private_profile"))
@@ -4577,7 +4591,7 @@ def render_user_profile(user_id, show_back_button=True):
                 st.info("No photos in this album.")
             if st.button("← Back to Profile"):
                 st.session_state.viewing_album = None
-                st.rerun()
+                safe_rerun()
         else:
             st.error("Album not found.")
             st.session_state.viewing_album = None
@@ -4600,7 +4614,7 @@ def render_friends_page():
             render_user_profile(st.session_state.viewing_profile, show_back_button=False)
             if st.button("← Back to Friends"):
                 st.session_state.viewing_profile = None
-                st.rerun()
+                safe_rerun()
             return
 
         st.header(t("friends_chat"))
@@ -4610,7 +4624,6 @@ def render_friends_page():
         check_missed_calls()
 
         # ---- Handle incoming call notifications ----
-        # We'll scan notifications for call_request and render accept/reject if any
         call_request_notifications = [n for n in st.session_state.notifications if n.get('type') == 'call_request' and not n.get('read')]
         for notif in call_request_notifications:
             render_incoming_call(notif)
@@ -4648,7 +4661,6 @@ def render_friends_page():
                 st.info("No notifications")
             else:
                 for n in st.session_state.notifications:
-                    # Skip call_request and missed_call as they are handled above
                     if n.get('type') in ['call_request', 'missed_call']:
                         continue
                     cols = st.columns([5,1])
@@ -4660,7 +4672,7 @@ def render_friends_page():
                                 mark_notification_read(n['id'])
                                 st.session_state.notifications = load_notifications(st.session_state.user.id)
                                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
-                                st.rerun()
+                                safe_rerun()
                     st.divider()
 
         st.subheader(t("friend_requests"))
@@ -4679,7 +4691,7 @@ def render_friends_page():
                             load_friend_data()
                             st.session_state.notifications = load_notifications(st.session_state.user.id)
                             st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
-                            st.rerun()
+                            safe_rerun()
                         else:
                             st.error(msg)
                 with cols[2]:
@@ -4687,7 +4699,7 @@ def render_friends_page():
                         success, msg = respond_friend_request(req['id'], False)
                         if success:
                             load_friend_data()
-                            st.rerun()
+                            safe_rerun()
                         else:
                             st.error(msg)
                 st.divider()
@@ -4714,7 +4726,7 @@ def render_friends_page():
                     with cols[2]:
                         if st.button(t("view_profile"), key=f"view_{user['id']}"):
                             st.session_state.viewing_profile = user['id']
-                            st.rerun()
+                            safe_rerun()
                     st.divider()
 
         st.divider()
@@ -4729,15 +4741,15 @@ def render_friends_page():
                 with cols[1]:
                     if st.button(friend['full_name'], key=f"friend_name_{friend['id']}"):
                         st.session_state.viewing_profile = friend['id']
-                        st.rerun()
+                        safe_rerun()
                 with cols[2]:
                     if st.button(t("chat"), key=f"chat_{friend['id']}"):
                         st.session_state.selected_chat = friend['id']
-                        st.rerun()
+                        safe_rerun()
                 with cols[3]:
                     if st.button(t("call"), key=f"call_{friend['id']}"):
                         initiate_phone_call(friend['id'])
-                        st.rerun()
+                        safe_rerun()
                 with cols[4]:
                     if st.button("📧", key=f"email_{friend['id']}"):
                         if friend.get('email'):
@@ -4768,7 +4780,7 @@ def render_friends_page():
                     with cols[1]:
                         if st.button(conv['full_name'], key=f"conv_{conv['other_id']}"):
                             st.session_state.selected_chat = conv['other_id']
-                            st.rerun()
+                            safe_rerun()
                         st.caption(conv['last_message'])
                         if conv['unread']:
                             st.markdown(f"<span class='unread-badge'>New</span>", unsafe_allow_html=True)
@@ -4804,7 +4816,7 @@ def render_friends_page():
                 st.markdown(f"**Chat with {other_name}**")
                 if st.button("✖ Close Chat", key="close_chat_btn"):
                     st.session_state.selected_chat = None
-                    st.rerun()
+                    safe_rerun()
 
             st.divider()
             messages = load_messages(st.session_state.user.id, other_id)
@@ -4832,7 +4844,7 @@ def render_friends_page():
                                             if st.form_submit_button(t("post")):
                                                 media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
                                                 create_post(st.session_state.user.id, caption or "", existing_media_urls=media_info, is_public=True)
-                                                st.rerun()
+                                                safe_rerun()
                             with col3:
                                 if st.button("🔗 Copy Link", key=f"copy_{msg['id']}"):
                                     st.markdown(f"""
@@ -4873,7 +4885,7 @@ def render_friends_page():
                                             if st.form_submit_button(t("post")):
                                                 media_info = [{"url": msg["media_url"], "type": msg["media_type"]}]
                                                 create_post(st.session_state.user.id, caption or "", existing_media_urls=media_info, is_public=True)
-                                                st.rerun()
+                                                safe_rerun()
                             with col3:
                                 if st.button("🔗 Copy Link", key=f"copy_{msg['id']}"):
                                     st.markdown(f"""
@@ -4896,18 +4908,16 @@ def render_friends_page():
                             st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
             with st.form("send_message", clear_on_submit=True):
-                # Emoji picker: simple buttons
+                # Emoji picker
                 st.markdown("**Emojis:** 😀 😂 ❤️ 👍 😮 😢 😡 🎉 🔥 💯")
                 col_emoji = st.columns(10)
                 emojis = ["😀","😂","❤️","👍","😮","😢","😡","🎉","🔥","💯"]
                 for i, emoji in enumerate(emojis):
                     with col_emoji[i]:
                         if st.button(emoji, key=f"emoji_{i}"):
-                            # Append emoji to message input
-                            # We'll use a session state variable to store the current message
                             current_msg = st.session_state.get("chat_input", "")
                             st.session_state.chat_input = current_msg + emoji
-                            st.rerun()
+                            safe_rerun()
                 msg_content = st.text_input(t("send_message"), placeholder="Type your message...", value=st.session_state.get("chat_input", ""))
                 uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
                 st.caption("⚠️ File size limit: 200MB. For larger videos, use external links.")
@@ -4918,7 +4928,7 @@ def render_friends_page():
                     if msg_content or uploaded_file:
                         send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
                         st.session_state.chat_input = ""
-                        st.rerun()
+                        safe_rerun()
 
             st.divider()
         else:
@@ -4939,19 +4949,18 @@ def render_friends_page():
                 data_url = f"data:{mime};base64,{b64}"
                 st.session_state.call_background_url = data_url
                 st.success("Background uploaded! Refreshing call...")
-                st.rerun()
+                safe_rerun()
             if st.session_state.get("call_background_url"):
                 st.image(st.session_state.call_background_url, width=200, caption="Current background")
                 if st.button("🗑️ Clear Background"):
                     st.session_state.call_background_url = None
-                    st.rerun()
+                    safe_rerun()
             if st.button(t("reload_call")):
                 st.session_state.call_reload += 1
-                st.rerun()
+                safe_rerun()
             domain = JITSI_DOMAIN
             room = st.session_state.call_room
             container_id = f"jitsi-container-{st.session_state.call_reload}"
-            # If audio-only, mute video by default
             start_with_video_muted = st.session_state.get('call_audio_only', False)
             config_overwrite = {"startWithAudioMuted": False,
                                 "startWithVideoMuted": start_with_video_muted,
@@ -4996,18 +5005,18 @@ def render_friends_page():
                 st.session_state.call_background_url = None
                 st.session_state.call_audio_only = False
                 end_call()
-                st.rerun()
+                safe_rerun()
         else:
             if st.button(t("start_call")):
-                start_call(audio_only=False)  # video call from here
-                st.rerun()
+                start_call(audio_only=False)
+                safe_rerun()
 
     except Exception as e:
         st.error(f"An error occurred while loading the Friends & Chat page:\n\n{e}")
         st.exception(e)
         if st.button("Go back to Feed"):
             st.session_state.current_page = "feed"
-            st.rerun()
+            safe_rerun()
 
 def render_map():
     st.header(t("satellite_map"))
@@ -5067,7 +5076,7 @@ def render_profile():
                 profile["avatar_url"] = url
                 update_profile(profile)
                 st.success("Avatar updated successfully!")
-                st.rerun()
+                safe_rerun()
             else:
                 st.error("Avatar upload failed. Please try again.")
     with col2:
@@ -5104,7 +5113,7 @@ def render_profile():
                 })
                 if update_profile(profile):
                     st.success(t("profile"))
-                    st.rerun()
+                    safe_rerun()
     st.divider()
     total_posts = get_user_post_count(st.session_state.user.id, public_only=False)
     cola, colb, colc, cold = st.columns(4)
@@ -5136,11 +5145,11 @@ def render_profile():
                     st.markdown(f"<div class='album-meta'>Visibility: {'Public' if album['visibility']=='public' else 'Private'}</div>", unsafe_allow_html=True)
                     if st.button(t("view_album"), key=f"view_album_own_{album['id']}"):
                         st.session_state.viewing_album = album['id']
-                        st.rerun()
+                        safe_rerun()
                     if st.button(t("delete_album"), key=f"del_album_own_{album['id']}"):
                         if delete_album(album['id']):
                             st.success(t("album_deleted"))
-                            st.rerun()
+                            safe_rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("---")
     with st.expander(t("create_album")):
@@ -5156,7 +5165,7 @@ def render_profile():
                     if album:
                         if upload_album_photos(album["id"], uploaded_files):
                             st.success(t("album_created") + " " + t("photos_uploaded"))
-                            st.rerun()
+                            safe_rerun()
                         else:
                             st.error("Failed to upload photos.")
                 else:
@@ -5179,7 +5188,7 @@ def render_profile():
                 st.info("No photos in this album.")
             if st.button("← Back to Profile"):
                 st.session_state.viewing_album = None
-                st.rerun()
+                safe_rerun()
         else:
             st.error("Album not found.")
             st.session_state.viewing_album = None
@@ -5204,7 +5213,7 @@ def render_profile():
                     if sess.get('is_live'):
                         if st.button(t("join_live"), key=f"join_live_{sess['id']}"):
                             st.session_state.viewing_live = sess['id']
-                            st.rerun()
+                            safe_rerun()
                 st.divider()
     st.divider()
     st.subheader(t("my_wall"))
@@ -5228,11 +5237,11 @@ def render_profile():
                 with col_d:
                     if st.button("✏️", key=f"edit_{post['id']}"):
                         st.session_state.editing_post = post['id']
-                        st.rerun()
+                        safe_rerun()
                 with col_e:
                     if st.button("🗑️", key=f"del_{post['id']}"):
                         st.session_state.delete_confirm = (post['id'], post['content'][:30])
-                        st.rerun()
+                        safe_rerun()
                 if st.session_state.editing_post == post['id']:
                     with st.form(key=f"edit_form_{post['id']}"):
                         new_content = st.text_area("Edit caption", value=post.get('content', ''), height=100)
@@ -5243,11 +5252,11 @@ def render_profile():
                                 existing = post.get('media_urls', [])
                                 if update_post(post['id'], st.session_state.user.id, new_content, new_media, existing):
                                     st.session_state.editing_post = None
-                                    st.rerun()
+                                    safe_rerun()
                         with col2:
                             if st.form_submit_button("Cancel"):
                                 st.session_state.editing_post = None
-                                st.rerun()
+                                safe_rerun()
                     st.divider()
                 media_urls = post.get("media_urls", [])
                 if media_urls:
@@ -5266,7 +5275,7 @@ def render_profile():
                 with col_react:
                     if st.button("👍 React", key=f"react_btn_{post['id']}"):
                         st.session_state[f"show_reactions_{post['id']}"] = not st.session_state.get(f"show_reactions_{post['id']}", False)
-                        st.rerun()
+                        safe_rerun()
                     if st.session_state.get(f"show_reactions_{post['id']}", False):
                         st.markdown("**Choose reaction**")
                         for i in range(0, len(emojis), 3):
@@ -5276,7 +5285,7 @@ def render_profile():
                                     if st.button(emoji, key=f"react_{post['id']}_{emoji}"):
                                         toggle_reaction(post['id'], st.session_state.user.id, emoji)
                                         st.session_state[f"show_reactions_{post['id']}"] = False
-                                        st.rerun()
+                                        safe_rerun()
                     if summary:
                         st.markdown(f"<small>{summary}</small>", unsafe_allow_html=True)
                 with col_comments:
@@ -5284,7 +5293,7 @@ def render_profile():
                 with col_shares:
                     if st.button(f"🔄 {post['shares_count']}", key=f"share_{post['id']}"):
                         share_post(post['id'], st.session_state.user.id, is_public=True)
-                        st.rerun()
+                        safe_rerun()
                 st.markdown("<div class='comment-section'>", unsafe_allow_html=True)
                 st.markdown(f"#### {t('comments')}")
                 with st.form(key=f"new_comment_{post['id']}", clear_on_submit=True):
@@ -5292,7 +5301,7 @@ def render_profile():
                     if st.form_submit_button(t("post")):
                         if msg:
                             add_comment(post['id'], st.session_state.user.id, msg)
-                            st.rerun()
+                            safe_rerun()
                 comments = load_comments(post['id'])
                 top_level = [c for c in comments if not c.get('parent_id')]
                 replies = {}
@@ -5310,16 +5319,16 @@ def render_profile():
                     with col2:
                         if st.button(f"👍 {c.get('likes',0)}", key=f"like_{c['id']}"):
                             like_comment(c['id'], increment=True)
-                            st.rerun()
+                            safe_rerun()
                     with col3:
                         if st.button(t("reply"), key=f"reply_{c['id']}"):
                             st.session_state.replying_to[c['id']] = not st.session_state.replying_to.get(c['id'], False)
-                            st.rerun()
+                            safe_rerun()
                     with col4:
                         if st.session_state.user and c['user_id'] == st.session_state.user.id:
                             if st.button("🗑️", key=f"del_comment_{c['id']}"):
                                 delete_comment(c['id'])
-                                st.rerun()
+                                safe_rerun()
                     if st.session_state.replying_to.get(c['id'], False):
                         with st.form(key=f"reply_form_{c['id']}"):
                             reply = st.text_input(t("your_reply"), label_visibility="collapsed", placeholder=t("your_reply"))
@@ -5327,7 +5336,7 @@ def render_profile():
                                 if reply:
                                     add_comment(post['id'], st.session_state.user.id, reply, parent_id=c['id'])
                                     st.session_state.replying_to[c['id']] = False
-                                    st.rerun()
+                                    safe_rerun()
                     for r in replies.get(c['id'], []):
                         st.markdown("<div class='comment-indent'>", unsafe_allow_html=True)
                         colr_avatar, colr1, colr2, colr3, colr4 = st.columns([1,4,1,1,1])
@@ -5340,14 +5349,14 @@ def render_profile():
                         with colr2:
                             if st.button(f"👍 {r.get('likes',0)}", key=f"like_{r['id']}"):
                                 like_comment(r['id'], increment=True)
-                                st.rerun()
+                                safe_rerun()
                         with colr3:
                             pass
                         with colr4:
                             if st.session_state.user and r['user_id'] == st.session_state.user.id:
                                 if st.button("🗑️", key=f"del_comment_{r['id']}"):
                                     delete_comment(r['id'])
-                                    st.rerun()
+                                    safe_rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
@@ -5361,7 +5370,7 @@ def owner_space():
             if st.form_submit_button(t("login_button")):
                 if pwd.strip() == OWNSPACE_PASSWORD.strip():
                     st.session_state.owner_space_access = True
-                    st.rerun()
+                    safe_rerun()
                 else:
                     st.error("Invalid password")
         return
@@ -5479,7 +5488,7 @@ def owner_space():
             else:
                 st.info("No users found in the database.")
             if st.button("🔄 Refresh", use_container_width=True):
-                st.rerun()
+                safe_rerun()
         except Exception as e:
             st.error(f"Error in New Users tab: {e}")
             st.exception(e)
@@ -5533,7 +5542,7 @@ def owner_space():
                                     success, msg = toggle_post_visibility(post['id'], False)
                                     if success:
                                         st.success(msg)
-                                        st.rerun()
+                                        safe_rerun()
                                     else:
                                         st.error(msg)
                             else:
@@ -5541,20 +5550,20 @@ def owner_space():
                                     success, msg = toggle_post_visibility(post['id'], True)
                                     if success:
                                         st.success(msg)
-                                        st.rerun()
+                                        safe_rerun()
                                     else:
                                         st.error(msg)
                         with cols[4]:
                             if st.button(t("delete_post"), key=f"del_{post['id']}"):
                                 if delete_post(post['id']):
                                     st.success("Post deleted.")
-                                    st.rerun()
+                                    safe_rerun()
                                 else:
                                     st.error("Delete failed.")
                         with cols[5]:
                             if st.button("⚠️ Warn", key=f"warn_{post['id']}"):
                                 st.session_state.warn_post_id = post['id']
-                                st.rerun()
+                                safe_rerun()
                         if st.session_state.warn_post_id == post['id']:
                             with st.form(key=f"warn_form_{post['id']}"):
                                 default_msg = f"Your post '{post.get('content', '')[:50]}...' contains sensitive content and has been removed. Please review our community guidelines."
@@ -5569,13 +5578,13 @@ def owner_space():
                                             if delete_post(post['id']):
                                                 st.info("Post also deleted.")
                                             st.session_state.warn_post_id = None
-                                            st.rerun()
+                                            safe_rerun()
                                         else:
                                             st.error("Failed to send message.")
                                 with col2:
                                     if st.form_submit_button("Cancel"):
                                         st.session_state.warn_post_id = None
-                                        st.rerun()
+                                        safe_rerun()
                         st.divider()
         except Exception as e:
             st.error(f"Error in Post Moderation tab: {e}")
@@ -5667,7 +5676,7 @@ def owner_space():
                                 success, msg = unban_user(user['id'])
                                 if success:
                                     st.success(msg)
-                                    st.rerun()
+                                    safe_rerun()
                                 else:
                                     st.error(msg)
                         else:
@@ -5678,7 +5687,7 @@ def owner_space():
                                         success, msg = ban_user(user['id'], reason)
                                         if success:
                                             st.success(msg)
-                                            st.rerun()
+                                            safe_rerun()
                                         else:
                                             st.error(msg)
                     with cols[4]:
@@ -5712,12 +5721,12 @@ def owner_space():
                         with cols[2]:
                             if st.button("View", key=f"owner_view_album_{album['id']}"):
                                 st.session_state.viewing_album = album['id']
-                                st.rerun()
+                                safe_rerun()
                         with cols[3]:
                             if st.button("Delete", key=f"owner_del_album_{album['id']}"):
                                 if delete_album(album['id']):
                                     st.success("Album deleted.")
-                                    st.rerun()
+                                    safe_rerun()
                         st.divider()
         except Exception as e:
             st.error(f"Error in Albums tab: {e}")
@@ -5999,7 +6008,7 @@ def owner_space():
     st.markdown("Email: `deslandes78@gmail.com`  \nWhatsApp: `+50947385663`")
     if st.button(t("logout_owner")):
         st.session_state.owner_space_access = False
-        st.rerun()
+        safe_rerun()
 
 def render_video_call():
     st.header(t("video_call"))
@@ -6061,7 +6070,7 @@ def render_live_page(session_id):
         st.error("This live session has ended or does not exist.")
         if st.button(t("back_to_feed")):
             st.session_state.viewing_live = None
-            st.rerun()
+            safe_rerun()
         return
     is_broadcaster = st.session_state.user and session["user_id"] == st.session_state.user.id
     st.header(f"🔴 LIVE: {session['title']}")
@@ -6088,7 +6097,7 @@ def render_live_page(session_id):
                         st.session_state[bg_key] = data_url
                         supabase.table("live_participants").update({"background_url": data_url}).eq("session_id", session_id).eq("user_id", st.session_state.user.id).execute()
                         st.success(t("background_set"))
-                        st.rerun()
+                        safe_rerun()
     gifts = load_gifts_for_session(session_id)
     total_gifts_htg = sum(g.get('converted_amount_htg', 0) for g in gifts)
     col1, col2 = st.columns([2,1])
@@ -6110,7 +6119,7 @@ def render_live_page(session_id):
                             if new_url:
                                 if update_live_stream_url(session_id, new_url):
                                     st.success("Stream URL updated! Refreshing...")
-                                    st.rerun()
+                                    safe_rerun()
                             else:
                                 st.warning("Please enter a URL")
             if stream_url:
@@ -6193,7 +6202,7 @@ def render_live_page(session_id):
                             try:
                                 supabase.table("live_participants").insert({"session_id": session_id, "user_id": st.session_state.user.id, "status": "pending"}).execute()
                                 st.success("Request sent! Waiting for broadcaster approval.")
-                                st.rerun()
+                                safe_rerun()
                             except Exception as e:
                                 st.error(f"Failed to send request: {e}")
                 else:
@@ -6219,11 +6228,11 @@ def render_live_page(session_id):
                                     supabase.table("notifications").insert({"user_id": req["user_id"], "type": "live_join_accepted", "message": f"You have been accepted to join the live stream: {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
-                                st.rerun()
+                                safe_rerun()
                         with cols[2]:
                             if st.button("❌ Reject", key=f"reject_{req['id']}"):
                                 supabase.table("live_participants").delete().eq("id", req["id"]).execute()
-                                st.rerun()
+                                safe_rerun()
                 else:
                     st.info("No pending requests")
                 try:
@@ -6245,7 +6254,7 @@ def render_live_page(session_id):
                                     supabase.table("notifications").insert({"user_id": part["user_id"], "type": "live_mute", "message": f"The broadcaster has muted your microphone in {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
-                                st.rerun()
+                                safe_rerun()
                         with cols[2]:
                             if st.button("🔊 Unmute", key=f"unmute_{part['id']}"):
                                 supabase.table("live_participants").update({"status": "accepted"}).eq("id", part["id"]).execute()
@@ -6253,11 +6262,11 @@ def render_live_page(session_id):
                                     supabase.table("notifications").insert({"user_id": part["user_id"], "type": "live_unmute", "message": f"The broadcaster has unmuted your microphone in {session['title']}", "read": False}).execute()
                                 except Exception:
                                     pass
-                                st.rerun()
+                                safe_rerun()
                         with cols[3]:
                             if st.button("❌ Remove", key=f"remove_{part['id']}"):
                                 supabase.table("live_participants").delete().eq("id", part["id"]).execute()
-                                st.rerun()
+                                safe_rerun()
                 else:
                     st.info("No active participants")
         try:
@@ -6289,7 +6298,7 @@ def render_live_page(session_id):
                             if success:
                                 st.success(msg)
                                 st.session_state.live_gifts = load_gifts_for_session(session_id)
-                                st.rerun()
+                                safe_rerun()
                             else:
                                 st.error(msg)
             st.markdown("### 😊 Reactions")
@@ -6299,7 +6308,7 @@ def render_live_page(session_id):
                 with cols[i]:
                     if st.button(emoji, key=f"reaction_{i}"):
                         add_comment(session_id, st.session_state.user.id, f"🎉 {emoji}")
-                        st.rerun()
+                        safe_rerun()
         if is_broadcaster:
             st.metric(t("total_gifts"), f"{total_gifts_htg:.0f} HTG")
             moncash = session["profiles"].get("moncash_phone")
@@ -6324,7 +6333,7 @@ def render_live_page(session_id):
             if st.form_submit_button(t("send")):
                 if msg:
                     add_comment(session_id, st.session_state.user.id, msg)
-                    st.rerun()
+                    safe_rerun()
         comments = load_comments(session_id)
         all_events = []
         for c in comments:
@@ -6387,7 +6396,7 @@ def main_app():
         selected_lang = st.selectbox(t("voice_lang"), options=list(lang_options.keys()), format_func=lambda x: lang_options[x], index=list(lang_options.keys()).index(st.session_state.language))
         if selected_lang != st.session_state.language:
             st.session_state.language = selected_lang
-            st.rerun()
+            safe_rerun()
         st.divider()
 
         # ====== EXTERNAL APP LINKS ======
@@ -6498,7 +6507,7 @@ def main_app():
             if st.button(f"💕 {label}", key=f"love_{url}", use_container_width=True):
                 st.session_state.love_story_url = url
                 st.session_state.show_love_story = True
-                st.rerun()
+                safe_rerun()
         st.divider()
 
         # ====== GLOBAL SHIELD STATUS ======
@@ -6518,7 +6527,7 @@ def main_app():
                 for ls in st.session_state.live_sessions:
                     if ls["user_id"] == st.session_state.user.id:
                         end_live_session(ls["id"])
-                        st.rerun()
+                        safe_rerun()
                         break
         else:
             with st.expander(t("go_live")):
@@ -6548,7 +6557,7 @@ def main_app():
                                     if platform != 'inapp':
                                         st.info(f"**Stream Key:** `{st.session_state.stream_key}`")
                                         st.markdown(f"**Start streaming on {platform}:** [Click here](https://www.{platform.lower()}.com/live)")
-                                    st.rerun()
+                                    safe_rerun()
                             else:
                                 st.warning("Please enter a title")
         st.divider()
@@ -6572,7 +6581,6 @@ def main_app():
             logout()
         st.divider()
         if st.session_state.language == 'ht':
-            # For Haitian Creole, we use a French voice (closest available)
             voice_lang = 'fr'
         else:
             voice_lang = st.session_state.language
@@ -6600,7 +6608,7 @@ def main_app():
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
             st.session_state.current_page = selected_key
-            st.rerun()
+            safe_rerun()
 
         st.divider()
         st.markdown("### 🕊️ Owner Space")
@@ -6613,7 +6621,7 @@ def main_app():
                     if pwd_sidebar.strip() == OWNSPACE_PASSWORD.strip():
                         st.session_state.owner_space_access = True
                         st.session_state.current_page = "owner_space"
-                        st.rerun()
+                        safe_rerun()
                     else:
                         st.error("Invalid password")
 
