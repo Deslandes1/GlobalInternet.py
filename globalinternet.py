@@ -4603,7 +4603,7 @@ def render_profile():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== OWNER SPACE (UPDATED WITH BANK TRANSFER INFO TAB) ======
+# ====== OWNER SPACE (UPDATED WITH TWO-LANGUAGE BANK TRANSFER INFO) ======
 def owner_space():
     st.header(t("owner_space"))
     if not st.session_state.owner_space_access:
@@ -4627,7 +4627,7 @@ def owner_space():
         st.warning(f"⚠️ Could not load new users: {e}")
         new_users = []
 
-    # ---- UPDATED TABS LIST (includes "💳 Bank Transfer Info") ----
+    # ---- TABS LIST (includes "💳 Bank Transfer Info") ----
     tabs = st.tabs([
         t("dashboard"), t("new_users"), t("post_moderation"),
         t("client_payments"), t("gift_management"), t("user_management"),
@@ -5005,7 +5005,7 @@ def owner_space():
             st.error(f"Error in Live Monitoring tab: {e}")
             st.exception(e)
 
-    # ---- TAB 9: 💳 Bank Transfer Info (SECRETS‑BASED) ----
+    # ---- TAB 9: 💳 Bank Transfer Info (ENGLISH & FRENCH, with CIN) ----
     with tabs[8]:
         st.subheader("💳 UNIBANK Wire Transfer Instructions")
         st.markdown("""
@@ -5017,8 +5017,8 @@ def owner_space():
         usd_account = st.secrets.get("UNIBANK_USD_ACCOUNT", "⚠️ NOT SET in secrets")
         htg_account = st.secrets.get("UNIBANK_HTG_ACCOUNT", "⚠️ NOT SET in secrets")
 
-        # ----- Build the full instruction text for download -----
-        instructions = f"""
+        # ----- ENGLISH VERSION -----
+        instructions_en = f"""
         ============================================================
         UNIBANK WIRE TRANSFER INSTRUCTIONS
         (for receiving funds from abroad)
@@ -5027,6 +5027,8 @@ def owner_space():
         BANK: UNIBANK S.A.
         ADDRESS: IMMEUBLE RIVOLI, 157, RUE FLAUBERT, PETION-VILLE, HAITI
         SWIFT/BIC: UBNKHTPPXXX
+
+        CIN CARD NUMBER : 1248795849
 
         ------------------------------------------------------------
         FOR USD TRANSFERS (from USA)
@@ -5092,6 +5094,94 @@ def owner_space():
         Email: deslandes78@gmail.com
         WhatsApp: +50947385663
 
+        CIN CARD NUMBER : 1248795849
+
+        ============================================================
+        """
+
+        # ----- FRENCH VERSION -----
+        instructions_fr = f"""
+        ============================================================
+        INSTRUCTIONS DE VIREMENT BANCAIRE UNIBANK
+        (pour recevoir des fonds de l'étranger)
+        ============================================================
+
+        BANQUE : UNIBANK S.A.
+        ADRESSE : IMMEUBLE RIVOLI, 157, RUE FLAUBERT, PETION-VILLE, HAÏTI
+        SWIFT/BIC : UBNKHTPPXXX
+
+        CIN CARD NUMBER : 1248795849
+
+        ------------------------------------------------------------
+        POUR LES TRANSFERTS EN USD (depuis les États-Unis)
+        ------------------------------------------------------------
+        Banque bénéficiaire : UNIBANK S.A., Haïti
+        SWIFT : UBNKHTPPXXX
+        Numéro de compte du bénéficiaire : {usd_account}
+        Nom du bénéficiaire : [Votre nom commercial / personnel complet tel qu'enregistré auprès d'UNIBANK]
+
+        Choisissez UNE des banques intermédiaires suivantes :
+
+        1) Bank of America, Miami, FL
+           SWIFT : BOFAUS3M
+           ABA : 026009593
+           Compte : 1901892336
+
+        2) Bank of New York, New York, NY
+           SWIFT : IRVTUS3N
+           ABA : 021000018
+           Compte : 8900570881
+
+        3) Citibank N.A., New York, NY
+           SWIFT : CITIUS33
+           ABA : 021000089
+           Compte : 36338572
+
+        ------------------------------------------------------------
+        POUR LES TRANSFERTS EN USD (depuis l'Europe)
+        ------------------------------------------------------------
+        Banque intermédiaire : Bank of America, Londres, Angleterre
+        SWIFT : BOFAGB22
+        IBAN (pour virement SEPA en EUR) : GB33BOFA16505023805023
+        Compte : 600823805023
+
+        Banque bénéficiaire : UNIBANK S.A., Haïti
+        SWIFT : UBNKHTPPXXX
+        Numéro de compte du bénéficiaire : {usd_account}
+        Nom du bénéficiaire : [Votre nom commercial / personnel complet]
+
+        ------------------------------------------------------------
+        POUR LES TRANSFERTS EN HTG (depuis l'étranger)
+        ------------------------------------------------------------
+        Les transferts en HTG depuis l'extérieur d'Haïti utilisent généralement le même
+        routage que les USD. Les fonds sont envoyés en USD via l'une des banques
+        intermédiaires ci-dessus, et UNIBANK les convertit automatiquement en HTG
+        au taux de change en vigueur à l'arrivée.
+
+        Numéro de compte du bénéficiaire (HTG) : {htg_account}
+        Nom du bénéficiaire : [Votre nom commercial / personnel complet]
+
+        Pour les transferts HTG nationaux à l'intérieur d'Haïti, utilisez le système SPIH
+        (pas de SWIFT).
+
+        ------------------------------------------------------------
+        REMARQUES IMPORTANTES
+        ------------------------------------------------------------
+        - Vérifiez toujours le nom du bénéficiaire et le numéro de compte.
+        - Les virements arrivent généralement sous 24 à 48 heures, mais peuvent
+          prendre 3 à 5 jours ouvrables.
+        - Contactez directement UNIBANK pour obtenir la liste la plus récente
+          des banques intermédiaires.
+        - Pour les montants importants, envisagez d'effectuer un test de transfert
+          au préalable.
+
+        Pour toute assistance, contactez-nous :
+        Téléphone : (509) 4738-5663
+        E-mail : deslandes78@gmail.com
+        WhatsApp : +50947385663
+
+        CIN CARD NUMBER : 1248795849
+
         ============================================================
         """
 
@@ -5110,13 +5200,25 @@ def owner_space():
 
         st.divider()
         st.markdown("#### 📥 Download Full Instructions")
-        st.download_button(
-            label="📄 Download Wire Transfer Instructions (TXT)",
-            data=instructions,
-            file_name=f"UNIBANK_wire_instructions_{datetime.now().strftime('%Y%m%d')}.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+
+        # ----- Two download buttons: English and French -----
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.download_button(
+                label="🇬🇧 Download Instructions (English)",
+                data=instructions_en,
+                file_name=f"UNIBANK_wire_instructions_EN_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        with col_btn2:
+            st.download_button(
+                label="🇫🇷 Télécharger les instructions (Français)",
+                data=instructions_fr,
+                file_name=f"UNIBANK_wire_instructions_FR_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
         st.info("✅ The account numbers are read from `st.secrets` – they are **not** stored in the source code.")
         if "⚠️ NOT SET" in usd_account or "⚠️ NOT SET" in htg_account:
