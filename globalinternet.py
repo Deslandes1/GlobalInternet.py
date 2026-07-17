@@ -4603,7 +4603,7 @@ def render_profile():
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.divider()
 
-# ====== OWNER SPACE (UPDATED WITH TWO-LANGUAGE BANK TRANSFER INFO) ======
+# ====== OWNER SPACE (UPDATED WITH PRISME TRANSFER) ======
 def owner_space():
     st.header(t("owner_space"))
     if not st.session_state.owner_space_access:
@@ -5005,7 +5005,7 @@ def owner_space():
             st.error(f"Error in Live Monitoring tab: {e}")
             st.exception(e)
 
-    # ---- TAB 9: 💳 Bank Transfer Info (ENGLISH & FRENCH, with CIN) ----
+    # ---- TAB 9: 💳 Bank Transfer Info (with Prisme Transfer) ----
     with tabs[8]:
         st.subheader("💳 UNIBANK Wire Transfer Instructions")
         st.markdown("""
@@ -5017,7 +5017,7 @@ def owner_space():
         usd_account = st.secrets.get("UNIBANK_USD_ACCOUNT", "⚠️ NOT SET in secrets")
         htg_account = st.secrets.get("UNIBANK_HTG_ACCOUNT", "⚠️ NOT SET in secrets")
 
-        # ----- ENGLISH VERSION -----
+        # ----- ENGLISH VERSION (with Prisme Transfer) -----
         instructions_en = f"""
         ============================================================
         UNIBANK WIRE TRANSFER INSTRUCTIONS
@@ -5082,6 +5082,16 @@ def owner_space():
         For domestic HTG transfers inside Haiti, use the SPIH system (no SWIFT).
 
         ------------------------------------------------------------
+        PRISME TRANSFER – WORLDWIDE QUICK & INSTANT TRANSACTIONS
+        ------------------------------------------------------------
+        For fast and easy payments, you can also use Prisme Transfer via:
+        - Digicel MonCash: (509) 4738-5663
+        - Natcom Natcash: [Your NATCASH Number]
+
+        This method is ideal for quick, small to medium amounts and works globally.
+        Contact us to confirm the recipient's mobile money details before sending.
+
+        ------------------------------------------------------------
         IMPORTANT NOTES
         ------------------------------------------------------------
         - Always double‑check the beneficiary name and account number.
@@ -5099,7 +5109,7 @@ def owner_space():
         ============================================================
         """
 
-        # ----- FRENCH VERSION -----
+        # ----- FRENCH VERSION (with Prisme Transfer) -----
         instructions_fr = f"""
         ============================================================
         INSTRUCTIONS DE VIREMENT BANCAIRE UNIBANK
@@ -5163,6 +5173,16 @@ def owner_space():
 
         Pour les transferts HTG nationaux à l'intérieur d'Haïti, utilisez le système SPIH
         (pas de SWIFT).
+
+        ------------------------------------------------------------
+        PRISME TRANSFER – TRANSACTIONS RAPIDES ET INSTANTANÉES DANS LE MONDE
+        ------------------------------------------------------------
+        Pour des paiements rapides et faciles, vous pouvez également utiliser Prisme Transfer via :
+        - Digicel MonCash : (509) 4738-5663
+        - Natcom Natcash : [Votre numéro NATCASH]
+
+        Cette méthode est idéale pour des montants petits à moyens, et fonctionne à l'échelle mondiale.
+        Contactez-nous pour confirmer les coordonnées du bénéficiaire avant d'envoyer.
 
         ------------------------------------------------------------
         REMARQUES IMPORTANTES
