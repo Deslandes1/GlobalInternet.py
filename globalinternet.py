@@ -1,19 +1,31 @@
-# ====== FULL app.py (Mobile + Session Persistence Fixed) ======
+# ====== FULL app.py - Lakay se Lakay (Mobile Fixed v92.2.2) ======
 import streamlit as st
 import time
 from datetime import datetime
 import requests
-from supabase import create_client
+from supabase import create_client, Client
 import hashlib
 import random
 import string
 import json
 import base64
+import os
+import tempfile
+import asyncio
+import edge_tts
+from PIL import Image
+import io
+import re
 
-# ====== PAGE CONFIG ======
-st.set_page_config(page_title="Lakay se Lakay", page_icon="🏠", layout="wide", initial_sidebar_state="collapsed")
+# ====== MOBILE OPTIMIZED CONFIG ======
+st.set_page_config(
+    page_title="Lakay se Lakay",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# ====== KEEP ALIVE ======
+# ====== KEEP-ALIVE ======
 if st.query_params.get("ping") == "1":
     st.markdown("OK")
     st.stop()
@@ -34,7 +46,7 @@ def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
     if not url or not key:
-        st.error("Supabase not configured")
+        st.error("Supabase credentials missing")
         return None
     return create_client(url, key)
 
@@ -50,7 +62,7 @@ for key in ["logged_in", "user", "profile", "refresh_token", "_session_restored"
 if "current_page" not in st.session_state:
     st.session_state.current_page = "feed"
 
-# ====== STORAGE & COOKIE ======
+# ====== STRONG COOKIE + KEEP ALIVE ======
 def inject_storage_reader():
     js = """
     <script>
@@ -89,7 +101,7 @@ def set_cookie(name, value, days=30):
     st.components.v1.html(js, height=0)
 
 # Restore session
-if not st.session_state._session_restored:
+if not st.session_state.get("_session_restored", False):
     st.session_state._session_restored = True
     inject_storage_reader()
     token = st.query_params.get("sb_refresh")
@@ -105,7 +117,7 @@ if not st.session_state._session_restored:
             pass
 
 # Token refresh
-if st.session_state.logged_in and st.session_state.get("refresh_token") and supabase:
+if st.session_state.get("logged_in") and st.session_state.get("refresh_token") and supabase:
     if time.time() - st.session_state.get("_last_token_refresh", 0) > REFRESH_INTERVAL:
         try:
             new = supabase.auth.refresh_session(st.session_state.refresh_token)
@@ -116,12 +128,10 @@ if st.session_state.logged_in and st.session_state.get("refresh_token") and supa
         except:
             pass
 
-# ====== YOUR ORIGINAL CODE STARTS HERE ======
-# Paste ALL your original code (LANG dictionary, t() function, all helper functions, 
-# render_feed, render_friends_page, render_profile, owner_space, login_interface, etc.) 
-# right below this comment.
+# ====== PASTE YOUR ORIGINAL FULL CODE BELOW THIS LINE ======
+# (LANG dictionary, t() function, all helpers, render functions, login_interface, main_app, etc.)
 
-# [YOUR FULL ORIGINAL CODE GOES HERE]
+# [YOUR ORIGINAL CODE GOES HERE - EVERYTHING FROM LANG TO THE END]
 
 # ====== ENTRY POINT ======
 if __name__ == "__main__":
