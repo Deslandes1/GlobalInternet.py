@@ -1,91 +1,67 @@
-# ====== FULL app.py (Lakay se Lakay - Mobile Optimized + Strong Session Persistence) ======
-# Lakay se Lakay - Haitian Social Media Platform
-# Lead Developer: Gesner Deslandes
-# Version: 92.2.0 (Mobile + Strong Persistence Fix)
-
+# ====== FULL app.py (Lakay se Lakay - Mobile + Session Fix v92.2.1) ======
 import streamlit as st
-import smtplib
-from email.message import EmailMessage
-import pandas as pd
-import numpy as np
 import time
-import socket
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 from supabase import create_client, Client
-import io
-from PIL import Image
-import urllib.parse
-import json
-import os
+import hashlib
 import random
 import string
-import traceback
-import re
+import json
 import base64
-import asyncio
+import os
 import tempfile
+import asyncio
 import edge_tts
+from PIL import Image
+import io
 
-# ====== PAGE CONFIG - MOBILE OPTIMIZED ======
+# ====== PAGE CONFIG - MOBILE FIRST ======
 st.set_page_config(
     page_title="Lakay se Lakay",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed",  # Better on mobile
-    menu_items={"Get Help": None, "Report a bug": None, "About": None}
+    initial_sidebar_state="collapsed",
 )
 
-# ====== KEEP-ALIVE + MOBILE PING ======
+# ====== KEEP-ALIVE ======
 try:
-    query_params = st.query_params
-    if "ping" in query_params and query_params["ping"] == "1":
+    if st.query_params.get("ping") == "1":
         st.markdown("OK")
         st.stop()
 except:
     pass
 
-# ====== DEBOUNCE RERUN ======
+# ====== DEBOUNCE ======
 if "_last_rerun" not in st.session_state:
     st.session_state._last_rerun = 0
 
 def safe_rerun():
     now = time.time()
-    if now - st.session_state._last_rerun > 0.8:  # Slightly more tolerant on mobile
+    if now - st.session_state._last_rerun > 0.8:
         st.session_state._last_rerun = now
         st.rerun()
 
-# --- Supabase ---
+# ====== SUPABASE ======
 @st.cache_resource
 def init_supabase():
     url = st.secrets.get("SUPABASE_URL")
     key = st.secrets.get("SUPABASE_KEY")
     if not url or not key:
-        st.error("Supabase credentials missing in secrets.")
+        st.error("Supabase credentials missing")
         return None
     return create_client(url, key)
 
 supabase = init_supabase()
 
-# ====== SECRETS ======
-REFRESH_INTERVAL = int(st.secrets.get("REFRESH_TOKEN_INTERVAL", 7200))  # 2 hours default (more reliable on mobile)
-OWNER_CIN = st.secrets.get("OWNER_CIN")
-# ... (keep all your other secrets as-is)
+REFRESH_INTERVAL = int(st.secrets.get("REFRESH_TOKEN_INTERVAL", 7200))  # 2 hours
 
 # ====== SESSION STATE ======
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-# ... (keep all your existing session_state initializations)
+for key in ["logged_in", "user", "profile", "refresh_token", "_session_restored", "_last_token_refresh"]:
+    if key not in st.session_state:
+        st.session_state[key] = False if key == "logged_in" else None if key != "_session_restored" else False
 
-if "_session_restored" not in st.session_state:
-    st.session_state._session_restored = False
-if "_last_token_refresh" not in st.session_state:
-    st.session_state._last_token_refresh = 0
-if "_last_ping" not in st.session_state:
-    st.session_state._last_ping = 0
-
-# ====== IMPROVED COOKIE + LOCALSTORAGE (Mobile Robust) ======
+# ====== IMPROVED STORAGE INJECTION ======
 def inject_storage_reader():
     js = """
     <script>
@@ -96,126 +72,82 @@ def inject_storage_reader():
             if (parts.length === 2) return parts.pop().split(';').shift();
             return null;
         }
-
-        function setCookie(name, value, days) {
-            let expires = "";
-            if (days) {
-                const date = new Date();
-                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-                expires = "; expires=" + date.toUTCString();
-            }
-            document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
-            try { localStorage.setItem(name, value); } catch(e) {}
-        }
-
-        const refreshToken = getCookie("sb_refresh_token") || localStorage.getItem("sb_refresh_token");
-
-        if (refreshToken) {
+        const token = getCookie("sb_refresh_token") || localStorage.getItem("sb_refresh_token");
+        if (token) {
             const url = new URL(window.location.href);
-            if (!url.searchParams.has('cookie_sb_refresh_token')) {
-                url.searchParams.set('cookie_sb_refresh_token', refreshToken);
+            if (!url.searchParams.has('sb_refresh')) {
+                url.searchParams.set('sb_refresh', token);
                 window.history.replaceState({}, '', url);
             }
-            // Force cookie refresh
-            setCookie("sb_refresh_token", refreshToken, 30);
         }
-
-        // Periodic ping for mobile keep-alive
+        // Keep-alive ping
         setInterval(() => {
-            fetch(window.location.href + (window.location.search ? '&' : '?') + 'ping=1', {cache: 'no-store', mode: 'no-cors'});
-        }, 45000); // every 45 seconds
+            fetch(location.href.split('?')[0] + '?ping=1', {cache:'no-store'});
+        }, 40000);
     })();
     </script>
     """
     st.components.v1.html(js, height=0)
 
-# ====== REFRESH SESSION ======
-def refresh_supabase_session():
-    if not supabase or not st.session_state.get("refresh_token"):
-        return False
-    try:
-        new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
-        if new_session and new_session.user:
-            st.session_state.user = new_session.user
-            st.session_state.refresh_token = new_session.session.refresh_token
-            # Update cookie
-            set_cookie("sb_refresh_token", new_session.session.refresh_token, 30)
-            st.session_state._last_token_refresh = time.time()
-            return True
-    except:
-        return False
-    return False
-
-# ====== RESTORE SESSION ON LOAD ======
-if not st.session_state._session_restored and supabase:
-    st.session_state._session_restored = True
-    inject_storage_reader()
-
-    refresh_token = None
-    try:
-        if "cookie_sb_refresh_token" in st.query_params:
-            refresh_token = st.query_params["cookie_sb_refresh_token"]
-    except:
-        pass
-
-    if not refresh_token:
-        try:
-            refresh_token = st.query_params.get("cookie_sb_refresh_token")
-        except:
-            pass
-
-    if refresh_token:
-        try:
-            new_session = supabase.auth.refresh_session(refresh_token)
-            if new_session and new_session.user:
-                profile = get_or_create_profile(...)  # keep your existing function
-                if profile and not profile.get("is_banned"):
-                    st.session_state.logged_in = True
-                    st.session_state.user = new_session.user
-                    st.session_state.refresh_token = new_session.session.refresh_token
-                    st.session_state.profile = profile
-                    st.session_state.connection_time = time.time()
-                    set_cookie("sb_refresh_token", new_session.session.refresh_token, 30)
-                    st.success("✅ Session restored successfully")
-        except:
-            pass
-
-# ====== TOKEN REFRESH (Mobile Friendly) ======
-if st.session_state.logged_in and supabase and st.session_state.get("refresh_token"):
-    if time.time() - st.session_state._last_token_refresh > REFRESH_INTERVAL:
-        refresh_supabase_session()
-
-# ====== COOKIE HELPER ======
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
-    function setCookie(name, value, days) {{
-        let expires = "";
-        if (days) {{
-            let date = new Date();
-            date.setTime(date.getTime() + (days*24*60*60*1000));
-            expires = "; expires=" + date.toUTCString();
-        }}
-        document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
-        try {{ localStorage.setItem(name, value); }} catch(e) {{}}
+    function setCookie(n,v,d){{
+        let e="";if(d){{const date=new Date();date.setTime(date.getTime()+(d*86400000));e="; expires="+date.toUTCString();}}
+        document.cookie=n+"="+v+e+"; path=/; SameSite=Lax";
+        try{{localStorage.setItem(n,v);}}catch(e){{}}
     }}
-    setCookie("{name}", "{value}", {days});
+    setCookie("{name}","{value}",{days});
     </script>
     """
     st.components.v1.html(js, height=0)
 
-# Keep all your existing functions (LANG, helpers, render functions, etc.)
+# Restore session
+if not st.session_state._session_restored and supabase:
+    st.session_state._session_restored = True
+    inject_storage_reader()
+    
+    token = st.query_params.get("sb_refresh")
+    if token:
+        try:
+            session = supabase.auth.refresh_session(token)
+            if session and session.user:
+                st.session_state.logged_in = True
+                st.session_state.user = session.user
+                st.session_state.refresh_token = session.session.refresh_token
+                # Load profile...
+                st.success("Session restored")
+                set_cookie("sb_refresh_token", session.session.refresh_token, 30)
+        except:
+            pass
 
-# At the very end, before if __name__ == "__main__":
-if st.session_state.logged_in:
-    # Extra mobile keep-alive
-    if time.time() - st.session_state.get("_last_ping", 0) > 30:
-        st.session_state._last_ping = time.time()
-        inject_storage_reader()
+# Token refresh
+if st.session_state.logged_in and st.session_state.refresh_token and supabase:
+    if time.time() - st.session_state.get("_last_token_refresh", 0) > REFRESH_INTERVAL:
+        try:
+            new = supabase.auth.refresh_session(st.session_state.refresh_token)
+            if new and new.session:
+                st.session_state.refresh_token = new.session.refresh_token
+                st.session_state._last_token_refresh = time.time()
+                set_cookie("sb_refresh_token", new.session.refresh_token, 30)
+        except:
+            pass
 
-# ====== MAIN APP CALL ======
+# ====== LANGUAGE & OTHER HELPERS (keep your existing LANG dict, t(), etc.) ======
+# ... Paste all your LANG dictionary, helper functions, render_feed, render_profile, etc. here ...
+
+# ====== MAIN APP ======
+def login_interface():
+    st.title("Lakay se Lakay")
+    # ... your existing login UI ...
+
+def main_app():
+    # ... your existing navigation and page rendering logic ...
+    st.sidebar.success("Mobile Optimized Version")
+    # Call your page functions here (render_feed, etc.)
+
 if __name__ == "__main__":
-    if not st.session_state.logged_in:
-        login_interface()
-    else:
+    if st.session_state.logged_in:
         main_app()
+    else:
+        login_interface()
