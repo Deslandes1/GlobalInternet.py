@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - Mobile Stable) ======
+# ====== FULL app.py (Lakay se Lakay - Session Persistence Fix) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 91.0.0 (Mobile-optimized, debounced reruns, stable session)
+# Version: 92.0.0 (Robust session refresh, localStorage fallback)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -112,6 +112,9 @@ EMAIL_FROM = st.secrets.get("EMAIL_FROM")
 EMAIL_TO = st.secrets.get("EMAIL_TO")
 
 JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
+
+# ====== REFRESH TOKEN INTERVAL (from secrets, default 10 min) ======
+REFRESH_INTERVAL = int(st.secrets.get("REFRESH_TOKEN_INTERVAL", 600))  # seconds
 
 # ====== GLOBAL SHIELD API KEY – NO FALLBACK! ======
 GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY")
@@ -1165,7 +1168,7 @@ LANG = {
 def t(key):
     return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
 
-# ====== COOKIE HELPERS ======
+# ====== COOKIE & LOCALSTORAGE HELPERS ======
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -1177,21 +1180,25 @@ def set_cookie(name, value, days=30):
             expires = "; expires=" + date.toUTCString();
         }}
         document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+        // Also store in localStorage as fallback
+        try {{
+            localStorage.setItem(name, value);
+        }} catch(e) {{}}
     }}
     setCookie("{name}", "{value}", {days});
     </script>
     """
     st.components.v1.html(js, height=0)
 
-def get_cookie(name):
+def get_cookie_or_storage(name):
     param_name = f"cookie_{name}"
     if param_name in st.query_params:
         val = st.query_params[param_name]
-        # Do not delete the param immediately to avoid resetting; we'll keep it.
         return val
+    # Try to read from localStorage via JS (on first load we set a param)
     return None
 
-def inject_cookie_reader():
+def inject_storage_reader():
     js = """
     <script>
     (function() {
@@ -1205,13 +1212,23 @@ def inject_cookie_reader():
             }
             return null;
         }
-        var refreshToken = getCookie("sb_refresh_token");
+        function getStorage(name) {
+            try {
+                return localStorage.getItem(name);
+            } catch(e) { return null; }
+        }
+        var refreshToken = getCookie("sb_refresh_token") || getStorage("sb_refresh_token");
         if (refreshToken) {
             var url = new URL(window.location.href);
-            // Only set param if not already present to avoid infinite loop
             if (!url.searchParams.has('cookie_sb_refresh_token')) {
                 url.searchParams.set('cookie_sb_refresh_token', refreshToken);
                 window.history.replaceState({}, '', url);
+            }
+            // Also write to cookie if missing
+            if (!getCookie("sb_refresh_token")) {
+                var date = new Date();
+                date.setTime(date.getTime() + (30*24*60*60*1000));
+                document.cookie = "sb_refresh_token=" + refreshToken + "; expires=" + date.toUTCString() + "; path=/";
             }
         }
     })();
@@ -1237,6 +1254,8 @@ def refresh_supabase_session():
                 safe_rerun()
                 return False
             st.session_state.profile = profile
+            # Update cookie and localStorage
+            set_cookie("sb_refresh_token", new_session.session.refresh_token, 30)
             return True
         else:
             return False
@@ -1247,14 +1266,10 @@ def refresh_supabase_session():
 # --- Restore session (runs only once) ---
 if not st.session_state._session_restored and supabase:
     st.session_state._session_restored = True
-    inject_cookie_reader()
-    refresh_token = get_cookie("sb_refresh_token")
+    inject_storage_reader()
+    refresh_token = get_cookie_or_storage("sb_refresh_token")
     if refresh_token:
         try:
-            # get_user expects a token, not refresh_token? Actually it expects a JWT token.
-            # We'll use the refresh token to get a new session using the client's auth API.
-            # Supabase client has a method to refresh session using refresh token.
-            # Let's use the refresh_session method directly.
             new_session = supabase.auth.refresh_session(refresh_token)
             if new_session and new_session.user:
                 profile = get_or_create_profile(new_session.user.id, new_session.user.email or new_session.user.phone, new_session.user.email)
@@ -1273,6 +1288,8 @@ if not st.session_state._session_restored and supabase:
                 st.session_state.notifications = load_notifications(new_session.user.id)
                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n['read'])
                 st.info("🔁 Session restored – you are still logged in.")
+                # Save in cookie and localStorage
+                set_cookie("sb_refresh_token", new_session.session.refresh_token, 30)
             else:
                 set_cookie("sb_refresh_token", "", -1)
                 st.warning("Session expired. Please log in again.")
@@ -1281,9 +1298,9 @@ if not st.session_state._session_restored and supabase:
             st.warning("Could not restore session. Please log in again.")
             st.session_state.last_error = str(e)
 
-# --- Lazy token refresh (only if more than 1 hour has passed) ---
+# --- Lazy token refresh (every REFRESH_INTERVAL seconds) ---
 if st.session_state.logged_in and supabase and st.session_state.refresh_token:
-    if time.time() - st.session_state._last_token_refresh > 3600:
+    if time.time() - st.session_state._last_token_refresh > REFRESH_INTERVAL:
         try:
             new_session = supabase.auth.refresh_session(st.session_state.refresh_token)
             if new_session and new_session.user:
@@ -1299,6 +1316,8 @@ if st.session_state.logged_in and supabase and st.session_state.refresh_token:
                     st.error("🚫 Your account has been banned. Contact support if you believe this is an error.")
                     st.stop()
                 st.session_state.profile = profile
+                # Update cookie
+                set_cookie("sb_refresh_token", new_session.session.refresh_token, 30)
         except Exception:
             pass
 
