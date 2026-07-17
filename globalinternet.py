@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - Multilingual with Golden Stars) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 79.0.0 (User Bank Transfer Instructions on Private Profile)
+# Version: 80.0.0 (Bigger Dove & Feed Avatars)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1401,7 +1401,8 @@ st.markdown("""
         0% { transform: translateX(100%); }
         100% { transform: translateX(-100%); }
     }
-    .home-title .dove-symbol { font-size: 4rem; color: #ffffff; text-shadow: 0 0 20px rgba(0,0,0,0.1); display: block; margin: 0 auto; }
+    /* ---- BIGGER DOVE ON LOGIN PAGE ---- */
+    .dove-symbol { font-size: 7rem; display: block; margin: 0 auto; color: #ffffff; text-shadow: 0 0 20px rgba(0,0,0,0.1); }
     .discover-card {
         background: rgba(255,255,255,0.8);
         backdrop-filter: blur(4px);
@@ -3589,9 +3590,10 @@ def render_feed():
     else:
         for post in filtered_posts:
             with st.container():
-                col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
+                # ---- LARGER AVATAR COLUMN & SIZE ----
+                col_a, col_b, col_c, col_d, col_e = st.columns([1.5, 4, 2, 1, 1])
                 with col_a:
-                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=50, profile=post["profiles"])
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=70, profile=post["profiles"])
                 with col_b:
                     name = post['profiles']['full_name']
                     if post['user_id'] != st.session_state.user.id:
@@ -4712,9 +4714,9 @@ def render_profile():
     else:
         for post in user_posts:
             with st.container():
-                col_a, col_b, col_c, col_d, col_e = st.columns([1,4,2,1,1])
+                col_a, col_b, col_c, col_d, col_e = st.columns([1.5,4,2,1,1])
                 with col_a:
-                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=50, profile=st.session_state.profile)
+                    display_avatar_and_followers(post["profiles"].get("avatar_url"), post["user_id"], size=70, profile=st.session_state.profile)
                 with col_b:
                     st.markdown(f"**{post['profiles']['full_name']}**")
                     if post.get("profiles", {}).get("is_live"):
