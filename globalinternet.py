@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - Session Persistence Fix) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 92.0.0 (Robust session refresh, localStorage fallback)
+# Version: 92.1.0 (Token refresh interval increased to 3 hours)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -113,8 +113,11 @@ EMAIL_TO = st.secrets.get("EMAIL_TO")
 
 JITSI_DOMAIN = st.secrets.get("JITSI_DOMAIN", "meet.jit.si")
 
-# ====== REFRESH TOKEN INTERVAL (from secrets, default 10 min) ======
-REFRESH_INTERVAL = int(st.secrets.get("REFRESH_TOKEN_INTERVAL", 600))  # seconds
+# ====== REFRESH TOKEN INTERVAL (now 3 hours) ======
+# This controls how often we refresh the session using the refresh token.
+# The access token (JWT) expiry is set on Supabase (default 1 hour).
+# Refreshing every 3 hours keeps the session alive as long as the refresh token is valid.
+REFRESH_INTERVAL = int(st.secrets.get("REFRESH_TOKEN_INTERVAL", 10800))  # seconds (3 hours)
 
 # ====== GLOBAL SHIELD API KEY – NO FALLBACK! ======
 GLOBAL_SHIELD_API_KEY = st.secrets.get("GLOBAL_SHIELD_API_KEY")
@@ -1298,7 +1301,7 @@ if not st.session_state._session_restored and supabase:
             st.warning("Could not restore session. Please log in again.")
             st.session_state.last_error = str(e)
 
-# --- Lazy token refresh (every REFRESH_INTERVAL seconds) ---
+# --- Lazy token refresh (every REFRESH_INTERVAL seconds, now 3 hours) ---
 if st.session_state.logged_in and supabase and st.session_state.refresh_token:
     if time.time() - st.session_state._last_token_refresh > REFRESH_INTERVAL:
         try:
