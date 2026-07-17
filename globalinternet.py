@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - Multilingual with Golden Stars) ======
+# ====== FULL app.py (Lakay se Lakay - with Phone Call Icon) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 79.0.0 (User Bank Transfer Instructions on Private Profile)
+# Version: 80.0.0 (Phone Call Icon on Profile with Audio-Only Jitsi)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -218,6 +218,9 @@ if "call_target_user" not in st.session_state:
     st.session_state.call_target_user = None
 if "call_ringing" not in st.session_state:
     st.session_state.call_ringing = False
+# ---- Audio-only call flag ----
+if "call_audio_only" not in st.session_state:
+    st.session_state.call_audio_only = False
 # ---- Navigation page ----
 if "current_page" not in st.session_state:
     st.session_state.current_page = "feed"
@@ -1465,6 +1468,50 @@ st.markdown("""
         transform: scale(1.02);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
+    /* ---- NEW: Big icon buttons for profile actions ---- */
+    .big-icon-btn {
+        display: inline-block;
+        text-align: center;
+        background: #f0f7ff;
+        border: 2px solid #0080ff;
+        border-radius: 50%;
+        width: 70px;
+        height: 70px;
+        line-height: 70px;
+        font-size: 2.2rem;
+        transition: 0.2s;
+        cursor: pointer;
+        text-decoration: none;
+        color: #0080ff;
+        margin: 0 6px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+    .big-icon-btn:hover {
+        background: #0080ff;
+        color: white;
+        border-color: #0080ff;
+        transform: scale(1.05);
+        box-shadow: 0 8px 16px rgba(0,128,255,0.25);
+    }
+    .big-icon-btn i { display: block; line-height: 70px; }
+    .big-icon-row {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 15px 0;
+    }
+    .big-icon-btn .label {
+        display: block;
+        font-size: 0.65rem;
+        line-height: 1.2;
+        margin-top: -10px;
+        color: inherit;
+        font-weight: 600;
+    }
+    .big-icon-btn:hover .label {
+        color: white;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -2647,11 +2694,12 @@ def load_messages(user_id, other_id):
         st.session_state.last_error = f"Error loading messages: {e}"
         return []
 
-def start_call(room_id=None):
+def start_call(room_id=None, audio_only=False):
     if not room_id:
         room_id = hashlib.md5(f"{st.session_state.user.id}_{time.time()}".encode()).hexdigest()[:10]
     st.session_state.call_room = room_id
     st.session_state.in_call = True
+    st.session_state.call_audio_only = audio_only
     if supabase:
         try:
             supabase.table("video_calls").insert({
@@ -2674,28 +2722,34 @@ def end_call():
     st.session_state.call_room = None
     st.session_state.call_ringing = False
     st.session_state.call_initiated_time = None
+    st.session_state.call_audio_only = False
 
-def initiate_call(target_user_id):
+def initiate_call(target_user_id, audio_only=False):
     if st.session_state.call_ringing:
         st.warning("You already have an ongoing call or ringing.")
         return
     room = hashlib.md5(f"{st.session_state.user.id}_{target_user_id}_{time.time()}".encode()).hexdigest()[:10]
+    call_type = " (Audio)" if audio_only else ""
     try:
         supabase.table("notifications").insert({
             "user_id": target_user_id,
             "type": "call_request",
-            "message": f"📞 {st.session_state.profile['full_name']} is calling you. Room: {room}",
+            "message": f"📞 {st.session_state.profile['full_name']} is calling you{call_type}. Room: {room}",
             "read": False,
             "created_at": datetime.now().isoformat()
         }).execute()
     except Exception as e:
         st.error(f"Failed to send call notification: {e}")
         return
-    start_call(room)
+    start_call(room, audio_only)
     st.session_state.call_target_user = target_user_id
     st.session_state.call_ringing = True
     st.session_state.call_initiated_time = time.time()
     st.rerun()
+
+def initiate_phone_call(target_user_id):
+    """Wrapper to initiate an audio-only phone call."""
+    initiate_call(target_user_id, audio_only=True)
 
 def check_call_status():
     if st.session_state.call_ringing and st.session_state.call_initiated_time:
@@ -2703,6 +2757,7 @@ def check_call_status():
         if elapsed > 30:
             st.session_state.call_ringing = False
             st.session_state.call_initiated_time = None
+            st.session_state.call_audio_only = False
             end_call()
             st.warning(t("call_unavailable"))
             st.rerun()
@@ -3065,6 +3120,7 @@ def logout():
     st.session_state.in_call = False
     st.session_state.call_ringing = False
     st.session_state.call_initiated_time = None
+    st.session_state.call_audio_only = False
     st.session_state.delete_confirm = None
     st.session_state.last_error = None
     st.session_state.replying_to = {}
@@ -3826,18 +3882,50 @@ def render_user_profile(user_id, show_back_button=True):
 
         is_own_profile = (user_id == st.session_state.user.id)
         if not is_own_profile:
-            if st.button(t("call_now"), key=f"call_{user_id}"):
-                initiate_call(user_id)
-                st.rerun()
-            if st.button(t("chat"), key=f"chat_{user_id}"):
-                st.session_state.selected_chat = user_id
-                st.session_state.viewing_profile = None
-                st.rerun()
-            if profile.get("email"):
-                st.markdown(f'<a href="mailto:{profile["email"]}" target="_blank" style="display:inline-block; margin-top:5px; background:#0080ff; color:white; padding:6px 12px; border-radius:20px; text-decoration:none; font-weight:bold;">📧 {t("email_user")}</a>', unsafe_allow_html=True)
-            if profile.get("whatsapp_phone"):
-                wa_number = profile["whatsapp_phone"].replace("+", "").strip()
-                st.markdown(f'<a href="https://wa.me/{wa_number}" target="_blank" style="display:inline-block; margin-top:5px; background:#25D366; color:white; padding:6px 12px; border-radius:20px; text-decoration:none; font-weight:bold;">💬 {t("whatsapp")}</a>', unsafe_allow_html=True)
+            # ---- BIG ICON ROW: Phone, Chat, Email, WhatsApp ----
+            st.markdown('<div class="big-icon-row">', unsafe_allow_html=True)
+
+            # Phone icon (audio-only call)
+            phone_html = f'''
+            <a href="#" onclick="(function(){{ window.parent.postMessage({{type:'streamlit:setComponentValue', value:'{user_id}'}}, '*'); }})();" 
+               style="text-decoration:none;" class="big-icon-btn" title="Call now">
+                <i>📞</i>
+                <span class="label">Call</span>
+            </a>
+            '''
+            # We'll use a Streamlit button for proper interaction, but we style it as a big icon.
+            # Since we cannot use custom HTML with onclick easily, we'll use a st.button with icon.
+            # We'll create a row of columns with buttons.
+
+            # We'll use st.columns and st.button with custom CSS to make them large.
+            # Let's create 4 columns for Phone, Chat, Email, WhatsApp.
+            col_phone, col_chat, col_email, col_wa = st.columns(4)
+            with col_phone:
+                if st.button("📞\nCall", key=f"phone_call_{user_id}", use_container_width=True):
+                    initiate_phone_call(user_id)
+                    st.rerun()
+            with col_chat:
+                if st.button("💬\nChat", key=f"chat_{user_id}_big", use_container_width=True):
+                    st.session_state.selected_chat = user_id
+                    st.session_state.viewing_profile = None
+                    st.rerun()
+            with col_email:
+                if profile.get("email"):
+                    st.markdown(f'<a href="mailto:{profile["email"]}" target="_blank" style="display:block; text-align:center; background:#f0f7ff; border:2px solid #0080ff; border-radius:50%; width:70px; height:70px; line-height:70px; font-size:2.2rem; text-decoration:none; color:#0080ff; margin:0 auto; box-shadow:0 4px 8px rgba(0,0,0,0.05);"><i>📧</i><span style="display:block; font-size:0.65rem; line-height:1.2; margin-top:-10px; color:inherit; font-weight:600;">Email</span></a>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div style="width:70px; height:70px; border-radius:50%; background:#ccc; line-height:70px; text-align:center; font-size:2rem; color:#888; margin:0 auto;">📧</div>', unsafe_allow_html=True)
+            with col_wa:
+                if profile.get("whatsapp_phone"):
+                    wa_number = profile["whatsapp_phone"].replace("+", "").strip()
+                    st.markdown(f'<a href="https://wa.me/{wa_number}" target="_blank" style="display:block; text-align:center; background:#f0f7ff; border:2px solid #25D366; border-radius:50%; width:70px; height:70px; line-height:70px; font-size:2.2rem; text-decoration:none; color:#25D366; margin:0 auto; box-shadow:0 4px 8px rgba(0,0,0,0.05);"><i>💬</i><span style="display:block; font-size:0.65rem; line-height:1.2; margin-top:-10px; color:inherit; font-weight:600;">WhatsApp</span></a>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div style="width:70px; height:70px; border-radius:50%; background:#ccc; line-height:70px; text-align:center; font-size:2rem; color:#888; margin:0 auto;">💬</div>', unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Original buttons (we keep them for fallback but they are replaced by icons above)
+            # We can remove them to avoid duplication.
+            # Remove the old "Call Now" and "Chat" buttons.
         if show_back_button:
             if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
@@ -4277,7 +4365,7 @@ def render_friends_page():
                         st.rerun()
                 with cols[3]:
                     if st.button(t("call"), key=f"call_{friend['id']}"):
-                        initiate_call(friend['id'])
+                        initiate_phone_call(friend['id'])
                         st.rerun()
                 with cols[4]:
                     if st.button("📧", key=f"email_{friend['id']}"):
@@ -4456,7 +4544,13 @@ def render_friends_page():
             domain = JITSI_DOMAIN
             room = st.session_state.call_room
             container_id = f"jitsi-container-{st.session_state.call_reload}"
-            config_overwrite = {"startWithAudioMuted": False, "startWithVideoMuted": False, "disableWelcomePage": True, "disableDeepLinking": True, "p2p": {"enabled": False}}
+            # If audio-only, mute video by default
+            start_with_video_muted = st.session_state.get('call_audio_only', False)
+            config_overwrite = {"startWithAudioMuted": False,
+                                "startWithVideoMuted": start_with_video_muted,
+                                "disableWelcomePage": True,
+                                "disableDeepLinking": True,
+                                "p2p": {"enabled": False}}
             config_json = json.dumps(config_overwrite)
             jitsi_html = f"""
             <div id="{container_id}" style="height: 500px; width: 100%;"></div>
@@ -4493,11 +4587,12 @@ def render_friends_page():
             st.markdown(f"**Or open in a new tab:** [Join Room]({fallback_url})", unsafe_allow_html=True)
             if st.button(t("end_call")):
                 st.session_state.call_background_url = None
+                st.session_state.call_audio_only = False
                 end_call()
                 st.rerun()
         else:
             if st.button(t("start_call")):
-                start_call()
+                start_call(audio_only=False)  # video call from here
                 st.rerun()
 
     except Exception as e:
@@ -5853,6 +5948,7 @@ def main_app():
         if elapsed > 30:
             st.session_state.call_ringing = False
             st.session_state.call_initiated_time = None
+            st.session_state.call_audio_only = False
             end_call()
             st.warning(t("call_unavailable"))
 
