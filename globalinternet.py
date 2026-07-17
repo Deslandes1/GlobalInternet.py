@@ -1,7 +1,7 @@
-# ====== FULL app.py (Lakay se Lakay - with Phone Call Icon) ======
+# ====== FULL app.py (Lakay se Lakay - Ultra-Fast with Call & Messaging) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 80.0.0 (Phone Call Icon on Profile with Audio-Only Jitsi)
+# Version: 90.0.0 (Phone Call on Profile, Message Inbox, Missed Calls, Speed Optimized)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -456,7 +456,22 @@ LANG = {
         "security_caption": "🔒 End-to-end encrypted connection",
         "unibank_usd_account": "UNIBANK USD Account Number",
         "unibank_htg_account": "UNIBANK HTG Account Number",
-        "cin_number": "CIN Card Number"
+        "cin_number": "CIN Card Number",
+        # New keys for call and messaging
+        "missed_call": "Missed call from {name}",
+        "call_back": "Call Back",
+        "incoming_call": "📞 Incoming call from {name}",
+        "accept_call": "Accept",
+        "reject_call": "Reject",
+        "call_ended": "Call ended",
+        "call_rejected": "Call rejected",
+        "call_missed": "Missed call",
+        "conversations": "Conversations",
+        "no_conversations": "No conversations yet.",
+        "chat_with": "Chat with {name}",
+        "emoji_picker": "😊",
+        "attach_file": "📎 Attach file",
+        "send_message_btn": "Send",
     },
     "fr": {
         "login_title": "Connexion",
@@ -666,7 +681,22 @@ LANG = {
         "security_caption": "🔒 Connexion chiffrée de bout en bout",
         "unibank_usd_account": "Numéro de compte UNIBANK USD",
         "unibank_htg_account": "Numéro de compte UNIBANK HTG",
-        "cin_number": "Numéro de carte CIN"
+        "cin_number": "Numéro de carte CIN",
+        # New keys
+        "missed_call": "Appel manqué de {name}",
+        "call_back": "Rappeler",
+        "incoming_call": "📞 Appel entrant de {name}",
+        "accept_call": "Accepter",
+        "reject_call": "Refuser",
+        "call_ended": "Appel terminé",
+        "call_rejected": "Appel refusé",
+        "call_missed": "Appel manqué",
+        "conversations": "Conversations",
+        "no_conversations": "Aucune conversation.",
+        "chat_with": "Discuter avec {name}",
+        "emoji_picker": "😊",
+        "attach_file": "📎 Joindre un fichier",
+        "send_message_btn": "Envoyer",
     },
     "es": {
         "login_title": "Iniciar sesión",
@@ -876,7 +906,22 @@ LANG = {
         "security_caption": "🔒 Conexión cifrada de extremo a extremo",
         "unibank_usd_account": "Número de cuenta UNIBANK USD",
         "unibank_htg_account": "Número de cuenta UNIBANK HTG",
-        "cin_number": "Número de CIN"
+        "cin_number": "Número de CIN",
+        # New keys
+        "missed_call": "Llamada perdida de {name}",
+        "call_back": "Devolver llamada",
+        "incoming_call": "📞 Llamada entrante de {name}",
+        "accept_call": "Aceptar",
+        "reject_call": "Rechazar",
+        "call_ended": "Llamada finalizada",
+        "call_rejected": "Llamada rechazada",
+        "call_missed": "Llamada perdida",
+        "conversations": "Conversaciones",
+        "no_conversations": "No hay conversaciones.",
+        "chat_with": "Chatear con {name}",
+        "emoji_picker": "😊",
+        "attach_file": "📎 Adjuntar archivo",
+        "send_message_btn": "Enviar",
     },
     "ht": {
         "login_title": "Konekte",
@@ -1086,7 +1131,22 @@ LANG = {
         "security_caption": "🔒 Koneksyon chifre bout nan bout",
         "unibank_usd_account": "Nimewo kont UNIBANK USD",
         "unibank_htg_account": "Nimewo kont UNIBANK HTG",
-        "cin_number": "Nimewo kat CIN"
+        "cin_number": "Nimewo kat CIN",
+        # New keys
+        "missed_call": "Apèl manke de {name}",
+        "call_back": "Rapèl",
+        "incoming_call": "📞 Apèl antre de {name}",
+        "accept_call": "Aksepte",
+        "reject_call": "Refize",
+        "call_ended": "Apèl fini",
+        "call_rejected": "Apèl refize",
+        "call_missed": "Apèl manke",
+        "conversations": "Konvèsasyon",
+        "no_conversations": "Pa gen konvèsasyon.",
+        "chat_with": "Chat ak {name}",
+        "emoji_picker": "😊",
+        "attach_file": "📎 Atache yon fichye",
+        "send_message_btn": "Voye",
     }
 }
 
@@ -1468,7 +1528,7 @@ st.markdown("""
         transform: scale(1.02);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    /* ---- NEW: Big icon buttons for profile actions ---- */
+    /* ---- Big icon buttons for profile actions ---- */
     .big-icon-btn {
         display: inline-block;
         text-align: center;
@@ -1511,6 +1571,78 @@ st.markdown("""
     }
     .big-icon-btn:hover .label {
         color: white;
+    }
+    /* ---- New: Top action bar for profile ---- */
+    .profile-action-bar {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin: 10px 0 20px 0;
+        flex-wrap: wrap;
+    }
+    .profile-action-bar .action-icon {
+        font-size: 2rem;
+        background: rgba(255,255,255,0.8);
+        padding: 8px 16px;
+        border-radius: 40px;
+        border: 1px solid #0080ff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: 0.2s;
+        cursor: pointer;
+    }
+    .profile-action-bar .action-icon:hover {
+        background: #0080ff;
+        color: white;
+        transform: scale(1.05);
+    }
+    .profile-action-bar .action-icon .label {
+        font-size: 0.7rem;
+        display: block;
+        margin-top: -5px;
+        font-weight: 600;
+    }
+    .incoming-call-box {
+        background: #ffdddd;
+        border-left: 6px solid #ff4444;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+    .missed-call-box {
+        background: #fff3cd;
+        border-left: 6px solid #ffc107;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+    /* ---- Chat conversation list ---- */
+    .conversation-item {
+        background: rgba(255,255,255,0.7);
+        padding: 10px 15px;
+        border-radius: 12px;
+        margin: 5px 0;
+        border: 1px solid rgba(0,168,255,0.2);
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .conversation-item:hover {
+        background: rgba(255,255,255,0.9);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .conversation-item .unread-badge {
+        background: #0080ff;
+        color: white;
+        border-radius: 50%;
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+    .chat-media-preview {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 8px;
+        margin: 5px 0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -1803,7 +1935,7 @@ def upload_post_media(user_id, file):
 def upload_media_base64(file):
     try:
         file_bytes = file.getvalue()
-        b64 = base64.b64encode(file_bytes).decode('utf-8')
+        b64 = base64.b64encode(file_bytes).decode()
         content_type = file.type
         data_url = f"data:{content_type};base64,{b64}"
         media_type = "video" if content_type.startswith("video") else "image"
@@ -1929,7 +2061,7 @@ def get_user_post_count(user_id, public_only=False):
         return 0
 
 # ====== OPTIMISED POST LOADING ======
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_posts_cached(user_id=None, author_id=None, include_private=False):
     if supabase is None:
         return []
@@ -2392,7 +2524,7 @@ def load_gifts_for_session(session_id):
         return []
 
 # ---- Friends / Chat / Notifications (cached) ----
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def load_notifications(user_id):
     if supabase is None:
         return []
@@ -2465,7 +2597,7 @@ def respond_friend_request(request_id, accept):
         return False, str(e)
 
 # ====== FIXED load_friend_data with retry and caching ======
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)
 def load_friend_data_cached(user_id):
     """Cached version of friend data loading."""
     max_retries = 3
@@ -2647,6 +2779,62 @@ def get_all_users_cached():
 def get_all_users():
     return get_all_users_cached()
 
+# ---- Messaging with conversation list ----
+@st.cache_data(ttl=60)
+def get_conversations(user_id):
+    """Return a list of users the current user has exchanged messages with, with latest message and unread count."""
+    if supabase is None:
+        return []
+    try:
+        # Get all messages where user is sender or receiver
+        sent = supabase.table("messages").select("receiver_id, created_at, content, read").eq("sender_id", user_id).execute()
+        received = supabase.table("messages").select("sender_id, created_at, content, read").eq("receiver_id", user_id).execute()
+        all_msgs = (sent.data or []) + (received.data or [])
+        if not all_msgs:
+            return []
+        # Build a dict of other user -> latest message info
+        conv_dict = {}
+        for msg in all_msgs:
+            other_id = msg["receiver_id"] if msg["receiver_id"] != user_id else msg["sender_id"]
+            if other_id not in conv_dict or msg["created_at"] > conv_dict[other_id]["created_at"]:
+                conv_dict[other_id] = {
+                    "other_id": other_id,
+                    "last_message": msg["content"],
+                    "created_at": msg["created_at"],
+                    "unread": (msg["receiver_id"] == user_id and not msg.get("read", True))
+                }
+            else:
+                # Update unread count if it's a received message
+                if msg["receiver_id"] == user_id and not msg.get("read", True):
+                    conv_dict[other_id]["unread"] = True
+        # Get profiles for these users
+        other_ids = list(conv_dict.keys())
+        profiles = {}
+        if other_ids:
+            fields = ["id", "full_name", "avatar_url", "last_active"]
+            prof_resp = supabase.table("profiles").select(",".join(fields)).in_("id", other_ids).execute()
+            for p in prof_resp.data or []:
+                profiles[p["id"]] = p
+        # Assemble final list
+        conversations = []
+        for other_id, data in conv_dict.items():
+            p = profiles.get(other_id, {})
+            conversations.append({
+                "other_id": other_id,
+                "full_name": p.get("full_name", "Unknown"),
+                "avatar_url": p.get("avatar_url"),
+                "last_active": p.get("last_active"),
+                "last_message": data["last_message"][:80] + ("..." if len(data["last_message"]) > 80 else ""),
+                "created_at": data["created_at"],
+                "unread": data["unread"],
+            })
+        # Sort by latest message
+        conversations.sort(key=lambda x: x["created_at"], reverse=True)
+        return conversations
+    except Exception as e:
+        st.session_state.last_error = f"Error loading conversations: {e}"
+        return []
+
 def send_message(sender_id, receiver_id, content, media_file=None):
     if supabase is None:
         return False
@@ -2688,12 +2876,179 @@ def load_messages(user_id, other_id):
         received = supabase.table("messages").select("*").eq("sender_id", other_id).eq("receiver_id", user_id).execute()
         all_msgs = (sent.data or []) + (received.data or [])
         all_msgs.sort(key=lambda x: x['created_at'])
+        # Mark as read
         supabase.table("messages").update({"read": True}).eq("sender_id", other_id).eq("receiver_id", user_id).execute()
         return all_msgs
     except Exception as e:
         st.session_state.last_error = f"Error loading messages: {e}"
         return []
 
+# ---- Call System (with ringtone and missed calls) ----
+def create_call_record(caller_id, receiver_id, room):
+    if supabase is None:
+        return None
+    try:
+        data = {
+            "caller_id": caller_id,
+            "receiver_id": receiver_id,
+            "room": room,
+            "status": "ringing",
+            "started_at": datetime.now().isoformat()
+        }
+        result = supabase.table("calls").insert(data).execute()
+        if result.data:
+            return result.data[0]["id"]
+        return None
+    except Exception as e:
+        st.session_state.last_error = f"Error creating call record: {e}"
+        return None
+
+def update_call_status(call_id, status, ended_at=None):
+    if supabase is None:
+        return
+    try:
+        update_data = {"status": status}
+        if ended_at:
+            update_data["ended_at"] = ended_at
+        supabase.table("calls").update(update_data).eq("id", call_id).execute()
+    except Exception as e:
+        st.session_state.last_error = f"Error updating call status: {e}"
+
+def get_missed_calls(user_id):
+    """Get missed calls for the user."""
+    if supabase is None:
+        return []
+    try:
+        resp = supabase.table("calls").select("*, caller:caller_id(full_name)").eq("receiver_id", user_id).eq("status", "missed").order("started_at", desc=True).execute()
+        return resp.data or []
+    except Exception as e:
+        st.session_state.last_error = f"Error loading missed calls: {e}"
+        return []
+
+def initiate_call(target_user_id, audio_only=False):
+    """Initiate a call: create call record, send notification with ringtone."""
+    if st.session_state.call_ringing:
+        st.warning("You already have an ongoing call or ringing.")
+        return
+    room = hashlib.md5(f"{st.session_state.user.id}_{target_user_id}_{time.time()}".encode()).hexdigest()[:10]
+    call_type = " (Audio)" if audio_only else ""
+    # Create call record
+    call_id = create_call_record(st.session_state.user.id, target_user_id, room)
+    if not call_id:
+        st.error("Failed to initiate call.")
+        return
+    # Send notification to receiver with call details
+    try:
+        # We'll store call_id in the notification data or as related_id
+        supabase.table("notifications").insert({
+            "user_id": target_user_id,
+            "type": "call_request",
+            "message": f"📞 {st.session_state.profile['full_name']} is calling you{call_type}.",
+            "read": False,
+            "created_at": datetime.now().isoformat(),
+            "related_id": call_id,  # store call_id
+            "data": {"room": room, "caller": st.session_state.user.id}
+        }).execute()
+    except Exception as e:
+        st.error(f"Failed to send call notification: {e}")
+        update_call_status(call_id, "missed", datetime.now().isoformat())
+        return
+    # Set session state for ringing
+    start_call(room, audio_only)
+    st.session_state.call_target_user = target_user_id
+    st.session_state.call_ringing = True
+    st.session_state.call_initiated_time = time.time()
+    st.session_state.current_call_id = call_id  # store for later
+    st.rerun()
+
+def accept_call(notification):
+    """Accept an incoming call: update call status, start Jitsi session."""
+    call_id = notification.get("related_id")
+    if not call_id:
+        return
+    # Update call status to answered
+    update_call_status(call_id, "answered", datetime.now().isoformat())
+    # Get room from notification data
+    data = notification.get("data", {})
+    room = data.get("room")
+    if room:
+        st.session_state.call_room = room
+        st.session_state.in_call = True
+        st.session_state.call_audio_only = False  # could be audio-only but we'll let Jitsi handle
+        st.rerun()
+    else:
+        st.error("Call room not found.")
+
+def reject_call(notification):
+    call_id = notification.get("related_id")
+    if call_id:
+        update_call_status(call_id, "rejected", datetime.now().isoformat())
+        st.success("Call rejected.")
+        st.rerun()
+
+def check_missed_calls():
+    """Check for any call that has been ringing for more than 30s and mark as missed."""
+    if supabase is None:
+        return
+    try:
+        # Get all ringing calls older than 30s
+        cutoff = (datetime.now() - timedelta(seconds=30)).isoformat()
+        resp = supabase.table("calls").select("id, caller_id, receiver_id, room").eq("status", "ringing").lt("started_at", cutoff).execute()
+        for call in resp.data or []:
+            # Update status to missed
+            update_call_status(call["id"], "missed", datetime.now().isoformat())
+            # Notify the caller that the call was missed
+            try:
+                caller_name = supabase.table("profiles").select("full_name").eq("id", call["caller_id"]).single().execute().data.get("full_name", "Someone")
+            except:
+                caller_name = "Someone"
+            supabase.table("notifications").insert({
+                "user_id": call["caller_id"],
+                "type": "missed_call",
+                "message": f"📞 Missed call from {caller_name}. Do you want to call back?",
+                "read": False,
+                "related_id": call["id"],
+                "data": {"room": call["room"], "receiver": call["receiver_id"]}
+            }).execute()
+            # Also notify the receiver? They already got a notification.
+    except Exception as e:
+        st.session_state.last_error = f"Error checking missed calls: {e}"
+
+def render_incoming_call(notification):
+    """Render Accept/Reject buttons for an incoming call."""
+    st.markdown(f"<div class='incoming-call-box'><b>{t('incoming_call', name=notification.get('message',''))}</b></div>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(t("accept_call"), key=f"accept_call_{notification['id']}"):
+            accept_call(notification)
+    with col2:
+        if st.button(t("reject_call"), key=f"reject_call_{notification['id']}"):
+            reject_call(notification)
+
+def render_missed_call(notification):
+    """Render missed call notification with call back button."""
+    st.markdown(f"<div class='missed-call-box'><b>{notification['message']}</b></div>", unsafe_allow_html=True)
+    if st.button(t("call_back"), key=f"callback_{notification['id']}"):
+        # Extract receiver/caller info from notification data
+        data = notification.get("data", {})
+        receiver_id = data.get("receiver")
+        if receiver_id:
+            initiate_call(receiver_id, audio_only=True)
+        else:
+            # Try to get from related_id
+            call_id = notification.get("related_id")
+            if call_id:
+                # Fetch call details to get receiver
+                try:
+                    call_resp = supabase.table("calls").select("receiver_id").eq("id", call_id).single().execute()
+                    if call_resp.data:
+                        receiver_id = call_resp.data["receiver_id"]
+                        initiate_call(receiver_id, audio_only=True)
+                except:
+                    pass
+        st.rerun()
+
+# ---- Video call functions ----
 def start_call(room_id=None, audio_only=False):
     if not room_id:
         room_id = hashlib.md5(f"{st.session_state.user.id}_{time.time()}".encode()).hexdigest()[:10]
@@ -2723,29 +3078,7 @@ def end_call():
     st.session_state.call_ringing = False
     st.session_state.call_initiated_time = None
     st.session_state.call_audio_only = False
-
-def initiate_call(target_user_id, audio_only=False):
-    if st.session_state.call_ringing:
-        st.warning("You already have an ongoing call or ringing.")
-        return
-    room = hashlib.md5(f"{st.session_state.user.id}_{target_user_id}_{time.time()}".encode()).hexdigest()[:10]
-    call_type = " (Audio)" if audio_only else ""
-    try:
-        supabase.table("notifications").insert({
-            "user_id": target_user_id,
-            "type": "call_request",
-            "message": f"📞 {st.session_state.profile['full_name']} is calling you{call_type}. Room: {room}",
-            "read": False,
-            "created_at": datetime.now().isoformat()
-        }).execute()
-    except Exception as e:
-        st.error(f"Failed to send call notification: {e}")
-        return
-    start_call(room, audio_only)
-    st.session_state.call_target_user = target_user_id
-    st.session_state.call_ringing = True
-    st.session_state.call_initiated_time = time.time()
-    st.rerun()
+    st.session_state.current_call_id = None
 
 def initiate_phone_call(target_user_id):
     """Wrapper to initiate an audio-only phone call."""
@@ -3199,6 +3532,7 @@ def log_in_email(email, password, remember=False, show_debug=False):
             st.error(f"❌ Login failed: {error_str}")
 
 def render_top_icons():
+    """Render the top action icons: Phone, Messages, Notifications (for logged-in user)."""
     if not st.session_state.logged_in:
         return
     user_id = st.session_state.user.id
@@ -3209,13 +3543,21 @@ def render_top_icons():
     except Exception:
         pass
     unread_notifs = st.session_state.unread_count
-    col1, col2 = st.columns([1, 1])
+    col1, col2, col3 = st.columns([1,1,1])
     with col1:
+        label = f"📞"  # Phone icon
+        if st.button(label, key="top_call_icon", use_container_width=True):
+            # If viewing a profile, call that user; otherwise, maybe show a call prompt?
+            if st.session_state.viewing_profile:
+                initiate_phone_call(st.session_state.viewing_profile)
+            else:
+                st.info("Go to a user's profile to call them.")
+    with col2:
         label = f"💬 {unread_msgs}" if unread_msgs > 0 else "💬"
         if st.button(label, key="top_msg_icon", use_container_width=True):
             st.session_state.current_page = "friends_chat"
             st.rerun()
-    with col2:
+    with col3:
         label = f"🔔 {unread_notifs}" if unread_notifs > 0 else "🔔"
         if st.button(label, key="top_notif_icon", use_container_width=True):
             st.session_state.current_page = "friends_chat"
@@ -3866,6 +4208,33 @@ def render_user_profile(user_id, show_back_button=True):
                 st.session_state.viewing_profile = None
                 st.rerun()
             return
+
+    # ---- Top Action Bar: Phone, Message, Notification ----
+    is_own_profile = (user_id == st.session_state.user.id)
+    if not is_own_profile:
+        st.markdown('<div class="profile-action-bar">', unsafe_allow_html=True)
+        col_phone, col_msg, col_notif = st.columns(3)
+        with col_phone:
+            if st.button("📞", key=f"top_call_{user_id}", help="Call this user"):
+                initiate_phone_call(user_id)
+                st.rerun()
+            st.caption("Call")
+        with col_msg:
+            if st.button("💬", key=f"top_msg_{user_id}", help="Send a message"):
+                st.session_state.selected_chat = user_id
+                st.session_state.current_page = "friends_chat"
+                st.rerun()
+            st.caption("Message")
+        with col_notif:
+            # This could be a bell icon, but we already have a global notification icon.
+            # We'll just show a bell that goes to notifications page.
+            if st.button("🔔", key=f"top_notif_{user_id}", help="Notifications"):
+                st.session_state.current_page = "friends_chat"
+                st.rerun()
+            st.caption("Notifications")
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.divider()
+
     st.header(f"👤 {profile['full_name']}'s Profile")
     col1, col2 = st.columns([1,2])
     with col1:
@@ -3880,25 +4249,11 @@ def render_user_profile(user_id, show_back_button=True):
         st.markdown(f"**{t('unibank_htg_account')}:** {profile.get('unibank_htg_account', 'Not set')}")
         st.markdown(f"**{t('cin_number')}:** {profile.get('cin_number', 'Not set')}")
 
-        is_own_profile = (user_id == st.session_state.user.id)
         if not is_own_profile:
             # ---- BIG ICON ROW: Phone, Chat, Email, WhatsApp ----
             st.markdown('<div class="big-icon-row">', unsafe_allow_html=True)
 
             # Phone icon (audio-only call)
-            phone_html = f'''
-            <a href="#" onclick="(function(){{ window.parent.postMessage({{type:'streamlit:setComponentValue', value:'{user_id}'}}, '*'); }})();" 
-               style="text-decoration:none;" class="big-icon-btn" title="Call now">
-                <i>📞</i>
-                <span class="label">Call</span>
-            </a>
-            '''
-            # We'll use a Streamlit button for proper interaction, but we style it as a big icon.
-            # Since we cannot use custom HTML with onclick easily, we'll use a st.button with icon.
-            # We'll create a row of columns with buttons.
-
-            # We'll use st.columns and st.button with custom CSS to make them large.
-            # Let's create 4 columns for Phone, Chat, Email, WhatsApp.
             col_phone, col_chat, col_email, col_wa = st.columns(4)
             with col_phone:
                 if st.button("📞\nCall", key=f"phone_call_{user_id}", use_container_width=True):
@@ -3923,9 +4278,6 @@ def render_user_profile(user_id, show_back_button=True):
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Original buttons (we keep them for fallback but they are replaced by icons above)
-            # We can remove them to avoid duplication.
-            # Remove the old "Call Now" and "Chat" buttons.
         if show_back_button:
             if st.button(t("back_to_feed")):
                 st.session_state.viewing_profile = None
@@ -4252,6 +4604,22 @@ def render_friends_page():
             return
 
         st.header(t("friends_chat"))
+        render_top_icons()  # show phone, message, notification icons
+
+        # ---- Check for missed calls ----
+        check_missed_calls()
+
+        # ---- Handle incoming call notifications ----
+        # We'll scan notifications for call_request and render accept/reject if any
+        call_request_notifications = [n for n in st.session_state.notifications if n.get('type') == 'call_request' and not n.get('read')]
+        for notif in call_request_notifications:
+            render_incoming_call(notif)
+
+        # ---- Handle missed call notifications ----
+        missed_call_notifications = [n for n in st.session_state.notifications if n.get('type') == 'missed_call' and not n.get('read')]
+        for notif in missed_call_notifications:
+            render_missed_call(notif)
+
         with st.expander(t("setup_instructions")):
             st.markdown("**If you get 'new row violates row-level security policy' for notifications:**")
             st.markdown("1. Go to your Supabase Dashboard → SQL Editor.")
@@ -4280,6 +4648,9 @@ def render_friends_page():
                 st.info("No notifications")
             else:
                 for n in st.session_state.notifications:
+                    # Skip call_request and missed_call as they are handled above
+                    if n.get('type') in ['call_request', 'missed_call']:
+                        continue
                     cols = st.columns([5,1])
                     with cols[0]:
                         st.markdown(f"**{n['message']}**  \n*{n['created_at'][:16]}*")
@@ -4381,6 +4752,29 @@ def render_friends_page():
                         else:
                             st.warning("No WhatsApp number.")
                 st.divider()
+
+        # ---- Conversation List (Inbox) ----
+        st.divider()
+        st.subheader("📬 " + t("conversations"))
+        conversations = get_conversations(st.session_state.user.id)
+        if not conversations:
+            st.info(t("no_conversations"))
+        else:
+            for conv in conversations:
+                with st.container():
+                    cols = st.columns([1,6,1])
+                    with cols[0]:
+                        display_avatar_and_followers(conv.get('avatar_url'), conv['other_id'], size=50, profile=conv)
+                    with cols[1]:
+                        if st.button(conv['full_name'], key=f"conv_{conv['other_id']}"):
+                            st.session_state.selected_chat = conv['other_id']
+                            st.rerun()
+                        st.caption(conv['last_message'])
+                        if conv['unread']:
+                            st.markdown(f"<span class='unread-badge'>New</span>", unsafe_allow_html=True)
+                    with cols[2]:
+                        st.caption(conv['created_at'][:16])
+                    st.divider()
 
         # Private chat
         if st.session_state.selected_chat:
@@ -4502,20 +4896,33 @@ def render_friends_page():
                             st.markdown(f"<div style='text-align:left; background:#f1f8e9; padding:5px; border-radius:10px; margin:5px;'><b>{other_name}:</b> {clickable_content}<br><small>{msg['created_at'][:16]}</small></div>", unsafe_allow_html=True)
 
             with st.form("send_message", clear_on_submit=True):
-                msg_content = st.text_input(t("send_message"), placeholder="Type your message...")
+                # Emoji picker: simple buttons
+                st.markdown("**Emojis:** 😀 😂 ❤️ 👍 😮 😢 😡 🎉 🔥 💯")
+                col_emoji = st.columns(10)
+                emojis = ["😀","😂","❤️","👍","😮","😢","😡","🎉","🔥","💯"]
+                for i, emoji in enumerate(emojis):
+                    with col_emoji[i]:
+                        if st.button(emoji, key=f"emoji_{i}"):
+                            # Append emoji to message input
+                            # We'll use a session state variable to store the current message
+                            current_msg = st.session_state.get("chat_input", "")
+                            st.session_state.chat_input = current_msg + emoji
+                            st.rerun()
+                msg_content = st.text_input(t("send_message"), placeholder="Type your message...", value=st.session_state.get("chat_input", ""))
                 uploaded_file = st.file_uploader(t("add_media"), type=["png","jpg","jpeg","gif","mp4","mov","avi"])
-                st.caption("⚠️ File size limit: 200MB (configurable). For larger videos, use external links.")
+                st.caption("⚠️ File size limit: 200MB. For larger videos, use external links.")
                 col1, col2 = st.columns([1,5])
                 with col1:
-                    sent = st.form_submit_button(t("send"))
+                    sent = st.form_submit_button(t("send_message_btn"))
                 if sent:
                     if msg_content or uploaded_file:
                         send_message(st.session_state.user.id, other_id, msg_content or "", media_file=uploaded_file)
+                        st.session_state.chat_input = ""
                         st.rerun()
 
             st.divider()
         else:
-            st.info("Select a friend and click 'Chat' to start a private conversation.")
+            st.info("Select a friend and click 'Chat' to start a private conversation, or click a conversation from the inbox above.")
 
         # Video call
         if st.session_state.in_call and st.session_state.call_room:
