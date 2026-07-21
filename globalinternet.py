@@ -1092,6 +1092,7 @@ def t(key):
     return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
 
 # ====== COOKIE HELPERS ======
+# FIXED set_cookie with Secure and SameSite=None for mobile browser compatibility
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -1102,7 +1103,7 @@ def set_cookie(name, value, days=30):
             date.setTime(date.getTime() + (days*24*60*60*1000));
             expires = "; expires=" + date.toUTCString();
         }}
-        document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+        document.cookie = name + "=" + (value || "")  + expires + "; path=/; Secure; SameSite=None";
     }}
     setCookie("{name}", "{value}", {days});
     </script>
