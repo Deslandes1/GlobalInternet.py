@@ -29,7 +29,8 @@ import edge_tts
 from PIL import Image
 
 # ====== PAGE CONFIG ======
-st.set_page_config(page_title="Lakay se Lakay", page_icon="🏠", layout="wide")
+# Changed layout from "wide" to "centered" to give a more vertical/length shape
+st.set_page_config(page_title="Lakay se Lakay", page_icon="🏠", layout="centered")
 
 # ====== KEEP‑ALIVE PING ======
 try:
