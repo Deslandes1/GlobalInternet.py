@@ -3393,15 +3393,17 @@ def render_discover_section():
     except Exception as e:
         st.error(f"Could not load users: {e}")
 
-# ====== MOVIES PAGE (EMBED 1HD.ART) ======
+# ====== MOVIES PAGE (OPEN IN NEW TAB) ======
 def render_movies():
     st.header("🎬 Movies")
     st.markdown("Watch your favorite movies and series online. The content is provided by a third-party source.")
-    # Embed the website in an iframe
-    st.components.v1.html("""
-    <iframe src="https://1hd.art/" style="width:100%; height:800px; border:none; border-radius:8px;"></iframe>
-    """, height=820)
-    st.caption("ℹ️ If the movie site does not load, try opening it in a new tab. Some browsers may block iframes from external domains.")
+    st.markdown("Click the button below to open the movie site in a new tab.")
+    # Use a styled link button that opens in a new tab
+    st.markdown(
+        f'<a href="https://1hd.art/" target="_blank" style="display:inline-block; background:#0080ff; color:white; padding:10px 20px; border-radius:5px; text-decoration:none; font-weight:bold;">🎬 Open Movies</a>',
+        unsafe_allow_html=True
+    )
+    st.caption("ℹ️ If the site doesn't load, try opening it directly in your browser.")
 
 # ====== FEED ======
 def render_feed():
