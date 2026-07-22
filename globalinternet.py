@@ -239,7 +239,7 @@ if "_posts_cache_time" not in st.session_state:
 # ---- NAVIGATION FROM QUERY PARAMS ----
 if "page" in st.query_params:
     page_param = st.query_params["page"]
-    valid_pages = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
+    valid_pages = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space", "movies"]
     if page_param in valid_pages:
         st.session_state.current_page = page_param
     del st.query_params["page"]
@@ -263,6 +263,7 @@ LANG = {
         "worldcup": "⚽ Live World Cup",
         "profile": "👤 Profile",
         "owner_space": "🕊️ Owner Space",
+        "movies": "🎬 Movies",
         "logout": "🚪 Logout",
         "system_health": "🛡️ System Health",
         "signal": "📡 Signal",
@@ -473,6 +474,7 @@ LANG = {
         "worldcup": "⚽ Coupe du monde en direct",
         "profile": "👤 Profil",
         "owner_space": "🕊️ Espace propriétaire",
+        "movies": "🎬 Films",
         "logout": "🚪 Déconnexion",
         "system_health": "🛡️ Santé du système",
         "signal": "📡 Signal",
@@ -683,6 +685,7 @@ LANG = {
         "worldcup": "⚽ Copa del Mundo en vivo",
         "profile": "👤 Perfil",
         "owner_space": "🕊️ Espacio del propietario",
+        "movies": "🎬 Películas",
         "logout": "🚪 Cerrar sesión",
         "system_health": "🛡️ Salud del sistema",
         "signal": "📡 Señal",
@@ -893,6 +896,7 @@ LANG = {
         "worldcup": "⚽ Koup Mondyal an dirèk",
         "profile": "👤 Pwofil",
         "owner_space": "🕊️ Espas Pwopriyetè",
+        "movies": "🎬 Sinema",
         "logout": "🚪 Dekonekte",
         "system_health": "🛡️ Sante Sistèm",
         "signal": "📡 Siyal",
@@ -3389,6 +3393,16 @@ def render_discover_section():
     except Exception as e:
         st.error(f"Could not load users: {e}")
 
+# ====== MOVIES PAGE (EMBED 1HD.ART) ======
+def render_movies():
+    st.header("🎬 Movies")
+    st.markdown("Watch your favorite movies and series online. The content is provided by a third-party source.")
+    # Embed the website in an iframe
+    st.components.v1.html("""
+    <iframe src="https://1hd.art/" style="width:100%; height:800px; border:none; border-radius:8px;"></iframe>
+    """, height=820)
+    st.caption("ℹ️ If the movie site does not load, try opening it in a new tab. Some browsers may block iframes from external domains.")
+
 # ====== FEED ======
 def render_feed():
     # ====== LOVE STORY – OPEN IN NEW TAB ======
@@ -5847,7 +5861,7 @@ def render_live_page(session_id):
                 st.markdown(f"🎁 **{sender}** sent a gift of {g['amount']} {g['currency']}!")
 
 # ====== GLOBAL PAGE KEYS / TITLES for navigation ======
-PAGE_KEYS = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space"]
+PAGE_KEYS = ["feed", "friends_chat", "satellite_map", "worldcup", "profile", "video_call", "owner_space", "movies"]
 PAGE_TITLES = {key: t(key) for key in PAGE_KEYS}
 
 # ========== MAIN APP ==========
@@ -6127,6 +6141,7 @@ def main_app():
         "profile": render_profile,
         "video_call": render_video_call,
         "owner_space": owner_space,
+        "movies": render_movies,
     }
     page_functions.get(st.session_state.current_page, render_feed)()
 
