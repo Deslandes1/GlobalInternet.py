@@ -1247,9 +1247,29 @@ st.markdown("""
     .friend-count { font-size: 1.2rem; font-weight: bold; color: #0a2a44; }
     .online-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #00ff88; border: 2px solid white; margin-left: 2px; vertical-align: middle; animation: pulse 2s infinite; }
     .offline-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #888; border: 2px solid white; margin-left: 2px; vertical-align: middle; }
-    .profile-avatar { border-radius: 50%; border: 3px solid #00209F; box-shadow: 0 4px 12px rgba(0,0,0,0.15); object-fit: cover; }
-    .profile-avatar-large { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #00209F; box-shadow: 0 8px 25px rgba(0,0,0,0.2); object-fit: cover; }
-    @media (max-width: 768px) { .profile-avatar-large { width: 200px; height: 200px; } }
+    /* === UPDATED AVATAR STYLES (Square & ID‑like) === */
+    .profile-avatar {
+        border-radius: 4px;                 /* square with slight rounding */
+        border: 2px solid #00209F;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        object-fit: cover;
+        aspect-ratio: 1/1;                  /* ensures square even if inline size differs */
+    }
+    .profile-avatar-large {
+        width: 400px;                       /* increased from 300px */
+        height: 400px;
+        border-radius: 4px;                 /* ID‑style square */
+        border: 4px solid #00209F;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        object-fit: cover;
+    }
+    @media (max-width: 768px) {
+        .profile-avatar-large {
+            width: 250px;                   /* increased from 200px */
+            height: 250px;
+        }
+    }
+    /* === END AVATAR CHANGES === */
     .stTextInput > div > div > input { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 40px !important; padding: 10px 20px !important; }
     .stTextArea > div > textarea { color: #1e2a3a !important; background-color: rgba(255,255,255,0.9) !important; border: 1px solid rgba(0,168,255,0.3) !important; border-radius: 20px !important; }
     .stRadio > div { color: #1e2a3a !important; }
