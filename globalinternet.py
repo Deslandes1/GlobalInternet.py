@@ -5240,7 +5240,7 @@ if not st.session_state._session_restored and supabase:
                 st.cache_data.clear()
                 st.session_state.posts = load_posts()
                 st.session_state.live_sessions = load_live_sessions()
-                load_friend_data(user.user.id)
+                load_friend_data()
                 st.session_state.notifications = load_notifications(user.user.id)
                 st.session_state.unread_count = sum(1 for n in st.session_state.notifications if not n.get('read', False))
                 st.info("🔁 Session restored – you are still logged in.")
