@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - Multilingual with Golden Stars) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 80.0.0 (Bigger Dove & Feed Avatars)
+# Version: 81.0.0 (Mobile Session Fix + New Design App Link)
 import streamlit as st
 import smtplib
 from email.message import EmailMessage
@@ -1095,8 +1095,8 @@ LANG = {
 def t(key):
     return LANG.get(st.session_state.language, LANG["en"]).get(key, key)
 
-# ====== COOKIE HELPERS ======
-# FIXED set_cookie with Secure and SameSite=None for mobile browser compatibility
+# ====== COOKIE HELPERS (UPDATED FOR MOBILE SESSION PERSISTENCE) ======
+# set_cookie now also writes to localStorage for mobile reliability
 def set_cookie(name, value, days=30):
     js = f"""
     <script>
@@ -1108,6 +1108,8 @@ def set_cookie(name, value, days=30):
             expires = "; expires=" + date.toUTCString();
         }}
         document.cookie = name + "=" + (value || "")  + expires + "; path=/; Secure; SameSite=None";
+        // Also store in localStorage for mobile reliability
+        localStorage.setItem(name, value);
     }}
     setCookie("{name}", "{value}", {days});
     </script>
@@ -1123,6 +1125,7 @@ def get_cookie(name):
     return None
 
 def inject_cookie_reader():
+    # Reads from localStorage first (mobile-friendly), then falls back to cookies
     js = """
     <script>
     function getCookie(name) {
@@ -1135,7 +1138,11 @@ def inject_cookie_reader():
         }
         return null;
     }
-    var refreshToken = getCookie("sb_refresh_token");
+    // Try localStorage first, then cookie
+    var refreshToken = localStorage.getItem('sb_refresh_token');
+    if (!refreshToken) {
+        refreshToken = getCookie('sb_refresh_token');
+    }
     if (refreshToken) {
         var url = new URL(window.location.href);
         url.searchParams.set('cookie_sb_refresh_token', refreshToken);
@@ -3055,6 +3062,14 @@ def verify_phone_otp(raw_phone, token, remember=False):
         return False
 
 def logout():
+    # Clear localStorage via JavaScript
+    js = """
+    <script>
+    localStorage.removeItem('sb_refresh_token');
+    document.cookie = "sb_refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    </script>
+    """
+    st.components.v1.html(js, height=0)
     set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
@@ -5907,7 +5922,7 @@ def main_app():
             st.rerun()
         st.divider()
 
-        # ====== EXTERNAL APP LINKS ======
+        # ====== EXTERNAL APP LINKS (UPDATED WITH NEW DESIGN APP) ======
         st.markdown("### 🌐 GlobalInternet.py Apps")
         st.markdown(
             """
@@ -5931,6 +5946,15 @@ def main_app():
                 🧮 AI Math Solver
             </a>
             <p style="text-align:center; font-size:0.8rem; color:#2c3e50;">🔑 Login: 20082010</p>
+            """,
+            unsafe_allow_html=True
+        )
+        # NEW LINK ADDED HERE
+        st.markdown(
+            """
+            <a href="https://design-application-2026-qc3hbgia7sbwdhvjxwqvfe.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#6C63FF; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                🎨 AI Design Generator
+            </a>
             """,
             unsafe_allow_html=True
         )
