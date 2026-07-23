@@ -1,0 +1,55 @@
+# MOBILE SESSION PERSISTENCE FIX  
+## Lakay se Lakay – Stay Logged In on Any Phone
+
+**Author:** Gesner Deslandes  
+**Date:** July 2026  
+**Version:** 1.0  
+
+---
+
+## Problem Statement
+
+Users reported that the **Lakay se Lakay** app would log them out on mobile phones (especially after closing the browser or switching tabs), while the **GlobalInternet.py** website kept them logged in reliably.
+
+**Root cause:**  
+- GlobalInternet.py relies solely on `st.session_state` – which persists as long as the browser tab is alive (mobile browsers often keep tabs alive in the background).  
+- Lakay se Lakay attempted to restore the session using **cookies** (`sb_refresh_token`). Mobile browsers frequently block or delete cookies with `Secure; SameSite=None`, causing the restoration to fail and the user to be logged out.
+
+---
+
+## Solution
+
+We replaced the cookie‑based session restoration with **`localStorage`**, a mobile‑friendly storage that persists across browser restarts.
+
+### Key changes:
+
+1. **Store the refresh token** in both `localStorage` and cookies (for backward compatibility).  
+2. **Read the token** from `localStorage` first, then fallback to cookies.  
+3. **Force a page reload** after setting the token in the URL, so the server can read it before the session check runs.  
+4. **Clear both storage methods** on logout.
+
+---
+
+## Code Modifications
+
+### 1. `set_cookie` – now writes to `localStorage` too
+
+```python
+def set_cookie(name, value, days=30):
+    js = f"""
+    <script>
+    function setCookie(name, value, days) {{
+        var expires = "";
+        if (days) {{
+            var date = new Date();
+            date.setTime(date.getTime() + (days*24*60*60*1000));
+            expires = "; expires=" + date.toUTCString();
+        }}
+        document.cookie = name + "=" + (value || "")  + expires + "; path=/; Secure; SameSite=None";
+        localStorage.setItem(name, value);
+    }}
+    setCookie("{name}", "{value}", {days});
+    </script>
+    """
+    st.components.v1.html(js, height=0)
+
