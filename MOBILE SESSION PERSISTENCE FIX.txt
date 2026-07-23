@@ -3,53 +3,122 @@
 
 **Author:** Gesner Deslandes  
 **Date:** July 2026  
-**Version:** 1.0  
+**Version:** 2.0 (Complete Implementation Guide + Troubleshooting)
 
 ---
 
-## Problem Statement
+## 1. Problem Statement
 
-Users reported that the **Lakay se Lakay** app would log them out on mobile phones (especially after closing the browser or switching tabs), while the **GlobalInternet.py** website kept them logged in reliably.
+Users reported that the **Lakay se Lakay** app logs them out on mobile phones (especially after closing the browser or switching tabs), while the **GlobalInternet.py** website keeps them logged in reliably.
 
-**Root cause:**  
+**Root Cause:**  
 - GlobalInternet.py relies solely on `st.session_state` – which persists as long as the browser tab is alive (mobile browsers often keep tabs alive in the background).  
 - Lakay se Lakay attempted to restore the session using **cookies** (`sb_refresh_token`). Mobile browsers frequently block or delete cookies with `Secure; SameSite=None`, causing the restoration to fail and the user to be logged out.
 
 ---
 
-## Solution
+## 2. The Solution
 
-We replaced the cookie‑based session restoration with **`localStorage`**, a mobile‑friendly storage that persists across browser restarts.
+We replace the cookie‑based session restoration with **`localStorage`**, a mobile‑friendly storage that persists across browser restarts.
 
-### Key changes:
-
-1. **Store the refresh token** in both `localStorage` and cookies (for backward compatibility).  
-2. **Read the token** from `localStorage` first, then fallback to cookies.  
+### Core Principles:
+1. **Store** the refresh token in both `localStorage` and cookies (for backward compatibility).  
+2. **Read** the token from `localStorage` first, then fallback to cookies.  
 3. **Force a page reload** after setting the token in the URL, so the server can read it before the session check runs.  
-4. **Clear both storage methods** on logout.
+4. **Clear** both storage methods on logout.
 
 ---
 
-## Code Modifications
+## 3. Implementation Overview (What to add to `app.py`)
 
-### 1. `set_cookie` – now writes to `localStorage` too
+To apply this fix, a developer must modify **four sections** of `app.py`. This file explains what each section must do.
 
+### 3.1. The `inject_cookie_reader()` function
+Add this function right after initialising Supabase.  
+**What it does:**  
+- Reads the token from `localStorage` (or cookies).  
+- If a token exists, it appends it to the URL as a query parameter (`?token=...`) and reloads the page. This ensures Streamlit's Python backend can read the token before rendering the UI.
+
+### 3.2. The Session Restoration Block (bottom of `app.py`)
+Replace the old session restoration logic with a new one that:  
+- Looks for the `token` in `st.query_params`.  
+- Uses Supabase’s **`refresh_session(token)`** method (this is critical – do not use `get_user`, as that requires an access token).  
+- If successful, restores `st.session_state` (user, profile, posts, friends, etc.).  
+- If the token is expired/invalid, it clears the token from both `localStorage` and cookies.  
+- Finally, clears the `token` from the URL to keep it clean.
+
+### 3.3. The `set_cookie()` function (used during login)
+Update this function so that it writes the token to **both** `document.cookie` **and** `localStorage.setItem()`. This ensures the token is saved regardless of the browser’s cookie policy.
+
+### 3.4. The `logout()` function
+Update this function so that it clears the token from **both** `localStorage` and cookies, preventing a stale session from reappearing.
+
+---
+
+## 4. Why This Fix Works on Mobile
+
+| Feature | Cookie‑only (old) | `localStorage` (new) |
+| :--- | :--- | :--- |
+| **Third‑party blocking** | Frequently blocked by iOS Safari and Android Chrome | Never blocked |
+| **Persistence after browser close** | Unreliable (cleared on exit) | Always persists |
+| **Access from JavaScript** | Limited (Secure/HttpOnly issues) | Always accessible |
+| **Compatibility** | Desktop only | Desktop + All mobile browsers |
+
+By using `localStorage`, the token survives even when the browser process is killed by the mobile OS, ensuring a seamless "stay logged in" experience.
+
+---
+
+## 5. Step‑by‑Step Developer Checklist
+
+To successfully deploy this fix, the developer must ensure:
+
+- [ ] **Step 1:** Add the `inject_cookie_reader()` JavaScript function to `app.py` (exact code provided in the code snippets section below).  
+- [ ] **Step 2:** Replace the bottom session‑restoration block with the new logic that uses `refresh_session()`.  
+- [ ] **Step 3:** Update the `set_cookie()` helper to write to `localStorage`.  
+- [ ] **Step 4:** Update the `logout()` helper to clear `localStorage`.  
+- [ ] **Step 5:** Call `inject_cookie_reader()` immediately after `supabase = init_supabase()` and **before** any `if st.session_state.logged_in` checks.  
+- [ ] **Step 6:** In the `log_in_email()` and `verify_phone_otp()` functions, call `set_cookie()` only if the user checks "Remember me" (this stores the token for 30 days).  
+- [ ] **Step 7:** Deploy the updated `app.py` to Streamlit Cloud and test on a real mobile device (close the browser completely and reopen).
+
+---
+
+## 6. Critical Pitfalls to Avoid
+
+| Pitfall | Why it breaks the fix | Correct approach |
+| :--- | :--- | :--- |
+| Using `get_user(token)` instead of `refresh_session(token)` | `get_user()` expects an **access token**, not a refresh token. It will fail with an invalid token error. | Always use `supabase.auth.refresh_session(refresh_token)`. |
+| Placing `inject_cookie_reader()` after the session state check | The page loads before the reader runs, so the Python code never sees the token in the URL. | Place the injector **before** any login checks. |
+| Not clearing the token from the URL | The token stays in the address bar, which is a security risk. | Use `st.query_params.clear()` immediately after restoring the session. |
+| Only clearing cookies on logout | The token stays in `localStorage`, so the app will try to reuse an invalid token. | Always clear **both** `localStorage` and cookies. |
+
+---
+
+## 7. Code Snippets (Ready to Copy)
+
+### 7.1. `inject_cookie_reader()`
 ```python
-def set_cookie(name, value, days=30):
-    js = f"""
+def inject_cookie_reader():
+    js = """
     <script>
-    function setCookie(name, value, days) {{
-        var expires = "";
-        if (days) {{
-            var date = new Date();
-            date.setTime(date.getTime() + (days*24*60*60*1000));
-            expires = "; expires=" + date.toUTCString();
-        }}
-        document.cookie = name + "=" + (value || "")  + expires + "; path=/; Secure; SameSite=None";
-        localStorage.setItem(name, value);
-    }}
-    setCookie("{name}", "{value}", {days});
+    function getToken() {
+        let token = localStorage.getItem('sb_refresh_token');
+        if (token) return token;
+        let name = "sb_refresh_token=";
+        let ca = document.cookie.split(';');
+        for(let i=0; i<ca.length; i++) {
+            let c = ca[i].trim();
+            if (c.indexOf(name) === 0) return c.substring(name.length, c.length);
+        }
+        return null;
+    }
+    let token = getToken();
+    if (token) {
+        let url = new URL(window.location.href);
+        if (!url.searchParams.has('token')) {
+            url.searchParams.set('token', token);
+            window.location.href = url.toString();
+        }
+    }
     </script>
     """
     st.components.v1.html(js, height=0)
-
