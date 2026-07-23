@@ -1124,8 +1124,8 @@ def get_cookie(name):
         return val
     return None
 
+# ====== UPDATED inject_cookie_reader with page reload ======
 def inject_cookie_reader():
-    # Reads from localStorage first (mobile-friendly), then falls back to cookies
     js = """
     <script>
     function getCookie(name) {
@@ -1145,8 +1145,12 @@ def inject_cookie_reader():
     }
     if (refreshToken) {
         var url = new URL(window.location.href);
-        url.searchParams.set('cookie_sb_refresh_token', refreshToken);
-        window.history.replaceState({}, '', url);
+        // Only set if not already present to avoid infinite loop
+        if (!url.searchParams.has('cookie_sb_refresh_token')) {
+            url.searchParams.set('cookie_sb_refresh_token', refreshToken);
+            // Reload the page with the token in the URL so the server can read it
+            window.location.href = url.toString();
+        }
     }
     </script>
     """
@@ -3061,8 +3065,8 @@ def verify_phone_otp(raw_phone, token, remember=False):
         st.error(f"Verification failed: {e}")
         return False
 
+# ====== UPDATED logout with localStorage clear ======
 def logout():
-    # Clear localStorage via JavaScript
     js = """
     <script>
     localStorage.removeItem('sb_refresh_token');
@@ -3070,7 +3074,6 @@ def logout():
     </script>
     """
     st.components.v1.html(js, height=0)
-    set_cookie("sb_refresh_token", "", -1)
     if supabase:
         supabase.auth.sign_out()
     st.session_state.logged_in = False
