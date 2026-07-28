@@ -5852,24 +5852,16 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
-        # --- NEW: Excel Advanced Accounting ---
+        # --- Excel Advanced Accounting (UPDATED LINK) ---
         st.markdown(
             """
-            <a href="https://accountant-excel-advanced-ai-streamlit-app-2026-7.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#2E86C1; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+            <a href="https://kpbhc3s8vhggkeo7yh9gzz.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#2E86C1; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
                 📊 Excel Advanced Accounting
             </a>
             """,
             unsafe_allow_html=True
         )
-        # --- NEW: Global App (added per user request) ---
-        st.markdown(
-            """
-            <a href="https://kpbhc3s8vhggkeo7yh9gzz.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#8E44AD; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
-                🌐 Global App
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+        # --- removed duplicate "Global App" entry ---
         st.markdown("### 🎮 More GlobalInternet.py Apps")
         st.markdown(
             """
@@ -6049,7 +6041,6 @@ def main_app():
             index=current_index,
             key="nav_selectbox"
         )
-        # FIX: Use PAGE_TITLES instead of PAGE_TITEMS
         selected_key = next(key for key, title in PAGE_TITLES.items() if title == selected_title)
         if selected_key != st.session_state.current_page:
             st.session_state.show_love_story = False
