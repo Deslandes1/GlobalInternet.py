@@ -5817,7 +5817,7 @@ def main_app():
             st.rerun()
         st.divider()
 
-        # ====== EXTERNAL APP LINKS ======
+        # ====== GLOBALINTERNET.PY APPS ======
         st.markdown("### 🌐 GlobalInternet.py Apps")
         st.markdown(
             """
@@ -5848,6 +5848,15 @@ def main_app():
             """
             <a href="https://design-application-2026-qc3hbgia7sbwdhvjxwqvfe.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#6C63FF; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
                 🎨 AI Design Generator
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+        # --- NEW: Excel Advanced Accounting ---
+        st.markdown(
+            """
+            <a href="https://accountant-excel-advanced-ai-streamlit-app-2026-7.streamlit.app/" target="_blank" style="display:block; text-align:center; background:#2E86C1; color:white; padding:8px; border-radius:8px; text-decoration:none; margin-bottom:5px; font-weight:bold;">
+                📊 Excel Advanced Accounting
             </a>
             """,
             unsafe_allow_html=True
@@ -6031,7 +6040,7 @@ def main_app():
             index=current_index,
             key="nav_selectbox"
         )
-        selected_key = next(key for key, title in PAGE_TITLES.items() if title == selected_title)
+        selected_key = next(key for key, title in PAGE_TITEMS.items() if title == selected_title)
         if selected_key != st.session_state.current_page:
             st.session_state.show_love_story = False
             st.session_state.love_story_url = None
