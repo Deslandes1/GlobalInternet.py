@@ -1,7 +1,7 @@
 # ====== FULL app.py (Lakay se Lakay - Mobile Session Persistence + Bigger Text) ======
 # Lakay se Lakay - Haitian Social Media Platform
 # Lead Developer: Gesner Deslandes (Python Developer, Haiti)
-# Version: 87.0.0 (User Migration Tools + Service Role Support)
+# Version: 88.0.0 (Data Migration Tool Integrated)
 # ============================================================
 import streamlit as st
 import smtplib
@@ -4070,137 +4070,94 @@ def render_profile():
                 st.divider()
 
 # ============================================================
-# ====== USER MIGRATION TOOLS (USING SERVICE ROLE KEY) ======
+# ====== DATA MIGRATION TOOL (USING SERVICE ROLE KEY) ======
 # ============================================================
 
-def migrate_all_users():
+def migrate_all_data():
     """
-    Creates auth users for EVERY profile in the profiles table.
-    This allows all former users to log in with their existing email.
-    They will need to reset their password on first login.
+    Migrates ALL data from the old Supabase project to the new one.
+    Fetches data in batches to avoid timeouts.
     """
-    # 1. Check if all required secrets exist
-    required_secrets = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "TEMP_PASSWORD"]
+    # Check for required secrets
+    required_secrets = ["OLD_SUPABASE_URL", "OLD_SUPABASE_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"]
     missing = [s for s in required_secrets if s not in st.secrets]
     if missing:
         return False, f"❌ Missing secrets: {', '.join(missing)}. Please add them to Streamlit Cloud secrets."
 
-    # 2. Initialize Supabase with SERVICE ROLE key
     try:
-        supabase_admin = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_KEY"])
+        old_client = create_client(st.secrets["OLD_SUPABASE_URL"], st.secrets["OLD_SUPABASE_KEY"])
+        new_client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_KEY"])
     except Exception as e:
-        return False, f"❌ Failed to connect to Supabase with service key: {e}"
+        return False, f"❌ Failed to connect: {e}"
 
-    # 3. Get all profiles from the new project
-    try:
-        profiles_resp = supabase_admin.table("profiles").select("id, email, full_name").execute()
-        profiles = profiles_resp.data if profiles_resp.data else []
-    except Exception as e:
-        return False, f"❌ Failed to fetch profiles: {e}"
+    # Tables in correct order (foreign keys)
+    tables = [
+        "profiles", "posts", "comments", "reactions",
+        "live_sessions", "live_gifts", "friend_requests",
+        "messages", "notifications", "photo_albums",
+        "album_photos", "video_calls"
+    ]
 
-    if not profiles:
-        return False, "❌ No profiles found in the database. Did you migrate your data?"
-
-    # 4. For each profile, try to create an auth user
-    created = 0
-    failed = 0
-    skipped = 0
     results = []
+    total_migrated = 0
+    admin_id = "852c129f-067c-40ff-8318-c24c5fe1e8eb"
 
-    # Get existing auth users (to avoid duplicates)
-    try:
-        auth_users_resp = supabase_admin.auth.admin.list_users()
-        existing_emails = {user.email for user in auth_users_resp.users} if auth_users_resp.users else set()
-    except Exception:
-        existing_emails = set()
-
-    for profile in profiles:
-        email = profile.get("email")
-        full_name = profile.get("full_name", "User")
-        user_id = profile.get("id")
-
-        if not email:
-            skipped += 1
-            results.append(f"⚠️ Skipped: {full_name} (no email)")
-            continue
-
-        if email in existing_emails:
-            skipped += 1
-            results.append(f"⏩ Skipped: {email} (already exists in auth)")
-            continue
-
+    for table in tables:
         try:
-            # Create the user with the same ID
-            response = supabase_admin.auth.admin.create_user({
-                "email": email,
-                "password": st.secrets["TEMP_PASSWORD"],
-                "email_confirm": True,
-                "user_metadata": {"full_name": full_name},
-                "id": user_id  # This preserves the original UUID
-            })
+            # Fetch all rows from old project in batches
+            rows = []
+            offset = 0
+            batch_size = 100
             
-            if response and response.user:
-                created += 1
-                results.append(f"✅ Created: {email} (ID: {user_id})")
-            else:
-                failed += 1
-                results.append(f"❌ Failed: {email}")
+            while True:
+                try:
+                    resp = old_client.table(table).select("*").range(offset, offset + batch_size - 1).execute()
+                    batch = resp.data
+                    if not batch:
+                        break
+                    rows.extend(batch)
+                    offset += batch_size
+                    if len(batch) < batch_size:
+                        break
+                except Exception as e:
+                    results.append(f"⚠️ Error fetching {table}: {e}")
+                    break
+            
+            if not rows:
+                results.append(f"⏩ {table}: 0 rows (empty or doesn't exist)")
+                continue
+
+            # For profiles, skip the admin row to avoid conflict
+            if table == "profiles":
+                rows = [r for r in rows if r.get("id") != admin_id]
+                if not rows:
+                    results.append(f"⏩ {table}: Only admin row found (skipped)")
+                    continue
+
+            # Insert into new project in batches
+            inserted = 0
+            for i in range(0, len(rows), 50):
+                batch = rows[i:i+50]
+                try:
+                    new_client.table(table).insert(batch).execute()
+                    inserted += len(batch)
+                except Exception as e:
+                    # Try row by row for this batch
+                    for row in batch:
+                        try:
+                            new_client.table(table).insert(row).execute()
+                            inserted += 1
+                        except Exception as row_e:
+                            results.append(f"❌ Failed row in {table}: {row_e}")
+
+            results.append(f"✅ {table}: {inserted} rows migrated")
+            total_migrated += inserted
+            
         except Exception as e:
-            error_str = str(e).lower()
-            if "already exists" in error_str or "duplicate" in error_str:
-                skipped += 1
-                results.append(f"⏩ Skipped: {email} (already exists)")
-            else:
-                failed += 1
-                results.append(f"❌ Error for {email}: {e}")
+            results.append(f"❌ Error processing {table}: {e}")
 
-    summary = f"📊 Migration complete: {created} created, {failed} failed, {skipped} skipped."
+    summary = f"📊 Migration complete: {total_migrated} total rows migrated."
     return True, (summary, results)
-
-def migrate_admin_user():
-    """
-    Creates the admin user in the new Supabase project using the old UUID.
-    This is a separate function for your own account.
-    """
-    required_secrets = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ADMIN_OLD_USER_ID", "ADMIN_EMAIL", "ADMIN_PASSWORD"]
-    missing = [s for s in required_secrets if s not in st.secrets]
-    if missing:
-        return False, f"❌ Missing secrets: {', '.join(missing)}. Please add them to Streamlit Cloud secrets."
-
-    try:
-        supabase_admin = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_KEY"])
-    except Exception as e:
-        return False, f"❌ Failed to connect to Supabase with service key: {e}"
-
-    email = st.secrets["ADMIN_EMAIL"]
-    password = st.secrets["ADMIN_PASSWORD"]
-    user_id = st.secrets["ADMIN_OLD_USER_ID"]
-    full_name = "Gesner Deslandes"
-
-    try:
-        response = supabase_admin.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {"full_name": full_name},
-            "id": user_id
-        })
-        
-        if response and response.user:
-            try:
-                supabase_admin.table("profiles").update({"email": email, "full_name": full_name}).eq("id", user_id).execute()
-            except Exception:
-                pass
-            return True, f"✅ Admin user '{email}' successfully created with old UUID {user_id}. You can now log in!"
-        else:
-            return False, "❌ Failed to create admin user."
-    
-    except Exception as e:
-        error_str = str(e).lower()
-        if "already exists" in error_str or "duplicate" in error_str:
-            return True, f"⚠️ Admin user '{email}' already exists. You can log in with your password."
-        else:
-            return False, f"❌ Error creating admin user: {e}"
 
 # ---- Owner Space ----
 def owner_space():
@@ -4235,40 +4192,41 @@ def owner_space():
     with tabs[0]:
         st.subheader(t("owner_dashboard"))
         
-        # ---- ADMIN MIGRATION TOOLS ----
+        # ---- DATA MIGRATION TOOL ----
         st.markdown("---")
-        st.markdown("### 🚀 User Migration Tools")
-        st.warning("⚠️ Use these tools to migrate your users from the old Supabase project to the new one. Run the Admin Migration first, then the All Users migration.")
+        st.markdown("### 🚀 Data Migration Tool")
+        st.warning("⚠️ This tool migrates ALL data from your OLD Supabase project to your NEW one. Only run this once.")
+        st.info(f"📌 Old project: {st.secrets.get('OLD_SUPABASE_URL', 'Not set')}")
+        st.info(f"📌 New project: {st.secrets.get('SUPABASE_URL', 'Not set')}")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 👤 Migrate Admin User")
-            st.caption("Creates your admin account with your old UUID so you can log in.")
-            if st.button("🔑 Create Admin User (from secrets)", use_container_width=True):
-                success, msg = migrate_admin_user()
+        if st.button("🚀 Migrate All Data from Old Project", use_container_width=True):
+            with st.spinner("Migrating data... this may take several minutes."):
+                success, result = migrate_all_data()
                 if success:
-                    st.success(msg)
+                    summary, details = result
+                    st.success(summary)
+                    with st.expander("📋 Detailed Results"):
+                        for line in details:
+                            st.write(line)
                 else:
-                    st.error(msg)
-        
-        with col2:
-            st.markdown("#### 👥 Migrate All Users")
-            st.caption("Creates auth users for EVERY profile in the database.")
-            if st.button("🚀 Migrate All Former Users", use_container_width=True):
-                with st.spinner("Migrating all users... this may take a moment."):
-                    success, result = migrate_all_users()
-                    if success:
-                        summary, details = result
-                        st.success(summary)
-                        with st.expander("📋 Detailed Results"):
-                            for line in details:
-                                st.write(line)
-                    else:
-                        st.error(result)
+                    st.error(result)
         
         st.divider()
-        # ---- END MIGRATION TOOLS ----
+        # ---- END MIGRATION TOOL ----
+        
+        # ---- ADMIN MIGRATION TOOLS ----
+        st.markdown("### 👤 Admin User Migration")
+        st.caption("Create or update your admin account with the correct password.")
+        
+        if st.button("🔑 Create/Update Admin User (from secrets)", use_container_width=True):
+            success, msg = migrate_admin_user()
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
+        
+        st.divider()
+        # ---- END ADMIN MIGRATION TOOLS ----
         
         try:
             real_balance = None
@@ -4870,6 +4828,73 @@ def owner_space():
     if st.button(t("logout_owner")):
         st.session_state.owner_space_access = False
         st.rerun()
+
+def migrate_admin_user():
+    """
+    Creates or updates the admin user with the correct password.
+    """
+    required_secrets = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ADMIN_OLD_USER_ID", "ADMIN_EMAIL", "ADMIN_PASSWORD"]
+    missing = [s for s in required_secrets if s not in st.secrets]
+    if missing:
+        return False, f"❌ Missing secrets: {', '.join(missing)}"
+
+    try:
+        supabase_admin = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_KEY"])
+    except Exception as e:
+        return False, f"❌ Failed to connect: {e}"
+
+    email = st.secrets["ADMIN_EMAIL"]
+    password = st.secrets["ADMIN_PASSWORD"]
+    user_id = st.secrets["ADMIN_OLD_USER_ID"]
+    full_name = "Gesner Deslandes"
+
+    # Check if user exists by listing users
+    try:
+        all_users = supabase_admin.auth.admin.list_users()
+        user_exists = any(u.email == email for u in all_users.users)
+    except:
+        user_exists = False
+
+    try:
+        if user_exists:
+            # Update password
+            response = supabase_admin.auth.admin.update_user_by_id(
+                user_id,
+                {"password": password, "email_confirm": True}
+            )
+            if response and response.user:
+                return True, f"✅ Password updated for {email}. You can now log in."
+            else:
+                return False, "❌ Password update failed."
+        else:
+            # Create user
+            response = supabase_admin.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": full_name},
+                "id": user_id
+            })
+            if response and response.user:
+                return True, f"✅ Admin user {email} created. You can now log in."
+            else:
+                return False, "❌ Creation failed."
+    except Exception as e:
+        error_str = str(e).lower()
+        if "already exists" in error_str:
+            # Try updating anyway
+            try:
+                response = supabase_admin.auth.admin.update_user_by_id(
+                    user_id,
+                    {"password": password, "email_confirm": True}
+                )
+                if response and response.user:
+                    return True, f"✅ User already existed, but password updated. Log in now."
+                else:
+                    return False, "❌ Update failed."
+            except Exception as e2:
+                return False, f"❌ Update error: {e2}"
+        return False, f"❌ Error: {e}"
 
 # ---- Video Call ----
 def render_video_call():
